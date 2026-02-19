@@ -8,10 +8,9 @@ import Parametres from "./Parametres"
 
 export default function App() {
 
-  const [menuOpen, setMenuOpen] = useState(false)
-
   const [user, setUser] = useState(null)
   const [page, setPage] = useState("dashboard")
+  const [menuOpen, setMenuOpen] = useState(false)
   
 
   useEffect(() => {
