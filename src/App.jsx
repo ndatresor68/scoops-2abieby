@@ -8,8 +8,11 @@ import Parametres from "./Parametres"
 
 export default function App() {
 
+  const [menuOpen, setMenuOpen] = useState(false)
+
   const [user, setUser] = useState(null)
   const [page, setPage] = useState("dashboard")
+  
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -38,6 +41,26 @@ export default function App() {
 
   return (
     <div style={appContainer}>
+
+      {/* Bouton menu mobile */}
+<button
+  onClick={() => setMenuOpen(!menuOpen)}
+  style={{
+    position: "fixed",
+    top: "15px",
+    left: "15px",
+    fontSize: "26px",
+    background: "#8B0000",
+    color: "white",
+    border: "none",
+    borderRadius: "8px",
+    padding: "8px 12px",
+    cursor: "pointer",
+    zIndex: 1000
+  }}
+>
+  ☰
+</button>
 
       {/* ===== MENU FIXE ===== */}
       <div style={menuStyle}>
@@ -93,16 +116,19 @@ const appContainer = {
 }
 
 const menuStyle = {
-  width: "240px",
-  background: "linear-gradient(180deg,#5c1111,#a61e1e)",
+  width: "260px",
+  background: "#7a1f1f",
   color: "white",
-  padding: "25px",
-  display: "flex",
-  flexDirection: "column",
+  padding: "20px",
+  boxSizing: "border-box",
+
+  /* MOBILE */
   position: "fixed",
+  left: menuOpen ? "0" : "-260px",
+  top: "0",
   height: "100vh",
-  left: 0,
-  top: 0
+  transition: "left 0.3s ease",
+  zIndex: 1000
 }
 
 const logoStyle = {

@@ -9,3 +9,18 @@ body {
   font-family: 'Poppins', sans-serif;
   background: #f5f6f8;
 }
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+}

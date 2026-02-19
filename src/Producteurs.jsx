@@ -469,8 +469,8 @@ if (cartePlanteurFile) {
         }}>
         </h2>
 
-        <div style={{ overflowY: "auto" }}>
-  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+       <div style={{ overflowX: "auto", width: "100%" }}>
+  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
     <thead>
       <tr style={{ background: "#e9ecef" }}>
         <th style={tdStyle}>Photo</th>
