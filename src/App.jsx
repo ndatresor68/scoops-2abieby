@@ -17,14 +17,14 @@ export default function App() {
       setUser(data.session?.user || null)
     })
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user || null)
       }
     )
 
     return () => {
-      authListener.subscription.unsubscribe()
+      listener.subscription.unsubscribe()
     }
   }, [])
 
@@ -33,63 +33,32 @@ export default function App() {
     setUser(null)
   }
 
-  if (!user) {
-    return <Login onLogin={setUser} />
-  }
-
-  /* ===== STYLES DYNAMIQUES ===== */
-
-  const menuStyle = {
-    width: "260px",
-    background: "#7a1f1f",
-    color: "white",
-    padding: "20px",
-    boxSizing: "border-box",
-    position: "fixed",
-    left: menuOpen ? "0" : "-260px",
-    top: "0",
-    height: "100vh",
-    transition: "left 0.3s ease",
-    zIndex: 1000
-  }
-
-  const rightZone = {
-    marginLeft: "0",
-    width: "100%",
-    display: "flex",
-    flexDirection: "column"
-  }
-
-  const headerStyle = {
-    height: "70px",
-    background: "linear-gradient(90deg,#7a1f1f,#b02a2a)",
-    color: "white",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "20px",
-    fontWeight: "bold",
-    letterSpacing: "2px",
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 500
-  }
+  if (!user) return <Login onLogin={setUser} />
 
   return (
     <div style={appContainer}>
 
       {/* ===== BOUTON MENU MOBILE ===== */}
       <button
-        onClick={() => setMenuOpen(!menuOpen)}
-        style={menuButtonStyle}
+        onClick={() => setMenuOpen(true)}
+        style={menuButton}
       >
         ☰
       </button>
 
+      {/* ===== OVERLAY MOBILE ===== */}
+      {menuOpen && (
+        <div
+          style={overlay}
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
       {/* ===== MENU ===== */}
-      <div style={menuStyle}>
+      <div style={{
+        ...menuStyle,
+        transform: menuOpen ? "translateX(0)" : "translateX(-100%)"
+      }}>
 
         <h2 style={logoStyle}>
           SCOOP ASAB-COOP-CA
@@ -108,8 +77,8 @@ export default function App() {
 
       </div>
 
-      {/* ===== ZONE DROITE ===== */}
-      <div style={rightZone}>
+      {/* ===== CONTENU PRINCIPAL ===== */}
+      <div style={mainZone}>
 
         {/* HEADER */}
         <div style={headerStyle}>
@@ -133,26 +102,36 @@ export default function App() {
   )
 }
 
-/* ===== STYLES FIXES ===== */
+/* ================= STYLES ================= */
 
 const appContainer = {
   display: "flex",
   height: "100vh",
-  overflow: "hidden"
+  background: "#f4f6f9"
+}
+
+/* ===== MENU ===== */
+
+const menuStyle = {
+  position: "fixed",
+  left: 0,
+  top: 0,
+  width: "260px",
+  height: "100vh",
+  background: "#7a1f1f",
+  color: "white",
+  padding: "20px",
+  boxSizing: "border-box",
+  display: "flex",
+  flexDirection: "column",
+  transition: "transform 0.3s ease",
+  zIndex: 2000
 }
 
 const logoStyle = {
   textAlign: "center",
   marginBottom: "40px",
   fontWeight: "bold"
-}
-
-const contentStyle = {
-  marginTop: "70px",
-  padding: "20px",
-  overflowY: "auto",
-  flex: 1,
-  background: "#f4f6f9"
 }
 
 const logoutStyle = {
@@ -165,7 +144,18 @@ const logoutStyle = {
   cursor: "pointer"
 }
 
-const menuButtonStyle = {
+/* ===== OVERLAY ===== */
+
+const overlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.4)",
+  zIndex: 1500
+}
+
+/* ===== MENU BUTTON ===== */
+
+const menuButton = {
   position: "fixed",
   top: "15px",
   left: "15px",
@@ -176,10 +166,44 @@ const menuButtonStyle = {
   borderRadius: "8px",
   padding: "8px 12px",
   cursor: "pointer",
-  zIndex: 2000
+  zIndex: 2500
 }
 
-/* ===== MENU BUTTON ===== */
+/* ===== MAIN ZONE ===== */
+
+const mainZone = {
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  width: "100%"
+}
+
+/* ===== HEADER ===== */
+
+const headerStyle = {
+  height: "70px",
+  background: "linear-gradient(90deg,#7a1f1f,#b02a2a)",
+  color: "white",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "20px",
+  fontWeight: "bold",
+  letterSpacing: "2px",
+  position: "sticky",
+  top: 0,
+  zIndex: 1000
+}
+
+/* ===== CONTENT ===== */
+
+const contentStyle = {
+  padding: "20px",
+  overflowY: "auto",
+  flex: 1
+}
+
+/* ===== MENU BUTTON COMPONENT ===== */
 
 function MenuButton({ text, onClick, active }) {
   return (
