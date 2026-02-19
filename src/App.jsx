@@ -43,7 +43,7 @@ export default function App() {
       <div style={menuStyle}>
 
         <h2 style={logoStyle}>
-          SCOOPS 2A-BIEBY
+          SCOOP ASAB-COOP-CA
         </h2>
 
         <div style={{ flex: 1 }}>

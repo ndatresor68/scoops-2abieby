@@ -60,7 +60,7 @@ export default function Centres() {
       .eq("type", "MAGASIN")
 
     const numero = (count || 0) + 1
-    `setGeneratedCode(2AB-M${numero})`
+    `setGeneratedCode(ASAB-M${numero})`
   }
 
   function openForm() {

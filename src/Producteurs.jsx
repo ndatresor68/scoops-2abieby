@@ -80,11 +80,11 @@ async function generateCode() {
 
   if (error) {
     console.error(error)
-    return "2AB-001"
+    return "ASAB-001"
   }
 
   if (!data || data.length === 0) {
-    return "2AB-001"
+    return "ASAB-001"
   }
 
   // Extraire tous les numéros
@@ -97,12 +97,12 @@ async function generateCode() {
     .filter(n => !isNaN(n))
 
   if (numbers.length === 0) {
-    return "2AB-001"
+    return "ASAB-001"
   }
 
   const maxNumber = Math.max(...numbers)
 
-  return `2AB-${maxNumber + 1}`
+  return `ASAB-${maxNumber + 1}`
 }
 
 
@@ -313,7 +313,7 @@ if (cartePlanteurFile) {
 
   doc.setFontSize(18)
   doc.setTextColor(122, 31, 31)
-  doc.text("SCOOPS 2A-BIEBY", pageWidth / 2, 20, { align: "center" })
+  doc.text("SCOOP ASAB-COOP-CA", pageWidth / 2, 20, { align: "center" })
 
   doc.setFontSize(12)
   doc.setTextColor(0, 0, 0)
@@ -440,7 +440,7 @@ if (cartePlanteurFile) {
   doc.line(15, pageHeight - 15, pageWidth - 15, pageHeight - 15)
 
   doc.text(
-    "Document généré automatiquement - SCOOPS 2A-BIEBY",
+    "Document généré automatiquement - SCOOP ASAB-COOP-CA",
     pageWidth / 2,
     pageHeight - 10,
     { align: "center" }
