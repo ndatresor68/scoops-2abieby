@@ -11,7 +11,6 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [page, setPage] = useState("dashboard")
   const [menuOpen, setMenuOpen] = useState(false)
-  
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -38,30 +37,58 @@ export default function App() {
     return <Login onLogin={setUser} />
   }
 
+  /* ===== STYLES DYNAMIQUES ===== */
+
+  const menuStyle = {
+    width: "260px",
+    background: "#7a1f1f",
+    color: "white",
+    padding: "20px",
+    boxSizing: "border-box",
+    position: "fixed",
+    left: menuOpen ? "0" : "-260px",
+    top: "0",
+    height: "100vh",
+    transition: "left 0.3s ease",
+    zIndex: 1000
+  }
+
+  const rightZone = {
+    marginLeft: "0",
+    width: "100%",
+    display: "flex",
+    flexDirection: "column"
+  }
+
+  const headerStyle = {
+    height: "70px",
+    background: "linear-gradient(90deg,#7a1f1f,#b02a2a)",
+    color: "white",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "20px",
+    fontWeight: "bold",
+    letterSpacing: "2px",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 500
+  }
+
   return (
     <div style={appContainer}>
 
-      {/* Bouton menu mobile */}
-<button
-  onClick={() => setMenuOpen(!menuOpen)}
-  style={{
-    position: "fixed",
-    top: "15px",
-    left: "15px",
-    fontSize: "26px",
-    background: "#8B0000",
-    color: "white",
-    border: "none",
-    borderRadius: "8px",
-    padding: "8px 12px",
-    cursor: "pointer",
-    zIndex: 1000
-  }}
->
-  ☰
-</button>
+      {/* ===== BOUTON MENU MOBILE ===== */}
+      <button
+        onClick={() => setMenuOpen(!menuOpen)}
+        style={menuButtonStyle}
+      >
+        ☰
+      </button>
 
-      {/* ===== MENU FIXE ===== */}
+      {/* ===== MENU ===== */}
       <div style={menuStyle}>
 
         <h2 style={logoStyle}>
@@ -69,10 +96,10 @@ export default function App() {
         </h2>
 
         <div style={{ flex: 1 }}>
-          <MenuButton active={page==="dashboard"} onClick={()=>setPage("dashboard")} text="📊 Dashboard" />
-          <MenuButton active={page==="producteurs"} onClick={()=>setPage("producteurs")} text="👨‍🌾 Producteurs" />
-          <MenuButton active={page==="centres"} onClick={()=>setPage("centres")} text="🏢 Centres" />
-          <MenuButton active={page==="parametres"} onClick={()=>setPage("parametres")} text="⚙️ Paramètres" />
+          <MenuButton active={page==="dashboard"} onClick={()=>{setPage("dashboard"); setMenuOpen(false)}} text="📊 Dashboard" />
+          <MenuButton active={page==="producteurs"} onClick={()=>{setPage("producteurs"); setMenuOpen(false)}} text="👨‍🌾 Producteurs" />
+          <MenuButton active={page==="centres"} onClick={()=>{setPage("centres"); setMenuOpen(false)}} text="🏢 Centres" />
+          <MenuButton active={page==="parametres"} onClick={()=>{setPage("parametres"); setMenuOpen(false)}} text="⚙️ Paramètres" />
         </div>
 
         <button style={logoutStyle} onClick={handleLogout}>
@@ -84,7 +111,7 @@ export default function App() {
       {/* ===== ZONE DROITE ===== */}
       <div style={rightZone}>
 
-        {/* HEADER FIXE */}
+        {/* HEADER */}
         <div style={headerStyle}>
           {page === "dashboard" && "TABLEAU CENTRAL"}
           {page === "producteurs" && "GESTION DES PRODUCTEURS"}
@@ -92,7 +119,7 @@ export default function App() {
           {page === "parametres" && "PARAMÈTRES"}
         </div>
 
-        {/* CONTENU SCROLLABLE */}
+        {/* CONTENU */}
         <div style={contentStyle}>
           {page === "dashboard" && <DashboardCentral />}
           {page === "producteurs" && <Producteurs />}
@@ -106,7 +133,7 @@ export default function App() {
   )
 }
 
-/* ================= STRUCTURE ================= */
+/* ===== STYLES FIXES ===== */
 
 const appContainer = {
   display: "flex",
@@ -114,56 +141,15 @@ const appContainer = {
   overflow: "hidden"
 }
 
-const menuStyle = {
-  width: "260px",
-  background: "#7a1f1f",
-  color: "white",
-  padding: "20px",
-  boxSizing: "border-box",
-
-  /* MOBILE */
-  position: "fixed",
-  left: menuOpen ? "0" : "-260px",
-  top: "0",
-  height: "100vh",
-  transition: "left 0.3s ease",
-  zIndex: 1000
-}
-
 const logoStyle = {
   textAlign: "center",
   marginBottom: "40px",
-  fontWeight: "bold",
-  letterSpacing: "1px"
-}
-
-const rightZone = {
-  marginLeft: "240px",
-  width: "100%",
-  display: "flex",
-  flexDirection: "column"
-}
-
-const headerStyle = {
-  height: "70px",
-  background: "linear-gradient(90deg,#7a1f1f,#b02a2a)",
-  color: "white",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "22px",
-  fontWeight: "bold",
-  letterSpacing: "2px",
-  position: "fixed",
-  top: 0,
-  left: "240px",
-  right: 0,
-  zIndex: 1000
+  fontWeight: "bold"
 }
 
 const contentStyle = {
   marginTop: "70px",
-  padding: "30px",
+  padding: "20px",
   overflowY: "auto",
   flex: 1,
   background: "#f4f6f9"
@@ -179,7 +165,21 @@ const logoutStyle = {
   cursor: "pointer"
 }
 
-/* ================= MENU BUTTON ================= */
+const menuButtonStyle = {
+  position: "fixed",
+  top: "15px",
+  left: "15px",
+  fontSize: "26px",
+  background: "#8B0000",
+  color: "white",
+  border: "none",
+  borderRadius: "8px",
+  padding: "8px 12px",
+  cursor: "pointer",
+  zIndex: 2000
+}
+
+/* ===== MENU BUTTON ===== */
 
 function MenuButton({ text, onClick, active }) {
   return (
@@ -195,8 +195,7 @@ function MenuButton({ text, onClick, active }) {
         textAlign: "left",
         background: active ? "white" : "rgba(255,255,255,0.15)",
         color: active ? "#7a1f1f" : "white",
-        fontWeight: "600",
-        transition: "0.2s"
+        fontWeight: "600"
       }}
     >
       {text}
