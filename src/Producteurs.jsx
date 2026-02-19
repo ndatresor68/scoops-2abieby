@@ -21,6 +21,9 @@ export default function Producteurs() {
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [selectedCentrePrint, setSelectedCentrePrint] = useState("")
   const [centresList, setCentresList] = useState([])
+  const [searchNom, setSearchNom] = useState("")
+  const [showDetails, setShowDetails] = useState(false)
+  const [selectedProducteur, setSelectedProducteur] = useState(null)
   const [formData, setFormData] = useState({
     nom: "",
     telephone: "",
@@ -30,6 +33,26 @@ export default function Producteurs() {
     statut: "",
     centre_id: ""
   })
+
+  // ⭐ Composant pour afficher une ligne d'information
+const Info = ({ label, value }) => (
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "120px 1fr",
+      padding: "8px 0",
+      borderBottom: "1px solid #eee"
+    }}
+  >
+    <span style={{ fontWeight: "bold", color: "#555" }}>
+      {label} :
+    </span>
+
+    <span style={{ color: "#111" }}>
+      {value || "-"}
+    </span>
+  </div>
+)
 
   useEffect(() => {
     fetchProducteurs()
@@ -47,7 +70,6 @@ async function fetchCentresList() {
 
   if (data) setCentresList(data)
 }
-
   async function fetchProducteurs() {
     const { data } = await supabase
       .from("producteurs")
@@ -271,6 +293,11 @@ if (cartePlanteurFile) {
   ? producteurs.filter(p => p.centre_id === centreSelectionne)
   : producteurs
 
+  // 🔎 Filtre par nom
+const producteursAffiches = producteursFiltres.filter(p =>
+  p.nom?.toLowerCase().includes(searchNom.toLowerCase())
+)
+
   async function getBase64FromUrl(url) {
 
   const response = await fetch(url)
@@ -470,6 +497,24 @@ if (cartePlanteurFile) {
         </h2>
 
        <div style={{ overflowX: "auto", width: "100%" }}>
+
+        {/* 🔎 Recherche*/}
+<div style={{ marginBottom: 15 }}>
+  <input
+    type="text"
+    placeholder="🔎 Recherche..."
+    value={searchNom}
+    onChange={(e) => setSearchNom(e.target.value)}
+    style={{
+      width: "150px",
+      padding: 12,
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      fontSize: 14
+    }}
+  />
+</div>
+
   <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
     <thead>
       <tr style={{ background: "#e9ecef" }}>
@@ -484,8 +529,26 @@ if (cartePlanteurFile) {
     </thead>
 
     <tbody>
-      {producteurs.map((p) => (
-        <tr key={p.id}>
+      {producteurs
+  .filter((p) => {
+    const matchCentre =
+      !centreSelectionne || p.centre_id === centreSelectionne
+
+    const matchNom =
+      p.nom?.toLowerCase().includes(searchNom.toLowerCase())
+
+    return matchCentre && matchNom
+  })
+  .map((p) => (
+        <tr
+  key={p.id}
+  onClick={() => {
+    setSelectedProducteur(p)
+    setShowDetails(true)
+  }}
+
+  style={{ cursor: "pointer" }}
+>
           
           {/* PHOTO EN PREMIER */}
           <td style={tdStyle}>
@@ -981,6 +1044,173 @@ if (cartePlanteurFile) {
           </div>
         )}
 
+        {showDetails && selectedProducteur && (
+
+  <div
+    onClick={() => setShowDetails(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 5000,
+      padding: 20
+    }}
+  >
+
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        background: "white",
+        borderRadius: 18,
+        width: "100%",
+        maxWidth: 420,
+        padding: 25,
+        position: "relative",
+        boxShadow: "0 15px 40px rgba(0,0,0,0.3)"
+      }}
+    >
+
+      {/* ❌ CROIX FERMETURE */}
+      <div
+        onClick={() => setShowDetails(false)}
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 15,
+          fontSize: 22,
+          cursor: "pointer",
+          fontWeight: "bold"
+        }}
+      >
+        ✕
+      </div>
+
+      {/* 📸 PHOTO */}
+      {selectedProducteur.photo_profil && (
+        <img
+          src={selectedProducteur.photo_profil}
+          alt="profil"
+          style={{
+            width: 130,
+            height: 130,
+            borderRadius: "50%",
+            objectFit: "cover",
+            display: "block",
+            margin: "0 auto 15px auto"
+          }}
+        />
+      )}
+
+      {/* 👤 NOM */}
+      <h2 style={{ textAlign: "center", marginBottom: 5 }}>
+        {selectedProducteur.nom}
+      </h2>
+
+      {/* 🏷 BADGE STATUT */}
+      <div style={{ textAlign: "center", marginBottom: 15 }}>
+        <span
+          style={{
+            background:
+              selectedProducteur.statut === "Membre"
+                ? "#16a34a"
+                : "#2563eb",
+            color: "white",
+            padding: "4px 12px",
+            borderRadius: 20,
+            fontSize: 13,
+            fontWeight: "bold"
+          }}
+        >
+          {selectedProducteur.statut}
+        </span>
+      </div>
+
+      {/* 📋 INFOS */}
+      <div style={{ fontSize: 16, lineHeight: "28px" }}>
+
+        <Info label="Code" value={selectedProducteur.code} />
+        <Info label="Téléphone" value={selectedProducteur.telephone} />
+        <Info label="Sexe" value={selectedProducteur.sexe} />
+        <Info label="Localité" value={selectedProducteur.localite} />
+
+      </div>
+
+      {/* 📄 DOCUMENTS */}
+      {(selectedProducteur.cni_recto ||
+        selectedProducteur.cni_verso ||
+        selectedProducteur.carte_planteur) && (
+
+        <div style={{ marginTop: 18 }}>
+          <h4>📄 Documents</h4>
+
+          {selectedProducteur.cni_recto && (
+            <a href={selectedProducteur.cni_recto} target="_blank">
+              Voir CNI Recto
+            </a>
+          )}
+
+          <br />
+
+          {selectedProducteur.cni_verso && (
+            <a href={selectedProducteur.cni_verso} target="_blank">
+              Voir CNI Verso
+            </a>
+          )}
+
+          <br />
+
+          {selectedProducteur.carte_planteur && (
+            <a href={selectedProducteur.carte_planteur} target="_blank">
+              Carte Planteur
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* ⚙️ ACTIONS */}
+      <div
+        style={{
+          marginTop: 20,
+          display: "flex",
+          gap: 10,
+          justifyContent: "center"
+        }}
+      >
+
+        <button
+          style={{
+            background: "#2563eb",
+            color: "white",
+            border: "none",
+            padding: "10px 18px",
+            borderRadius: 8,
+            cursor: "pointer"
+          }}
+        >
+          ✏️ Modifier
+        </button>
+
+        <button
+          style={{
+            background: "#dc2626",
+            color: "white",
+            border: "none",
+            padding: "10px 18px",
+            borderRadius: 8,
+            cursor: "pointer"
+          }}
+        >
+          🗑 Supprimer
+        </button>
+
+      </div>
+
     </div>
-  )
+  </div>
+)}
+</div>
+)
 }
