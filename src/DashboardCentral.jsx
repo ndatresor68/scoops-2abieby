@@ -238,7 +238,7 @@ export default function DashboardCentral() {
           {centresStats.map((centre) => (
             <div key={centre.id} style={centreCard}>
               <h4 style={{ margin: 0 }}>
-                {centre.nom} ({centre.code})
+                {centre.nom} [{centre.code}]
               </h4>
 
               <p style={{
