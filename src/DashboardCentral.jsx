@@ -3,6 +3,9 @@ import { supabase } from "./supabaseClient"
 import { FaBalanceScale } from "react-icons/fa"
 import { GiFarmer } from "react-icons/gi"
 import { FaBuilding } from "react-icons/fa"
+import { FaCheckCircle } from "react-icons/fa"
+import { FaClock } from "react-icons/fa"
+import { FaBoxes } from "react-icons/fa"
 
 export default function DashboardCentral() {
 
@@ -170,9 +173,57 @@ export default function DashboardCentral() {
   }
   value={stats.achats}
 />
-        <Card title="✅ Livraisons validées" value={stats.livraisonsValidees} />
-        <Card title="⏳ Livraisons attente" value={stats.livraisonsAttente} />
-        <Card title="🌾 Stock global" value={stats.stockGlobal + " Kg"} highlight />
+        <Card
+  title={
+    <span
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontSize: 22,
+        fontWeight: "bold"
+      }}
+    >
+      <FaCheckCircle size={50} color="#16a34a" />
+      LIVRAISON VALIDEES
+    </span>
+  }
+  value={stats.livraisonsValidees}
+/>
+        <Card
+  title={
+    <span
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontSize: 22,
+        fontWeight: "bold"
+      }}
+    >
+      <FaClock size={50} color="#f59e0b" />
+      LIVRAISON EN ATTENTE
+    </span>
+  }
+  value={stats.livraisonsAttente}
+/>
+        <Card
+  title={
+    <span
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontSize: 18,
+        fontWeight: "bold"
+      }}
+    >
+      <FaBoxes size={28} color="#6366f1" />
+      STOCK GLOBAL
+    </span>
+  }
+  value={stats.stockGlobal}
+/>
       </div>
 
       {/* ================= STOCK PAR CENTRE ================= */}
@@ -180,7 +231,7 @@ export default function DashboardCentral() {
       <div style={{ marginTop: 60 }}>
 
         <h2 style={sectionTitle}>
-          📦 Stock par Centre
+         STOCK PAR CENTRE :
         </h2>
 
         <div style={gridStyle}>
