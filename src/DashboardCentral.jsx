@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
+import { FaBalanceScale } from "react-icons/fa"
 
 export default function DashboardCentral() {
 
@@ -132,9 +133,17 @@ export default function DashboardCentral() {
       {/* ================= CARTES PRINCIPALES ================= */}
 
       <div style={gridStyle}>
-        <Card title="👨‍🌾 Producteurs" value={stats.producteurs} />
-        <Card title="🏢 Centres" value={stats.centres} />
-        <Card title="🛒 Achats" value={stats.achats} />
+        <Card title="👨‍🌾 PRODUCTEURS" value={stats.producteurs} />
+        <Card title="🏢 CENTRES" value={stats.centres} />
+        <Card
+  title={
+    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <FaBalanceScale color="#7a1f1f" />
+      PESEE
+    </span>
+  }
+  value={stats.achats}
+/>
         <Card title="✅ Livraisons validées" value={stats.livraisonsValidees} />
         <Card title="⏳ Livraisons attente" value={stats.livraisonsAttente} />
         <Card title="🌾 Stock global" value={stats.stockGlobal + " Kg"} highlight />
