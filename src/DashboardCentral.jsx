@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
 import { FaBalanceScale } from "react-icons/fa"
+import { GiFarmer } from "react-icons/gi"
+import { FaBuilding } from "react-icons/fa"
 
 export default function DashboardCentral() {
 
@@ -133,12 +135,36 @@ export default function DashboardCentral() {
       {/* ================= CARTES PRINCIPALES ================= */}
 
       <div style={gridStyle}>
-        <Card title="👨‍🌾 PRODUCTEURS" value={stats.producteurs} />
-        <Card title="🏢 CENTRES" value={stats.centres} />
         <Card
   title={
-    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <FaBalanceScale color="#7a1f1f" />
+    <span style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 22, fontWeight: "bold"}}>
+      <GiFarmer size={50} color="#7a1f1f" />
+      PRODUCTEURS
+    </span>
+  }
+  value={stats.producteurs}
+/>
+        <Card
+  title={
+    <span
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontSize: 22,      // ⭐ taille du texte
+        fontWeight: "bold"
+      }}
+    >
+      <FaBuilding size={28} color="#7a1f1f" />
+      CENTRES
+    </span>
+  }
+  value={stats.centres}
+/>
+        <Card
+  title={
+    <span style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 22, fontWeight: "bold" }}>
+      <FaBalanceScale size={50} color="#7a1f1f" />
       PESEE
     </span>
   }
