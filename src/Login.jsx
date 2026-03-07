@@ -1,25 +1,26 @@
 import { useState } from "react"
-import { supabase } from "./supabaseClient"
+import { useAuth } from "./context/AuthContext"
 
-export default function Login({ onLogin }) {
+export default function Login() {
+  const { signInWithPassword } = useAuth()
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
   async function handleLogin(e) {
     e.preventDefault()
+    setLoading(true)
+    setError("")
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    const { error: authError } = await signInWithPassword(email, password)
 
-    if (error) {
+    if (authError) {
       setError("Email ou mot de passe incorrect")
-    } else {
-      onLogin(data.user)
     }
+
+    setLoading(false)
   }
 
   return (
@@ -29,8 +30,6 @@ export default function Login({ onLogin }) {
           <h2 style={titleStyle}>Connexion</h2>
 
           <form onSubmit={handleLogin} style={{ width: "100%" }}>
-
-            {/* EMAIL */}
             <div style={inputContainerStyle}>
               <span style={iconStyle}>👤</span>
               <input
@@ -43,7 +42,6 @@ export default function Login({ onLogin }) {
               />
             </div>
 
-            {/* PASSWORD */}
             <div style={{ ...inputContainerStyle, marginTop: 20 }}>
               <span style={iconStyle}>🔒</span>
               <input
@@ -56,14 +54,11 @@ export default function Login({ onLogin }) {
               />
             </div>
 
-            <button type="submit" style={buttonStyle}>
-              Se connecter
+            <button type="submit" style={buttonStyle} disabled={loading}>
+              {loading ? "Connexion..." : "Se connecter"}
             </button>
 
-            {error && (
-              <p style={errorStyle}>{error}</p>
-            )}
-
+            {error && <p style={errorStyle}>{error}</p>}
           </form>
         </div>
       </div>
@@ -78,7 +73,7 @@ const backgroundStyle = {
   height: "100vh",
   display: "flex",
   justifyContent: "center",
-  alignItems: "center"
+  alignItems: "center",
 }
 
 const overlayStyle = {
@@ -87,7 +82,7 @@ const overlayStyle = {
   height: "100%",
   display: "flex",
   justifyContent: "center",
-  alignItems: "center"
+  alignItems: "center",
 }
 
 const cardStyle = {
@@ -95,13 +90,13 @@ const cardStyle = {
   padding: 45,
   borderRadius: 18,
   width: 420,
-  boxShadow: "0 15px 35px rgba(0,0,0,0.25)"
+  boxShadow: "0 15px 35px rgba(0,0,0,0.25)",
 }
 
 const titleStyle = {
   marginBottom: 25,
   textAlign: "center",
-  fontSize: 22
+  fontSize: 22,
 }
 
 const inputContainerStyle = {
@@ -109,12 +104,12 @@ const inputContainerStyle = {
   alignItems: "center",
   backgroundColor: "#f5f5f5",
   borderRadius: 10,
-  padding: "12px 15px"
+  padding: "12px 15px",
 }
 
 const iconStyle = {
   marginRight: 10,
-  fontSize: 18
+  fontSize: 18,
 }
 
 const inputStyle = {
@@ -122,7 +117,7 @@ const inputStyle = {
   background: "transparent",
   outline: "none",
   width: "100%",
-  fontSize: 14
+  fontSize: 14,
 }
 
 const buttonStyle = {
@@ -135,11 +130,11 @@ const buttonStyle = {
   borderRadius: 10,
   cursor: "pointer",
   fontSize: 15,
-  fontWeight: "bold"
+  fontWeight: "bold",
 }
 
 const errorStyle = {
   marginTop: 15,
   color: "red",
-  textAlign: "center"
+  textAlign: "center",
 }

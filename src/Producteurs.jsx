@@ -4,8 +4,6 @@ import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
 
 export default function Producteurs() {
-  console.log("Producteur charge")
-
   const [producteurs, setProducteurs] = useState([])
   const [centres, setCentres] = useState([])
   const [showForm, setShowForm] = useState(false)
@@ -34,6 +32,10 @@ export default function Producteurs() {
     centre_id: ""
   })
 
+  function normalizeId(value) {
+    return String(value ?? "")
+  }
+
   // ⭐ Composant pour afficher une ligne d'information
 const Info = ({ label, value }) => (
   <div
@@ -53,15 +55,6 @@ const Info = ({ label, value }) => (
     </span>
   </div>
 )
-
-  useEffect(() => {
-    fetchProducteurs()
-    fetchCentres()
-  }, [])
-
-  useEffect(() => {
-  fetchCentresList()
-}, [])
 
 async function fetchCentresList() {
   const { data } = await supabase
@@ -92,6 +85,15 @@ async function fetchCentresList() {
 
   if (data) setCentres(data)
 }
+
+  useEffect(() => {
+    fetchProducteurs()
+    fetchCentres()
+  }, [])
+
+  useEffect(() => {
+    fetchCentresList()
+  }, [])
   /* ================= CODE AUTO ================= */
 async function generateCode() {
 
@@ -150,8 +152,6 @@ async function uploadPhoto(file) {
   /* ================= SUBMIT ================= */
   async function handleSubmit(e) {
   e.preventDefault()
-  console.log("Submit ok")
-  console.log(photoFile)
 
   if (!formData.nom.trim() || !formData.telephone.trim()) {
     alert("Nom et téléphone obligatoires")
@@ -290,7 +290,7 @@ if (cartePlanteurFile) {
     border: "1px solid #ddd"
   }
   const producteursFiltres = centreSelectionne 
-  ? producteurs.filter(p => p.centre_id === centreSelectionne)
+  ? producteurs.filter(p => normalizeId(p.centre_id) === normalizeId(centreSelectionne))
   : producteurs
 
   // 🔎 Filtre par nom
@@ -312,7 +312,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
   })
 }
 
- async function generatePDF(data, centreNom) {
+  async function generatePDF(data, centreNom) {
 
   const doc = new jsPDF()
 
@@ -328,8 +328,8 @@ const producteursAffiches = producteursFiltres.filter(p =>
     logoBase64 = await getBase64FromUrl(
       "https://dbfcmlonhgpobmaeutdf.supabase.co/storage/v1/object/public/logos/logo.jpeg"
     )
-  } catch (err) {
-    console.log("Logo non chargé")
+  } catch {
+    // logo optionnel
   }
 
   if (logoBase64) {
@@ -480,7 +480,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
     { align: "center" }
   )
 
-  doc.save(`Producteurs_${centreNom}`.pdf)
+  doc.save(`Producteurs_${centreNom}.pdf`)
 }
   /* ================= RETURN ================= */
 
@@ -514,6 +514,26 @@ const producteursAffiches = producteursFiltres.filter(p =>
     }}
   />
 </div>
+<div style={{ marginBottom: 15 }}>
+  <select
+    value={centreSelectionne}
+    onChange={(e) => setCentreSelectionne(e.target.value)}
+    style={{
+      width: "180px",
+      padding: 12,
+      borderRadius: 8,
+      border: "1px solid #ccc",
+      fontSize: 14
+    }}
+  >
+    <option value="">Tous les centres</option>
+    {centres.map((centre) => (
+      <option key={centre.id} value={centre.id}>
+        {centre.nom}
+      </option>
+    ))}
+  </select>
+</div>
 
   <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
     <thead>
@@ -529,17 +549,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
     </thead>
 
     <tbody>
-      {producteurs
-  .filter((p) => {
-    const matchCentre =
-      !centreSelectionne || p.centre_id === centreSelectionne
-
-    const matchNom =
-      p.nom?.toLowerCase().includes(searchNom.toLowerCase())
-
-    return matchCentre && matchNom
-  })
-  .map((p) => (
+      {producteursAffiches.map((p) => (
         <tr
   key={p.id}
   onClick={() => {
@@ -1001,8 +1011,6 @@ const producteursAffiches = producteursFiltres.filter(p =>
 
               <button
                 onClick={async () => {
-                  console.log("Bouton clique")
-
                   if (!selectedCentrePrint) {
                     alert("Choisir un centre")
                     return
@@ -1015,7 +1023,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
                   const centreNom = centreChoisi?.nom || "Centre"
 
                   const producteursCentre = producteurs.filter(
-                    p => p.centre_id === selectedCentrePrint
+                    p => normalizeId(p.centre_id) === normalizeId(selectedCentrePrint)
                   )
 
                   if (producteursCentre.length === 0) {
@@ -1147,7 +1155,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
           <h4>📄 Documents</h4>
 
           {selectedProducteur.cni_recto && (
-            <a href={selectedProducteur.cni_recto} target="_blank">
+            <a href={selectedProducteur.cni_recto} target="_blank" rel="noopener noreferrer">
               Voir CNI Recto
             </a>
           )}
@@ -1155,7 +1163,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
           <br />
 
           {selectedProducteur.cni_verso && (
-            <a href={selectedProducteur.cni_verso} target="_blank">
+            <a href={selectedProducteur.cni_verso} target="_blank" rel="noopener noreferrer">
               Voir CNI Verso
             </a>
           )}
@@ -1163,7 +1171,7 @@ const producteursAffiches = producteursFiltres.filter(p =>
           <br />
 
           {selectedProducteur.carte_planteur && (
-            <a href={selectedProducteur.carte_planteur} target="_blank">
+            <a href={selectedProducteur.carte_planteur} target="_blank" rel="noopener noreferrer">
               Carte Planteur
             </a>
           )}
