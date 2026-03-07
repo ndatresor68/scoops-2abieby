@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect, useRef } from "react"
 import { FaChevronDown, FaGear, FaRightFromBracket, FaUser } from "react-icons/fa6"
 import { useAuth } from "../context/AuthContext"
+import { useMediaQuery } from "../hooks/useMediaQuery"
 
 function initialsFromName(name, email) {
   if (name) {
@@ -14,6 +15,21 @@ function initialsFromName(name, email) {
 export default function UserMenu({ onOpenProfile, onOpenSettings }) {
   const [open, setOpen] = useState(false)
   const { user, profile, role, displayName, signOut } = useAuth()
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  const menuRef = useRef(null)
+  
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+    
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [open])
 
   const initials = useMemo(
     () => initialsFromName(displayName, user?.email),
@@ -21,24 +37,41 @@ export default function UserMenu({ onOpenProfile, onOpenSettings }) {
   )
 
   return (
-    <div style={wrapper}>
-      <button style={trigger} onClick={() => setOpen((v) => !v)}>
+    <div style={wrapper} ref={menuRef}>
+      <button style={{
+        ...trigger,
+        padding: isMobile ? "6px 10px" : "8px 12px",
+      }} onClick={() => setOpen((v) => !v)}>
         {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt={displayName} style={avatarImage} />
+          <img src={profile.avatar_url} alt={displayName} style={{
+            ...avatarImage,
+            width: isMobile ? 32 : 36,
+            height: isMobile ? 32 : 36,
+          }} />
         ) : (
-          <div style={avatar}>{initials}</div>
+          <div style={{
+            ...avatar,
+            width: isMobile ? 32 : 36,
+            height: isMobile ? 32 : 36,
+            fontSize: isMobile ? 10 : 12,
+          }}>{initials}</div>
         )}
-        <div style={userInfo}>
-          <strong style={{ fontSize: 13 }}>{displayName}</strong>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>
-            {user?.email} • {role}
-          </span>
-        </div>
-        <FaChevronDown size={12} />
+        {!isMobile && (
+          <div style={userInfo}>
+            <strong style={{ fontSize: 13 }}>{displayName}</strong>
+            <span style={{ fontSize: 12, opacity: 0.8 }}>
+              {user?.email} • {role}
+            </span>
+          </div>
+        )}
+        {!isMobile && <FaChevronDown size={12} />}
       </button>
 
       {open && (
-        <div style={menu}>
+        <div style={{
+          ...menu,
+          minWidth: isMobile ? 180 : 220,
+        }}>
           <button
             style={menuItem}
             onClick={() => {

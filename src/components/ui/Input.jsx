@@ -1,3 +1,5 @@
+import { useMediaQuery } from "../../hooks/useMediaQuery"
+
 export default function Input({
   label,
   value,
@@ -11,6 +13,8 @@ export default function Input({
   style = {},
   ...props
 }) {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, ...style }}>
       {label && (
@@ -42,14 +46,15 @@ export default function Input({
           required={required}
           style={{
             width: "100%",
-            padding: icon ? "12px 12px 12px 40px" : "12px",
+            padding: icon ? (isMobile ? "14px 12px 14px 40px" : "12px 12px 12px 40px") : (isMobile ? "14px" : "12px"),
             borderRadius: "10px",
             border: error ? "1px solid #dc2626" : "1px solid #e5e7eb",
-            fontSize: "14px",
+            fontSize: isMobile ? "16px" : "14px",
             outline: "none",
             transition: "all 0.2s ease",
             background: disabled ? "#f9fafb" : "white",
             color: disabled ? "#6b7280" : "#1f2937",
+            minHeight: isMobile ? "44px" : "auto",
             ...(props.style || {}),
           }}
           {...props}

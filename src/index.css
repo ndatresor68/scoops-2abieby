@@ -21,6 +21,83 @@ body {
 .table-container {
   width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Responsive Grid Utilities */
+@media (max-width: 640px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  .content-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  .centres-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  .main-title {
+    font-size: 24px !important;
+  }
+  
+  .stat-value {
+    font-size: 20px !important;
+  }
+  
+  .stat-icon {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+  }
+  
+  /* Tables responsive */
+  table {
+    font-size: 12px !important;
+  }
+  
+  th, td {
+    padding: 8px !important;
+  }
+  
+  /* Buttons */
+  button {
+    min-height: 44px !important;
+    font-size: 16px !important;
+  }
+  
+  /* Inputs */
+  input, select, textarea {
+    font-size: 16px !important;
+    min-height: 44px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .content-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Prevent horizontal scroll */
+body {
+  overflow-x: hidden;
+}
+
+* {
+  max-width: 100%;
+}
+
+/* Touch targets */
+@media (max-width: 640px) {
+  button, a, input[type="button"], input[type="submit"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 @keyframes spin {

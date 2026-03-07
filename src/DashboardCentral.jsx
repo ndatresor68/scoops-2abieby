@@ -4,10 +4,13 @@ import { FaScaleBalanced, FaBuilding, FaCircleCheck, FaClock, FaBox } from "reac
 import { GiFarmer } from "react-icons/gi"
 import Card from "./components/ui/Card"
 import { useToast } from "./components/ui/Toast"
+import { useMediaQuery } from "./hooks/useMediaQuery"
 
 export default function DashboardCentral() {
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isTablet = useMediaQuery("(max-width: 1024px)")
 
   const [stats, setStats] = useState({
     producteurs: 0,
@@ -148,12 +151,19 @@ export default function DashboardCentral() {
     <div style={container}>
       <div style={headerSection}>
         <div>
-          <h1 style={mainTitle}>Tableau de Bord</h1>
+          <h1 style={{
+            ...mainTitle,
+            fontSize: isMobile ? "24px" : "32px",
+          }}>Tableau de Bord</h1>
           <p style={subtitle}>Vue d'ensemble de l'activité de la coopérative</p>
         </div>
       </div>
 
-      <div style={statsGrid}>
+      <div style={{
+        ...statsGrid,
+        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))",
+        gap: isMobile ? 12 : 16,
+      }}>
         <StatCard
           icon={<GiFarmer size={32} />}
           title="Producteurs"
@@ -205,12 +215,20 @@ export default function DashboardCentral() {
         />
       </div>
 
-      <div style={contentGrid}>
-        <Card title="Stock par Centre" style={{ gridColumn: "span 2" }}>
+      <div style={{
+        ...contentGrid,
+        gridTemplateColumns: isTablet ? "1fr" : "repeat(3, 1fr)",
+        gap: isTablet ? 16 : 20,
+      }}>
+        <Card title="Stock par Centre">
           {centresStats.length === 0 ? (
             <p style={{ textAlign: "center", color: "#6b7280", padding: 20 }}>Aucun centre enregistré</p>
           ) : (
-            <div style={centresGrid}>
+            <div style={{
+              ...centresGrid,
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: isMobile ? 12 : 16,
+            }}>
               {centresStats.map((centre) => (
                 <div key={centre.id} style={centreCard}>
                   <div style={centreHeader}>
@@ -256,28 +274,32 @@ export default function DashboardCentral() {
 }
 
 function StatCard({ icon, title, value, color, bgColor }) {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
   return (
     <Card>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div
           style={{
-            width: 64,
-            height: 64,
+            width: isMobile ? 48 : 56,
+            height: isMobile ? 48 : 56,
+            minWidth: isMobile ? 48 : 56,
             borderRadius: "16px",
             background: bgColor,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: color,
+            flexShrink: 0,
           }}
         >
           {icon}
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: "13px", color: "#6b7280", fontWeight: 500, marginBottom: 4 }}>
             {title}
           </p>
-          <p style={{ margin: 0, fontSize: "28px", fontWeight: 700, color: "#1f2937" }}>{value}</p>
+          <p style={{ margin: 0, fontSize: isMobile ? "20px" : "24px", fontWeight: 700, color: "#1f2937" }}>{value}</p>
         </div>
       </div>
     </Card>
@@ -310,8 +332,8 @@ const subtitle = {
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-  gap: 20,
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 16,
 }
 
 const contentGrid = {

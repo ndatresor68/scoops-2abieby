@@ -1,6 +1,9 @@
 import { FaXmark } from "react-icons/fa6"
+import { useMediaQuery } from "../../hooks/useMediaQuery"
 
 export default function Modal({ isOpen, onClose, title, children, size = "md", style = {} }) {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
   if (!isOpen) return null
 
   const sizes = {
@@ -12,29 +15,31 @@ export default function Modal({ isOpen, onClose, title, children, size = "md", s
 
   return (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        zIndex: 3000,
-        padding: 16,
-        backdropFilter: "blur(4px)",
-      }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.5)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: isMobile ? "flex-start" : "center",
+          zIndex: 3000,
+          padding: isMobile ? "0" : 16,
+          backdropFilter: "blur(4px)",
+          overflowY: "auto",
+        }}
       onClick={onClose}
     >
       <div
         style={{
           width: "100%",
-          ...sizes[size],
+          maxWidth: isMobile ? "100%" : sizes[size].maxWidth,
           background: "white",
           borderRadius: "16px",
           boxShadow: "0 20px 42px rgba(0,0,0,0.2)",
           maxHeight: "90vh",
           display: "flex",
           flexDirection: "column",
+          margin: isMobile ? "16px" : "0",
           ...style,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -78,7 +83,7 @@ export default function Modal({ isOpen, onClose, title, children, size = "md", s
             </button>
           </div>
         )}
-        <div style={{ padding: "24px", overflowY: "auto", flex: 1 }}>{children}</div>
+        <div style={{ padding: isMobile ? "16px" : "24px", overflowY: "auto", flex: 1 }}>{children}</div>
       </div>
     </div>
   )

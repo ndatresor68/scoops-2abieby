@@ -8,6 +8,7 @@ import Input from "./components/ui/Input"
 import Modal from "./components/ui/Modal"
 import { useToast } from "./components/ui/Toast"
 import { useAuth } from "./context/AuthContext"
+import { useMediaQuery } from "./hooks/useMediaQuery"
 
 export default function Achats() {
   const { showToast } = useToast()
@@ -15,6 +16,7 @@ export default function Achats() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const isMobile = useMediaQuery("(max-width: 640px)")
 
   const [achats, setAchats] = useState([])
   const [producteurs, setProducteurs] = useState([])
@@ -251,13 +253,21 @@ export default function Achats() {
 
   return (
     <div style={container}>
-      <div style={header}>
+      <div style={{
+        ...header,
+        flexDirection: isMobile ? "column" : "row",
+      }}>
         <div>
-          <h1 style={title}>Gestion des Achats / Pesées</h1>
+          <h1 style={{
+            ...title,
+            fontSize: isMobile ? "24px" : "32px",
+          }}>Gestion des Achats / Pesées</h1>
           <p style={subtitle}>Enregistrez et gérez les pesées de cacao</p>
         </div>
-        <Button onClick={() => setShowForm(true)} icon={<FaPlus />}>
-          Nouvelle pesée
+        <Button onClick={() => setShowForm(true)} icon={<FaPlus />} style={{
+          width: isMobile ? "100%" : "auto",
+        }}>
+          {isMobile ? "Nouvelle pesée" : "Nouvelle pesée"}
         </Button>
       </div>
 
@@ -336,6 +346,10 @@ export default function Achats() {
                         variant="secondary"
                         onClick={() => generatePDFReceipt(a)}
                         icon={<FaFilePdf />}
+                        style={{
+                          width: isMobile ? "100%" : "auto",
+                          minWidth: isMobile ? "100%" : "auto",
+                        }}
                       >
                         PDF
                       </Button>
@@ -438,7 +452,10 @@ export default function Achats() {
             <strong>Agent :</strong> {user?.email || "-"}
           </div>
 
-          <div style={modalActions}>
+          <div style={{
+            ...modalActions,
+            flexDirection: isMobile ? "column" : "row",
+          }}>
             <Button
               type="button"
               variant="secondary"
@@ -446,10 +463,15 @@ export default function Achats() {
                 setShowForm(false)
                 resetForm()
               }}
+              style={{
+                width: isMobile ? "100%" : "auto",
+              }}
             >
               Annuler
             </Button>
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" style={{
+              width: isMobile ? "100%" : "auto",
+            }}>
               Enregistrer la pesée
             </Button>
           </div>
@@ -651,4 +673,5 @@ const modalActions = {
   marginTop: 24,
   paddingTop: 24,
   borderTop: "1px solid #e5e7eb",
+  flexWrap: "wrap",
 }

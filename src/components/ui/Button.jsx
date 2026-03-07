@@ -1,3 +1,5 @@
+import { useMediaQuery } from "../../hooks/useMediaQuery"
+
 export default function Button({
   children,
   onClick,
@@ -9,6 +11,8 @@ export default function Button({
   style = {},
   ...props
 }) {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
   const baseStyle = {
     border: "none",
     borderRadius: "10px",
@@ -52,9 +56,9 @@ export default function Button({
   }
 
   const sizes = {
-    sm: { padding: "8px 12px", fontSize: "13px" },
-    md: { padding: "10px 16px", fontSize: "14px" },
-    lg: { padding: "12px 20px", fontSize: "15px" },
+    sm: { padding: "8px 12px", fontSize: "13px", minHeight: "36px" },
+    md: { padding: isMobile ? "12px 16px" : "10px 16px", fontSize: "14px", minHeight: isMobile ? "44px" : "auto" },
+    lg: { padding: isMobile ? "14px 20px" : "12px 20px", fontSize: "15px", minHeight: isMobile ? "48px" : "auto" },
   }
 
   return (

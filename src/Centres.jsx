@@ -6,6 +6,7 @@ import Button from "./components/ui/Button"
 import Input from "./components/ui/Input"
 import Modal from "./components/ui/Modal"
 import { useToast } from "./components/ui/Toast"
+import { useMediaQuery } from "./hooks/useMediaQuery"
 
 export default function Centres() {
   const { showToast } = useToast()
@@ -15,6 +16,7 @@ export default function Centres() {
   const [editingCentre, setEditingCentre] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [generatedCode, setGeneratedCode] = useState("")
+  const isMobile = useMediaQuery("(max-width: 640px)")
 
   const [formData, setFormData] = useState({
     nom: "",
@@ -180,13 +182,21 @@ export default function Centres() {
 
   return (
     <div style={container}>
-      <div style={header}>
+      <div style={{
+        ...header,
+        flexDirection: isMobile ? "column" : "row",
+      }}>
         <div>
-          <h1 style={title}>Gestion des Centres</h1>
+          <h1 style={{
+            ...title,
+            fontSize: isMobile ? "24px" : "32px",
+          }}>Gestion des Centres</h1>
           <p style={subtitle}>Gérez les centres de collecte de la coopérative</p>
         </div>
-        <Button onClick={() => openForm()} icon={<FaPlus />}>
-          Ajouter un centre
+        <Button onClick={() => openForm()} icon={<FaPlus />} style={{
+          width: isMobile ? "100%" : "auto",
+        }}>
+          {isMobile ? "Ajouter" : "Ajouter un centre"}
         </Button>
       </div>
 
@@ -253,16 +263,30 @@ export default function Centres() {
                       <span style={producteursBadge}>{centre.totalProducteurs}</span>
                     </td>
                     <td style={td}>
-                      <div style={actionsCell}>
+                      <div style={{
+                        ...actionsCell,
+                        gap: isMobile ? 12 : 8,
+                      }}>
                         <button
-                          style={actionBtn}
+                          style={{
+                            ...actionBtn,
+                            width: isMobile ? 44 : 36,
+                            height: isMobile ? 44 : 36,
+                            minWidth: isMobile ? 44 : 36,
+                          }}
                           onClick={() => openForm(centre)}
                           title="Modifier"
                         >
                           <FaPenToSquare />
                         </button>
                         <button
-                          style={{ ...actionBtn, ...deleteBtn }}
+                          style={{
+                            ...actionBtn,
+                            ...deleteBtn,
+                            width: isMobile ? 44 : 36,
+                            height: isMobile ? 44 : 36,
+                            minWidth: isMobile ? 44 : 36,
+                          }}
                           onClick={() => handleDelete(centre)}
                           title="Supprimer"
                         >
@@ -320,11 +344,18 @@ export default function Centres() {
             />
           </div>
 
-          <div style={modalActions}>
-            <Button type="button" variant="secondary" onClick={closeForm}>
+          <div style={{
+            ...modalActions,
+            flexDirection: isMobile ? "column" : "row",
+          }}>
+            <Button type="button" variant="secondary" onClick={closeForm} style={{
+              width: isMobile ? "100%" : "auto",
+            }}>
               Annuler
             </Button>
-            <Button type="submit" variant="primary">
+            <Button type="submit" variant="primary" style={{
+              width: isMobile ? "100%" : "auto",
+            }}>
               {editingCentre ? "Modifier" : "Enregistrer"}
             </Button>
           </div>
@@ -505,4 +536,5 @@ const modalActions = {
   marginTop: 24,
   paddingTop: 24,
   borderTop: "1px solid #e5e7eb",
+  flexWrap: "wrap",
 }

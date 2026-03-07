@@ -1,11 +1,15 @@
+import { useMediaQuery } from "../../hooks/useMediaQuery"
+
 export default function Card({ children, title, style = {}, className = "" }) {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  
   return (
     <div
       style={{
         background: "white",
         borderRadius: "16px",
         boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-        padding: "24px",
+        padding: isMobile ? "16px" : "24px",
         ...style,
       }}
       className={className}

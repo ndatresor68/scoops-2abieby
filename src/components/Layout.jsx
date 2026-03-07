@@ -93,10 +93,22 @@ export default function Layout() {
           marginLeft: sidebarWidth,
         }}
       >
-        <header style={header}>
-          <div style={headerLeft}>
+        <header style={{
+          ...header,
+          padding: isMobile ? "16px 20px" : "0 32px",
+          minHeight: isMobile ? 80 : 80,
+        }}>
+          <div style={{
+            ...headerLeft,
+            gap: isMobile ? 12 : 16,
+          }}>
             {isMobile ? (
-              <button style={iconBtn} onClick={() => setMobileOpen(true)}>
+              <button style={{
+                ...iconBtn,
+                width: 44,
+                height: 44,
+                minWidth: 44,
+              }} onClick={() => setMobileOpen(true)}>
                 <FaBars />
               </button>
             ) : (
@@ -105,11 +117,16 @@ export default function Layout() {
               </button>
             )}
 
-            <div>
-              <h1 style={title}>{TITLES[activePage] || "Application"}</h1>
-              <p style={subtitle}>
-                Connecté en tant que {displayName} ({role})
-              </p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{
+                ...title,
+                fontSize: isMobile ? "20px" : "24px",
+              }}>{TITLES[activePage] || "Application"}</h1>
+              {!isMobile && (
+                <p style={subtitle}>
+                  Connecté en tant que {displayName} ({role})
+                </p>
+              )}
             </div>
           </div>
 
@@ -119,7 +136,10 @@ export default function Layout() {
           />
         </header>
 
-        <main style={content}>{renderPage()}</main>
+        <main style={{
+          ...content,
+          padding: isMobile ? "16px" : "32px",
+        }}>{renderPage()}</main>
       </div>
     </div>
   )
@@ -141,11 +161,10 @@ const header = {
   position: "sticky",
   top: 0,
   zIndex: 1100,
-  height: 80,
+  minHeight: 80,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  padding: "0 32px",
   background: "rgba(255,255,255,0.95)",
   backdropFilter: "blur(12px)",
   borderBottom: "1px solid rgba(0,0,0,0.06)",
@@ -155,7 +174,8 @@ const header = {
 const headerLeft = {
   display: "flex",
   alignItems: "center",
-  gap: 16,
+  flex: 1,
+  minWidth: 0,
 }
 
 const iconBtn = {
@@ -171,6 +191,7 @@ const iconBtn = {
   justifyContent: "center",
   color: "#6b7280",
   transition: "all 0.2s ease",
+  flexShrink: 0,
 }
 
 const title = {
@@ -179,6 +200,9 @@ const title = {
   fontSize: "24px",
   fontWeight: 700,
   letterSpacing: "-0.02em",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 }
 
 const subtitle = {
@@ -186,12 +210,15 @@ const subtitle = {
   color: "#6b7280",
   fontSize: "13px",
   marginTop: 2,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 }
 
 const content = {
-  padding: "32px",
   flex: 1,
   maxWidth: "100%",
+  overflowX: "hidden",
 }
 
 const loadingScreen = {
