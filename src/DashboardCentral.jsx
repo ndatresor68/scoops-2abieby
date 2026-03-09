@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
-import { FaScaleBalanced, FaBuilding, FaCircleCheck, FaClock, FaBox } from "react-icons/fa6"
+import { FaBalanceScale, FaBuilding, FaCheckCircle, FaClock, FaBox } from "react-icons/fa"
 import { GiFarmer } from "react-icons/gi"
 import Card from "./components/ui/Card"
 import { useToast } from "./components/ui/Toast"
@@ -32,14 +32,14 @@ export default function DashboardCentral() {
   const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true)
+      console.log("[Dashboard] Fetching dashboard data...")
 
-      const [
-        producteursRes,
-        centresRes,
-        achatsRes,
-        livraisonsValideesRes,
-        livraisonsAttenteRes,
-      ] = await Promise.all([
+      // Timeout protection: max 20 seconds for all queries
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Dashboard query timeout")), 20000)
+      )
+
+      const queriesPromise = Promise.all([
         supabase.from("producteurs").select("*", { count: "exact", head: true }),
         supabase.from("centres").select("*", { count: "exact", head: true }),
         supabase.from("achats").select("*", { count: "exact", head: true }),
@@ -47,11 +47,44 @@ export default function DashboardCentral() {
         supabase.from("livraisons").select("*", { count: "exact", head: true }).eq("statut", "EN_ATTENTE"),
       ])
 
-      const { data: achatsData } = await supabase.from("achats").select("*")
-      const { data: livraisonsData } = await supabase
-        .from("livraisons")
-        .select("*")
-        .eq("statut", "VALIDEE")
+      const [
+        producteursRes,
+        centresRes,
+        achatsRes,
+        livraisonsValideesRes,
+        livraisonsAttenteRes,
+      ] = await Promise.race([queriesPromise, timeoutPromise]).catch((err) => {
+        console.error("[Dashboard] Query timeout or error:", err)
+        // Return default values on timeout
+        return [
+          { count: 0 },
+          { count: 0 },
+          { count: 0 },
+          { count: 0 },
+          { count: 0 },
+        ]
+      })
+
+      // Fetch detailed data with timeout protection
+      const detailTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Detail query timeout")), 15000)
+      )
+
+      const detailQueriesPromise = Promise.all([
+        supabase.from("achats").select("*"),
+        supabase.from("livraisons").select("*").eq("statut", "VALIDEE")
+      ])
+
+      const [achatsResult, livraisonsResult] = await Promise.race([
+        detailQueriesPromise,
+        detailTimeoutPromise
+      ]).catch((err) => {
+        console.error("[Dashboard] Detail query timeout:", err)
+        return [{ data: [] }, { data: [] }]
+      })
+
+      const achatsData = achatsResult?.data || []
+      const livraisonsData = livraisonsResult?.data || []
 
       const totalAchats = achatsData ? achatsData.reduce((sum, item) => sum + getQuantite(item), 0) : 0
       const totalLivraisons = livraisonsData
@@ -71,35 +104,67 @@ export default function DashboardCentral() {
         poidsTotal,
       })
 
-      const { data: centresData } = await supabase.from("centres").select("id, nom, code")
+      const centresQueryPromise = supabase.from("centres").select("id, nom, code")
+      const centresTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Centres query timeout")), 10000)
+      )
 
-      if (centresData) {
+      const { data: centresData } = await Promise.race([
+        centresQueryPromise,
+        centresTimeoutPromise
+      ]).catch((err) => {
+        console.error("[Dashboard] Centres query timeout:", err)
+        return { data: [] }
+      })
+
+      if (centresData && centresData.length > 0) {
+        // Limit concurrent queries to avoid overwhelming the database
         const centresCalcul = await Promise.all(
-          centresData.map(async (centre) => {
-            const { data: achatsCentre } = await supabase
-              .from("achats")
-              .select("*")
-              .eq("centre_id", centre.id)
+          centresData.slice(0, 10).map(async (centre) => {
+            try {
+              const centreTimeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Centre detail timeout")), 5000)
+              )
 
-            const { data: livraisonsCentre } = await supabase
-              .from("livraisons")
-              .select("*")
-              .eq("centre_id", centre.id)
-              .eq("statut", "VALIDEE")
+              const centreQueriesPromise = Promise.all([
+                supabase.from("achats").select("*").eq("centre_id", centre.id),
+                supabase.from("livraisons").select("*").eq("centre_id", centre.id).eq("statut", "VALIDEE")
+              ])
 
-            const totalCentreAchats = achatsCentre
-              ? achatsCentre.reduce((sum, item) => sum + getQuantite(item), 0)
-              : 0
+              const [achatsResult, livraisonsResult] = await Promise.race([
+                centreQueriesPromise,
+                centreTimeoutPromise
+              ]).catch((err) => {
+                console.warn(`[Dashboard] Centre ${centre.id} query timeout:`, err)
+                return [{ data: [] }, { data: [] }]
+              })
 
-            const totalCentreLivraisons = livraisonsCentre
-              ? livraisonsCentre.reduce((sum, item) => sum + getQuantite(item), 0)
-              : 0
+              const achatsCentre = achatsResult?.data || []
+              const livraisonsCentre = livraisonsResult?.data || []
 
-            return {
-              id: centre.id,
-              nom: centre.nom,
-              code: centre.code,
-              stock: totalCentreAchats - totalCentreLivraisons,
+              const totalCentreAchats = achatsCentre
+                ? achatsCentre.reduce((sum, item) => sum + getQuantite(item), 0)
+                : 0
+
+              const totalCentreLivraisons = livraisonsCentre
+                ? livraisonsCentre.reduce((sum, item) => sum + getQuantite(item), 0)
+                : 0
+
+              return {
+                id: centre.id,
+                nom: centre.nom,
+                code: centre.code,
+                stock: totalCentreAchats - totalCentreLivraisons,
+              }
+            } catch (error) {
+              console.error(`[Dashboard] Error loading centre ${centre.id}:`, error)
+              // Return default values on error
+              return {
+                id: centre.id,
+                nom: centre.nom,
+                code: centre.code,
+                stock: 0,
+              }
             }
           }),
         )
@@ -107,24 +172,61 @@ export default function DashboardCentral() {
         setCentresStats(centresCalcul)
       }
 
-      const { data: recentAchatsData } = await supabase
+      // Fetch recent achats with timeout
+      const recentTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Recent achats timeout")), 10000)
+      )
+
+      const recentQueryPromise = supabase
         .from("achats")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(5)
 
+      const { data: recentAchatsData } = await Promise.race([
+        recentQueryPromise,
+        recentTimeoutPromise
+      ]).catch((err) => {
+        console.warn("[Dashboard] Recent achats query timeout:", err)
+        return { data: [] }
+      })
+
       setRecentAchats(recentAchatsData || [])
+      console.log("[Dashboard] Dashboard data loaded successfully")
     } catch (error) {
-      console.error("Erreur Dashboard:", error)
-      showToast("Erreur lors du chargement du dashboard", "error")
+      console.error("[Dashboard] Erreur Dashboard:", error)
+      // Don't show toast on initial load to avoid spam
+      setStats({
+        producteurs: 0,
+        centres: 0,
+        achats: 0,
+        livraisonsValidees: 0,
+        livraisonsAttente: 0,
+        stockGlobal: 0,
+        poidsTotal: 0,
+      })
+      setCentresStats([])
+      setRecentAchats([])
     } finally {
       setLoading(false)
     }
   }, [showToast])
 
   useEffect(() => {
-    fetchDashboard()
-  }, [fetchDashboard])
+    let mounted = true
+    
+    console.log("[Dashboard] Component mounted, fetching dashboard...")
+    fetchDashboard().catch((error) => {
+      console.error("[Dashboard] Error in useEffect:", error)
+      if (mounted) {
+        setLoading(false)
+      }
+    })
+    
+    return () => {
+      mounted = false
+    }
+  }, []) // Empty deps - fetchDashboard is stable
 
   if (loading) {
     return (
@@ -179,7 +281,7 @@ export default function DashboardCentral() {
           bgColor="#eff6ff"
         />
         <StatCard
-          icon={<FaScaleBalanced size={32} />}
+          icon={<FaBalanceScale size={32} />}
           title="Pesées"
           value={stats.achats}
           color="#16a34a"
@@ -193,7 +295,7 @@ export default function DashboardCentral() {
           bgColor="#fffbeb"
         />
         <StatCard
-          icon={<FaCircleCheck size={32} />}
+          icon={<FaCheckCircle size={32} />}
           title="Livraisons Validées"
           value={stats.livraisonsValidees}
           color="#16a34a"

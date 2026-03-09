@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react"
-import { FaCamera, FaImage, FaXmark } from "react-icons/fa6"
+import { FaCamera, FaImage, FaTimes } from "react-icons/fa"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 
 export default function ImageUpload({
@@ -72,7 +72,7 @@ export default function ImageUpload({
         <div style={previewContainer}>
           <img src={preview} alt="Preview" style={previewImage} />
           <button type="button" onClick={handleRemove} style={removeBtn}>
-            <FaXmark />
+            <FaTimes />
           </button>
         </div>
       ) : (

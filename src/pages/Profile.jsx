@@ -1,31 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { FaCamera, FaFloppyDisk, FaPenToSquare } from "react-icons/fa6"
+import { FaCamera, FaSave, FaEdit } from "react-icons/fa"
 import { supabase } from "../supabaseClient"
 import { useAuth } from "../context/AuthContext"
 
 function getInitialForm(user) {
-  const metadata = user?.user_metadata || {}
-  const appMeta = user?.app_metadata || {}
-
+  // ALWAYS use user data (which includes merged profile data from utilisateurs table)
   return {
-    nom:
-      metadata.full_name ||
-      metadata.name ||
-      metadata.nom ||
-      user?.email?.split("@")[0] ||
-      "",
+    nom: user?.nom || user?.email?.split("@")[0] || "",
     email: user?.email || "",
-    role: metadata.role || appMeta.role || "",
-    photo:
-      metadata.avatar_url ||
-      metadata.photo_url ||
-      metadata.photo_profil ||
-      "",
+    // Role is ALWAYS from user.role (merged from utilisateurs table)
+    role: user?.role || "",
+    photo: user?.avatar_url || "",
   }
 }
 
 export default function Profile() {
-  const { user, refreshUser } = useAuth()
+  const { user, role, refreshUser } = useAuth()
+  
+  // Debug log to verify role source
+  useEffect(() => {
+    console.log("[Profile] User role:", user?.role)
+    console.log("[Profile] Role from AuthContext:", role)
+  }, [user, role])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -43,7 +39,8 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfile()
-  }, [user?.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role])
 
   const avatarToShow = useMemo(() => previewUrl || form.photo || "", [previewUrl, form.photo])
 
@@ -66,23 +63,13 @@ export default function Profile() {
     }
 
     const authUser = authData.user
-    let nextForm = getInitialForm(authUser)
+    
+    // Use user from AuthContext (which has merged profile data including role and nom)
+    // If not available, use authUser directly
+    const userWithProfile = user || authUser
 
-    const { data: rowData } = await supabase
-      .from("utilisateurs")
-      .select("nom,email,role,avatar_url,photo_profil")
-      .eq("id", authUser.id)
-      .maybeSingle()
-
-    if (rowData) {
-      nextForm = {
-        ...nextForm,
-        nom: rowData.nom || nextForm.nom,
-        email: rowData.email || nextForm.email,
-        role: rowData.role || nextForm.role,
-        photo: rowData.avatar_url || rowData.photo_profil || nextForm.photo,
-      }
-    }
+    // ALWAYS use data from user (which includes merged profile data from utilisateurs table)
+    const nextForm = getInitialForm(userWithProfile)
 
     setForm(nextForm)
     setLoading(false)
@@ -256,11 +243,11 @@ export default function Profile() {
 
           <div style={actions}>
             <button style={secondaryBtn} onClick={() => setIsEditing((v) => !v)}>
-              <FaPenToSquare /> {isEditing ? "Annuler" : "Modifier profil"}
+              <FaEdit /> {isEditing ? "Annuler" : "Modifier profil"}
             </button>
 
             <button style={primaryBtn} onClick={handleSave} disabled={saving}>
-              <FaFloppyDisk /> {saving ? "Enregistrement..." : "Enregistrer"}
+              <FaSave /> {saving ? "Enregistrement..." : "Enregistrer"}
             </button>
           </div>
         </div>

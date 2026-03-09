@@ -1,20 +1,22 @@
 import {
   FaChartLine,
-  FaGear,
+  FaCog,
   FaStore,
   FaUserShield,
   FaUsers,
   FaWeightHanging,
-  FaXmark,
-} from "react-icons/fa6"
+  FaTimes,
+} from "react-icons/fa"
 
 const BASE_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
   { id: "centres", label: "Centres", icon: FaStore },
   { id: "producteurs", label: "Producteurs", icon: FaUsers },
   { id: "achats", label: "Achats", icon: FaWeightHanging },
-  { id: "parametres", label: "Paramètres", icon: FaGear },
+  { id: "parametres", label: "Paramètres", icon: FaCog },
 ]
+
+const ADMIN_MODULE = { id: "admin", label: "Administration", icon: FaUserShield }
 
 export default function Navbar({
   activePage,
@@ -26,7 +28,7 @@ export default function Navbar({
   isAdmin,
 }) {
   const modules = isAdmin
-    ? [...BASE_MODULES, { id: "admin-users", label: "Utilisateurs", icon: FaUserShield }]
+    ? [...BASE_MODULES, ADMIN_MODULE]
     : BASE_MODULES
 
   return (
@@ -52,7 +54,7 @@ export default function Navbar({
           )}
           {isMobile && (
             <button style={closeMobileBtn} onClick={onCloseMobile}>
-              <FaXmark />
+              <FaTimes />
             </button>
           )}
         </div>

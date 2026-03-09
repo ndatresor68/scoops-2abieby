@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
-import { FaPlus, FaMagnifyingGlass, FaPenToSquare, FaTrash, FaPhone, FaLocationDot } from "react-icons/fa6"
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaPhone, FaMapMarkerAlt } from "react-icons/fa"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
 import Input from "./components/ui/Input"
@@ -203,7 +203,7 @@ export default function Centres() {
       <Card>
         <div style={searchBar}>
           <Input
-            icon={<FaMagnifyingGlass />}
+            icon={<FaSearch />}
             placeholder="Rechercher un centre..."
             value={searchTerm}
             onChange={setSearchTerm}
@@ -249,7 +249,7 @@ export default function Centres() {
                     </td>
                     <td style={td}>
                       <div style={locationCell}>
-                        <FaLocationDot style={{ color: "#6b7280", fontSize: 14 }} />
+                        <FaMapMarkerAlt style={{ color: "#6b7280", fontSize: 14 }} />
                         <span>{centre.localisation || "Non défini"}</span>
                       </div>
                     </td>
@@ -277,7 +277,7 @@ export default function Centres() {
                           onClick={() => openForm(centre)}
                           title="Modifier"
                         >
-                          <FaPenToSquare />
+                          <FaEdit />
                         </button>
                         <button
                           style={{

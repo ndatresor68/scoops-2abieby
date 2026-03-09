@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "./supabaseClient"
-import { FaPlus, FaFilePdf, FaMagnifyingGlass, FaCalendar } from "react-icons/fa6"
+import { FaPlus, FaFilePdf, FaSearch, FaCalendar } from "react-icons/fa"
 import { jsPDF } from "jspdf"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
@@ -274,7 +274,7 @@ export default function Achats() {
       <Card>
         <div style={searchBar}>
           <Input
-            icon={<FaMagnifyingGlass />}
+            icon={<FaSearch />}
             placeholder="Rechercher une pesée..."
             value={searchTerm}
             onChange={setSearchTerm}

@@ -2,15 +2,15 @@ import { useEffect, useState, useRef } from "react"
 import { supabase } from "./supabaseClient"
 import {
   FaPlus,
-  FaMagnifyingGlass,
-  FaPenToSquare,
+  FaSearch,
+  FaEdit,
   FaTrash,
   FaPhone,
   FaUser,
   FaFilePdf,
-  FaXmark,
+  FaTimes,
   FaFilter,
-} from "react-icons/fa6"
+} from "react-icons/fa"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
 import Input from "./components/ui/Input"
@@ -64,18 +64,31 @@ export default function Producteurs() {
   })
 
   async function fetchProducteurs() {
-    setLoading(true)
     try {
-      const { data: producteursData, error } = await supabase
+      console.log("[Producteurs] Fetching producteurs...")
+      
+      // Timeout protection: max 15 seconds
+      const queryPromise = supabase
         .from("producteurs")
         .select("*")
         .order("created_at", { ascending: false })
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Query timeout")), 15000)
+      )
+      
+      const { data: producteursData, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise
+      ]).catch((err) => {
+        console.error("[Producteurs] Query timeout or error:", err)
+        return { data: null, error: err }
+      })
 
       if (error) {
-        console.error("Erreur fetch producteurs:", error)
-        showToast("Erreur lors du chargement des producteurs: " + error.message, "error")
+        console.error("[Producteurs] Erreur fetch producteurs:", error)
+        // Don't show toast on initial load to avoid spam
         setProducteurs([])
-        setLoading(false)
         return
       }
 
@@ -84,36 +97,72 @@ export default function Producteurs() {
         return
       }
 
+      console.log(`[Producteurs] Loaded ${producteursData.length} producteurs`)
       setProducteurs(producteursData)
-      // Ne pas afficher de toast si c'est le chargement initial (trop de notifications)
-      // Le toast sera affiché seulement après les actions (ajout, modification, suppression)
     } catch (error) {
-      console.error("Erreur fetch producteurs:", error)
-      showToast("Erreur lors du chargement: " + (error.message || "Erreur inconnue"), "error")
+      console.error("[Producteurs] Exception in fetchProducteurs:", error)
       setProducteurs([])
-    } finally {
-      setLoading(false)
     }
   }
 
   async function fetchCentres() {
     try {
-      const { data, error } = await supabase.from("centres").select("id, nom").order("nom")
+      console.log("[Producteurs] Fetching centres...")
+      
+      // Timeout protection: max 10 seconds
+      const queryPromise = supabase.from("centres").select("id, nom").order("nom")
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Query timeout")), 10000)
+      )
+      
+      const { data, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise
+      ]).catch((err) => {
+        console.error("[Producteurs] Centres query timeout or error:", err)
+        return { data: null, error: err }
+      })
 
       if (error) {
-        console.error(error)
+        console.error("[Producteurs] Error fetching centres:", error)
+        setCentres([])
         return
       }
 
+      console.log(`[Producteurs] Loaded ${data?.length || 0} centres`)
       setCentres(data || [])
     } catch (error) {
-      console.error(error)
+      console.error("[Producteurs] Exception in fetchCentres:", error)
+      setCentres([])
     }
   }
 
   useEffect(() => {
-    fetchProducteurs()
+    let mounted = true
+    
+    async function loadData() {
+      setLoading(true)
+      try {
+        console.log("[Producteurs] Starting data load...")
+        await Promise.all([
+          fetchProducteurs(),
     fetchCentres()
+        ])
+        console.log("[Producteurs] Data load completed")
+      } catch (error) {
+        console.error("[Producteurs] Error loading initial data:", error)
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
+      }
+    }
+    
+    loadData()
+    
+    return () => {
+      mounted = false
+    }
   }, [])
 
   async function generateCode() {
@@ -406,7 +455,7 @@ export default function Producteurs() {
       closeForm()
       // Rafraîchir la liste après un court délai pour laisser le temps à la DB
       setTimeout(() => {
-        fetchProducteurs()
+      fetchProducteurs()
       }, 500)
     } catch (error) {
       console.error("Erreur handleSubmit:", error)
@@ -591,15 +640,15 @@ export default function Producteurs() {
     <div style={container}>
       <div
         style={{
-          ...header,
-          flexDirection: isMobile ? "column" : "row",
+        ...header,
+        flexDirection: isMobile ? "column" : "row",
         }}
       >
         <div>
           <h1
             style={{
-              ...title,
-              fontSize: isMobile ? "24px" : "32px",
+            ...title,
+            fontSize: isMobile ? "24px" : "32px",
             }}
           >
             Gestion des Producteurs
@@ -612,11 +661,11 @@ export default function Producteurs() {
             icon={<FaFilePdf />}
             variant="secondary"
             style={{
-              width: isMobile ? "100%" : "auto",
+          width: isMobile ? "100%" : "auto",
             }}
           >
             {isMobile ? "PDF" : "Exporter PDF"}
-          </Button>
+        </Button>
         </div>
       </div>
 
@@ -640,16 +689,16 @@ export default function Producteurs() {
               </select>
             </div>
 
-            <Input
-              icon={<FaMagnifyingGlass />}
+          <Input
+            icon={<FaSearch />}
               placeholder="Rechercher par nom..."
-              value={searchTerm}
-              onChange={setSearchTerm}
-              style={{ flex: 1, maxWidth: "400px" }}
-            />
+            value={searchTerm}
+            onChange={setSearchTerm}
+            style={{ flex: 1, maxWidth: "400px" }}
+          />
 
             {(selectedCentre || searchTerm) && (
-              <Button onClick={resetFilters} variant="ghost" icon={<FaXmark />}>
+              <Button onClick={resetFilters} variant="ghost" icon={<FaTimes />}>
                 Réinitialiser
               </Button>
             )}
@@ -721,7 +770,7 @@ export default function Producteurs() {
                     onClick={() => openForm(producteur)}
                     title="Modifier"
                   >
-                    <FaPenToSquare />
+                    <FaEdit />
                   </button>
                   <button
                     style={{
@@ -794,8 +843,8 @@ export default function Producteurs() {
                     <td style={td} onClick={(e) => e.stopPropagation()}>
                       <div
                         style={{
-                          ...actionsCell,
-                          gap: isMobile ? 12 : 8,
+                        ...actionsCell,
+                        gap: isMobile ? 12 : 8,
                         }}
                       >
                         <button
@@ -816,7 +865,7 @@ export default function Producteurs() {
                             e.currentTarget.style.transform = "translateY(0)"
                           }}
                         >
-                          <FaPenToSquare />
+                          <FaEdit />
                         </button>
                         <button
                           style={{
@@ -861,38 +910,38 @@ export default function Producteurs() {
           <div style={formSection}>
             <h3 style={formSectionTitle}>Informations principales</h3>
             <div style={formGrid}>
-              <Input
-                label="Code"
-                value={generatedCode}
-                readOnly
-                disabled
+          <Input
+            label="Code"
+            value={generatedCode}
+            readOnly
+            disabled
                 style={formField}
-              />
+          />
 
-              <Input
-                label="Nom du producteur"
-                value={formData.nom}
-                onChange={(v) => setFormData({ ...formData, nom: v })}
-                required
-                placeholder="Ex: Kouassi Jean"
+          <Input
+            label="Nom du producteur"
+            value={formData.nom}
+            onChange={(v) => setFormData({ ...formData, nom: v })}
+            required
+            placeholder="Ex: Kouassi Jean"
                 style={formField}
-              />
+          />
 
-              <Input
-                label="Téléphone"
-                value={formData.telephone}
-                onChange={(v) => setFormData({ ...formData, telephone: v })}
-                required
-                placeholder="Ex: 0700000000"
-                icon={<FaPhone />}
+          <Input
+            label="Téléphone"
+            value={formData.telephone}
+            onChange={(v) => setFormData({ ...formData, telephone: v })}
+            required
+            placeholder="Ex: 0700000000"
+            icon={<FaPhone />}
                 style={formField}
-              />
+          />
 
               <div style={formField}>
                 <label style={formLabel}>Centre associé</label>
-                <select
-                  value={formData.centre_id}
-                  onChange={(e) => setFormData({ ...formData, centre_id: e.target.value })}
+            <select
+              value={formData.centre_id}
+              onChange={(e) => setFormData({ ...formData, centre_id: e.target.value })}
                   style={formSelect}
                   onFocus={(e) => {
                     e.target.style.borderColor = "#7a1f1f"
@@ -902,21 +951,21 @@ export default function Producteurs() {
                     e.target.style.borderColor = "#d1d5db"
                     e.target.style.boxShadow = "none"
                   }}
-                >
-                  <option value="">Aucun centre</option>
-                  {centres.map((centre) => (
-                    <option key={centre.id} value={centre.id}>
-                      {centre.nom}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            >
+              <option value="">Aucun centre</option>
+              {centres.map((centre) => (
+                <option key={centre.id} value={centre.id}>
+                  {centre.nom}
+                </option>
+              ))}
+            </select>
+          </div>
 
               <div style={formField}>
                 <label style={formLabel}>Sexe</label>
-                <select
-                  value={formData.sexe}
-                  onChange={(e) => setFormData({ ...formData, sexe: e.target.value })}
+            <select
+              value={formData.sexe}
+              onChange={(e) => setFormData({ ...formData, sexe: e.target.value })}
                   style={formSelect}
                   onFocus={(e) => {
                     e.target.style.borderColor = "#7a1f1f"
@@ -926,26 +975,26 @@ export default function Producteurs() {
                     e.target.style.borderColor = "#d1d5db"
                     e.target.style.boxShadow = "none"
                   }}
-                >
-                  <option value="">Non spécifié</option>
-                  <option value="Homme">Homme</option>
-                  <option value="Femme">Femme</option>
-                </select>
-              </div>
+            >
+              <option value="">Non spécifié</option>
+              <option value="Homme">Homme</option>
+              <option value="Femme">Femme</option>
+            </select>
+          </div>
 
-              <Input
-                label="Localité"
-                value={formData.localite}
-                onChange={(v) => setFormData({ ...formData, localite: v })}
-                placeholder="Ex: Divo, Côte d'Ivoire"
+          <Input
+            label="Localité"
+            value={formData.localite}
+            onChange={(v) => setFormData({ ...formData, localite: v })}
+            placeholder="Ex: Divo, Côte d'Ivoire"
                 style={formField}
-              />
+          />
 
               <div style={formField}>
                 <label style={formLabel}>Statut</label>
-                <select
-                  value={formData.statut}
-                  onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
+            <select
+              value={formData.statut}
+              onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
                   style={formSelect}
                   onFocus={(e) => {
                     e.target.style.borderColor = "#7a1f1f"
@@ -955,11 +1004,11 @@ export default function Producteurs() {
                     e.target.style.borderColor = "#d1d5db"
                     e.target.style.boxShadow = "none"
                   }}
-                >
-                  <option value="">Non spécifié</option>
-                  <option value="Membre">Membre</option>
-                  <option value="Nouveau membre">Nouveau membre</option>
-                </select>
+            >
+              <option value="">Non spécifié</option>
+              <option value="Membre">Membre</option>
+              <option value="Nouveau membre">Nouveau membre</option>
+            </select>
               </div>
             </div>
           </div>
@@ -1070,8 +1119,8 @@ export default function Producteurs() {
 
           <div
             style={{
-              ...modalActions,
-              flexDirection: isMobile ? "column" : "row",
+            ...modalActions,
+            flexDirection: isMobile ? "column" : "row",
             }}
           >
             <Button
@@ -1080,7 +1129,7 @@ export default function Producteurs() {
               onClick={() => setShowPdfModal(false)}
               disabled={generatingPdf}
               style={{
-                width: isMobile ? "100%" : "auto",
+              width: isMobile ? "100%" : "auto",
               }}
             >
               Annuler
@@ -1092,7 +1141,7 @@ export default function Producteurs() {
               disabled={generatingPdf}
               icon={generatingPdf ? null : <FaFilePdf />}
               style={{
-                width: isMobile ? "100%" : "auto",
+              width: isMobile ? "100%" : "auto",
               }}
             >
               {generatingPdf ? "Génération..." : "Générer le PDF"}
@@ -1394,12 +1443,6 @@ const formSection = {
   borderBottom: "1px solid #f3f4f6",
 }
 
-const formSection:last-child = {
-  marginBottom: 0,
-  paddingBottom: 0,
-  borderBottom: "none",
-}
-
 const formSectionTitle = {
   margin: "0 0 20px 0",
   fontSize: "16px",
@@ -1411,7 +1454,7 @@ const formSectionTitle = {
 const formGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 20,
+  gap: 24,
 }
 
 const formField = {

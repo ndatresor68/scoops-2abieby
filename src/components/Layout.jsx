@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { FaBars, FaChevronLeft, FaChevronRight } from "react-icons/fa6"
+import { FaBars, FaChevronLeft, FaChevronRight } from "react-icons/fa"
 import Achats from "../achats"
 import Centres from "../Centres"
 import DashboardCentral from "../DashboardCentral"
@@ -8,6 +8,7 @@ import Parametres from "../Parametres"
 import Producteurs from "../Producteurs"
 import { useAuth } from "../context/AuthContext"
 import AdminUsers from "../pages/AdminUsers"
+import AdminDashboard from "../pages/AdminDashboard"
 import Profile from "../pages/Profile"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
@@ -19,11 +20,19 @@ const TITLES = {
   achats: "Gestion des Achats",
   parametres: "Paramètres",
   profile: "Mon Profil",
+  admin: "Administration",
   "admin-users": "Gestion des Utilisateurs",
 }
 
 export default function Layout() {
   const { user, loading, displayName, isAdmin, role } = useAuth()
+  
+  // Debug log to verify role source
+  useEffect(() => {
+    console.log("[Layout] User role:", user?.role)
+    console.log("[Layout] Role from AuthContext:", role)
+    console.log("[Layout] Is Admin:", isAdmin)
+  }, [user, role, isAdmin])
   const [activePage, setActivePage] = useState("dashboard")
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -68,6 +77,8 @@ export default function Layout() {
         return <Parametres onOpenAdminUsers={() => setActivePage("admin-users")} isAdmin={isAdmin} />
       case "profile":
         return <Profile />
+      case "admin":
+        return isAdmin ? <AdminDashboard /> : <DashboardCentral />
       case "admin-users":
         return isAdmin ? <AdminUsers /> : <DashboardCentral />
       default:
@@ -124,7 +135,7 @@ export default function Layout() {
               }}>{TITLES[activePage] || "Application"}</h1>
               {!isMobile && (
                 <p style={subtitle}>
-                  Connecté en tant que {displayName} ({role})
+                  Connecté en tant que {displayName} {user?.role ? `(${user.role})` : ""}
                 </p>
               )}
             </div>

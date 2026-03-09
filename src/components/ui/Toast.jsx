@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react"
-import { FaCircleCheck, FaCircleExclamation, FaCircleInfo, FaXmark } from "react-icons/fa6"
+import { FaCheckCircle, FaExclamationCircle, FaInfoCircle, FaTimes } from "react-icons/fa"
 
 const ToastContext = createContext(null)
 
@@ -47,10 +47,10 @@ export function ToastProvider({ children }) {
 
 function ToastItem({ toast, onClose }) {
   const icons = {
-    success: <FaCircleCheck />,
-    error: <FaCircleExclamation />,
-    warning: <FaCircleExclamation />,
-    info: <FaCircleInfo />,
+    success: <FaCheckCircle />,
+    error: <FaExclamationCircle />,
+    warning: <FaExclamationCircle />,
+    info: <FaInfoCircle />,
   }
 
   const colors = {
@@ -96,7 +96,7 @@ function ToastItem({ toast, onClose }) {
         onMouseEnter={(e) => (e.target.style.opacity = 1)}
         onMouseLeave={(e) => (e.target.style.opacity = 0.7)}
       >
-        <FaXmark size={14} />
+        <FaTimes size={14} />
       </button>
       <style>{`
         @keyframes slideIn {

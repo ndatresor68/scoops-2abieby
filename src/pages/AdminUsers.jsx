@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { FaPenToSquare, FaPlus, FaTrash, FaUserShield, FaXmark } from "react-icons/fa6"
+import { FaEdit, FaPlus, FaTrash, FaUserShield, FaTimes } from "react-icons/fa"
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../supabaseClient"
 
@@ -277,7 +277,7 @@ export default function AdminUsers() {
                 <td style={td}>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button style={editBtn} onClick={() => openEditModal(u)}>
-                      <FaPenToSquare />
+                      <FaEdit />
                     </button>
                     <button style={deleteBtn} onClick={() => handleDeleteUser(u)}>
                       <FaTrash />
@@ -296,7 +296,7 @@ export default function AdminUsers() {
             <div style={modalHeader}>
               <h3 style={{ margin: 0 }}>{editingUser ? "Modifier utilisateur" : "Nouvel utilisateur"}</h3>
               <button style={iconBtn} onClick={resetModalState}>
-                <FaXmark />
+                <FaTimes />
               </button>
             </div>
 

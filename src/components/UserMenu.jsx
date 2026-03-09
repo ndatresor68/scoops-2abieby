@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react"
-import { FaChevronDown, FaGear, FaRightFromBracket, FaUser } from "react-icons/fa6"
+import { FaChevronDown, FaCog, FaSignOutAlt, FaUser } from "react-icons/fa"
 import { useAuth } from "../context/AuthContext"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 
@@ -14,7 +14,13 @@ function initialsFromName(name, email) {
 
 export default function UserMenu({ onOpenProfile, onOpenSettings }) {
   const [open, setOpen] = useState(false)
-  const { user, profile, role, displayName, signOut } = useAuth()
+  const { user, role, displayName, signOut } = useAuth()
+  
+  // Debug log to verify role source
+  useEffect(() => {
+    console.log("[UserMenu] User role:", user?.role)
+    console.log("[UserMenu] Role from AuthContext:", role)
+  }, [user, role])
   const isMobile = useMediaQuery("(max-width: 640px)")
   const menuRef = useRef(null)
   
@@ -42,8 +48,8 @@ export default function UserMenu({ onOpenProfile, onOpenSettings }) {
         ...trigger,
         padding: isMobile ? "6px 10px" : "8px 12px",
       }} onClick={() => setOpen((v) => !v)}>
-        {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt={displayName} style={{
+        {user?.avatar_url ? (
+          <img src={user.avatar_url} alt={displayName} style={{
             ...avatarImage,
             width: isMobile ? 32 : 36,
             height: isMobile ? 32 : 36,
@@ -60,7 +66,7 @@ export default function UserMenu({ onOpenProfile, onOpenSettings }) {
           <div style={userInfo}>
             <strong style={{ fontSize: 13 }}>{displayName}</strong>
             <span style={{ fontSize: 12, opacity: 0.8 }}>
-              {user?.email} • {role}
+              {user?.email} {user?.role ? `• ${user.role}` : ""}
             </span>
           </div>
         )}
@@ -88,7 +94,7 @@ export default function UserMenu({ onOpenProfile, onOpenSettings }) {
               setOpen(false)
             }}
           >
-            <FaGear size={14} /> Parametres
+            <FaCog size={14} /> Parametres
           </button>
           <button
             style={dangerItem}
@@ -97,7 +103,7 @@ export default function UserMenu({ onOpenProfile, onOpenSettings }) {
               setOpen(false)
             }}
           >
-            <FaRightFromBracket size={14} /> Deconnexion
+            <FaSignOutAlt size={14} /> Deconnexion
           </button>
         </div>
       )}

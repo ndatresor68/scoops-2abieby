@@ -1,4 +1,4 @@
-import { FaPhone, FaUser, FaCalendar, FaBuilding, FaIdCard, FaFile } from "react-icons/fa6"
+import { FaPhone, FaUser, FaCalendar, FaBuilding, FaIdCard, FaFile } from "react-icons/fa"
 import Modal from "./ui/Modal"
 import Card from "./ui/Card"
 import { useMediaQuery } from "../hooks/useMediaQuery"

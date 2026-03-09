@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { FaGear, FaUsersGear } from "react-icons/fa6"
+import { FaCog, FaUsers } from "react-icons/fa"
 import { supabase } from "./supabaseClient"
 
 const INITIAL_PARAMS = {
@@ -72,7 +72,7 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
     <div style={page}>
       <div style={pageHeader}>
         <h2 style={{ margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
-          <FaGear /> Parametres
+          <FaCog /> Parametres
         </h2>
       </div>
 
@@ -126,7 +126,7 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
           <div style={{ marginTop: 14 }}>
             {isAdmin ? (
               <button type="button" style={adminBtn} onClick={onOpenAdminUsers}>
-                <FaUsersGear /> Gestion des utilisateurs
+                <FaUsers /> Gestion des utilisateurs
               </button>
             ) : (
               <p style={{ margin: 0, color: "#6b7280" }}>

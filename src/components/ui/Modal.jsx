@@ -1,4 +1,4 @@
-import { FaXmark } from "react-icons/fa6"
+import { FaTimes } from "react-icons/fa"
 import { useMediaQuery } from "../../hooks/useMediaQuery"
 
 export default function Modal({ isOpen, onClose, title, children, size = "md", style = {} }) {
@@ -79,7 +79,7 @@ export default function Modal({ isOpen, onClose, title, children, size = "md", s
                 e.target.style.color = "#6b7280"
               }}
             >
-              <FaXmark />
+              <FaTimes />
             </button>
           </div>
         )}
