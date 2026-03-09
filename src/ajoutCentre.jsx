@@ -27,7 +27,7 @@ export default function AjoutCentre() {
       ])
 
     if (error) {
-      console.log(error)
+      console.error("Erreur ajout centre:", error)
       setMessage("Erreur lors de l'ajout")
     } else {
       setMessage("Centre ajouté avec succès")

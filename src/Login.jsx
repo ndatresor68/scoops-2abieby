@@ -14,13 +14,19 @@ export default function Login() {
     setLoading(true)
     setError("")
 
-    const { error: authError } = await signInWithPassword(email, password)
+    try {
+      const { error: authError } = await signInWithPassword(email, password)
 
-    if (authError) {
-      setError("Email ou mot de passe incorrect")
+      if (authError) {
+        console.error("Erreur de connexion:", authError)
+        setError(authError.message || "Email ou mot de passe incorrect")
+      }
+    } catch (error) {
+      console.error("Erreur lors de la connexion:", error)
+      setError("Une erreur est survenue. Veuillez réessayer.")
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (

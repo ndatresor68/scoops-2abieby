@@ -75,11 +75,26 @@ export function AuthProvider({ children }) {
   }, [])
 
   const syncAuthState = useCallback(async () => {
-    const { data } = await supabase.auth.getUser()
-    const nextUser = data?.user || null
-    setUser(nextUser)
-    await Promise.all([loadProfileForUser(nextUser), loadRoleForUser(nextUser)])
-    return nextUser
+    try {
+      const { data, error } = await supabase.auth.getUser()
+      if (error) {
+        console.error("Auth error:", error)
+        setUser(null)
+        setProfile(null)
+        setRole("AGENT")
+        return null
+      }
+      const nextUser = data?.user || null
+      setUser(nextUser)
+      await Promise.all([loadProfileForUser(nextUser), loadRoleForUser(nextUser)])
+      return nextUser
+    } catch (error) {
+      console.error("Error syncing auth state:", error)
+      setUser(null)
+      setProfile(null)
+      setRole("AGENT")
+      return null
+    }
   }, [loadProfileForUser, loadRoleForUser])
 
   const refreshUser = useCallback(async () => {
@@ -108,9 +123,6 @@ export function AuthProvider({ children }) {
     }
   }, [syncAuthState])
 
-  useEffect(() => {
-    console.log(role)
-  }, [role])
 
   const signInWithPassword = useCallback(async (email, password) => {
     const response = await supabase.auth.signInWithPassword({ email, password })
