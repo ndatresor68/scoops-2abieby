@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../supabaseClient"
-import { FaPlus, FaEdit, FaTrash, FaUserFriends, FaBuilding } from "react-icons/fa"
+import { FaPlus, FaEdit, FaTrash, FaUserFriends, FaBuilding, FaFilePdf } from "react-icons/fa"
 import Card from "../../components/ui/Card"
 import Button from "../../components/ui/Button"
 import Table from "../../components/ui/Table"
@@ -9,6 +9,7 @@ import ConfirmDialog from "../../components/ui/ConfirmDialog"
 import Input from "../../components/ui/Input"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
+import { exportAgentsPDF } from "../../utils/exportToPDF"
 
 const INITIAL_FORM = {
   nom: "",
@@ -30,6 +31,7 @@ export default function AdminAgents() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(INITIAL_FORM)
   const [errors, setErrors] = useState({})
+  const [exportingPDF, setExportingPDF] = useState(false)
 
   useEffect(() => {
     if (!isAdmin) {
@@ -272,6 +274,24 @@ export default function AdminAgents() {
     )
   }
 
+  async function handleExportPDF() {
+    if (agents.length === 0) {
+      showToast("Aucun agent à exporter", "warning")
+      return
+    }
+
+    setExportingPDF(true)
+    try {
+      const result = await exportAgentsPDF(agents, centres)
+      showToast(`PDF exporté avec succès (${result.count} agent${result.count > 1 ? "s" : ""})`, "success")
+    } catch (error) {
+      console.error("[AdminAgents] PDF export error:", error)
+      showToast("Erreur lors de l'export PDF: " + (error.message || "Erreur inconnue"), "error")
+    } finally {
+      setExportingPDF(false)
+    }
+  }
+
   return (
     <div style={container}>
       <div style={header}>
@@ -279,9 +299,19 @@ export default function AdminAgents() {
           <h2 style={title}>Gestion des Agents</h2>
           <p style={subtitle}>Gérer les agents assignés aux centres</p>
         </div>
-        <Button variant="primary" icon={<FaPlus />} onClick={openCreateModal}>
-          Ajouter un agent
-        </Button>
+        <div style={headerActions}>
+          <Button
+            variant="secondary"
+            icon={<FaFilePdf />}
+            onClick={handleExportPDF}
+            disabled={exportingPDF || agents.length === 0}
+          >
+            {exportingPDF ? "Export..." : "Exporter PDF"}
+          </Button>
+          <Button variant="primary" icon={<FaPlus />} onClick={openCreateModal}>
+            Ajouter un agent
+          </Button>
+        </div>
       </div>
 
       <Card>

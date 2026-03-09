@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/supabase-js": "2.49.4",
     "dompurify": "^3.3.0",
+    "jspdf": "^2.5.2",
     "jspdf-autotable": "^5.0.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

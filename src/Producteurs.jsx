@@ -19,8 +19,7 @@ import ImageUpload from "./components/ImageUpload"
 import ProducteurDetail from "./components/ProducteurDetail"
 import { useToast } from "./components/ui/Toast"
 import { useMediaQuery } from "./hooks/useMediaQuery"
-import { jsPDF } from "jspdf"
-import "jspdf-autotable"
+import { exportProducteursPDF } from "./utils/exportToPDF"
 
 export default function Producteurs() {
   const { showToast } = useToast()
@@ -519,115 +518,17 @@ export default function Producteurs() {
   async function generatePDF() {
     setGeneratingPdf(true)
     try {
-      // Filtrer les producteurs selon le centre sélectionné
-      let producteursToExport = producteurs
-      if (pdfCentreFilter && pdfCentreFilter !== "") {
-        producteursToExport = producteurs.filter(
-          (p) => String(p.centre_id) === String(pdfCentreFilter),
-        )
-      }
-
-      if (producteursToExport.length === 0) {
-        showToast("Aucun producteur à exporter", "warning")
-        setShowPdfModal(false)
-        setGeneratingPdf(false)
-        return
-      }
-
-      const doc = new jsPDF()
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
-
-      // En-tête avec logo et nom
-      doc.setFillColor(122, 31, 31)
-      doc.rect(0, 0, pageWidth, 40, "F")
-
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(20)
-      doc.setFont("helvetica", "bold")
-      doc.text("SCOOP ASAB-COOP-CA", pageWidth / 2, 18, { align: "center" })
-
-      doc.setFontSize(11)
-      doc.setFont("helvetica", "normal")
-      doc.text("Union • Discipline • Travail", pageWidth / 2, 28, { align: "center" })
-
-      // Titre
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(16)
-      doc.setFont("helvetica", "bold")
-      doc.text("LISTE DES PRODUCTEURS", pageWidth / 2, 55, { align: "center" })
-
-      // Informations d'export
-      doc.setFontSize(10)
-      doc.setFont("helvetica", "normal")
-      const exportDate = new Date().toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-      doc.text(`Date d'export : ${exportDate}`, pageWidth / 2, 65, { align: "center" })
-
-      const centreNom = pdfCentreFilter
-        ? getCentreNom(pdfCentreFilter)
-        : "Tous les centres"
-      doc.text(`Centre : ${centreNom}`, pageWidth / 2, 72, { align: "center" })
-
-      // Tableau
-      const tableData = producteursToExport.map((p) => [
-        p.code || "-",
-        p.nom || "-",
-        p.telephone || "-",
-        getCentreNom(p.centre_id),
-      ])
-
-      doc.autoTable({
-        startY: 80,
-        head: [["Code", "Nom", "Téléphone", "Centre"]],
-        body: tableData,
-        theme: "striped",
-        headStyles: {
-          fillColor: [122, 31, 31],
-          textColor: 255,
-          fontStyle: "bold",
-        },
-        styles: {
-          fontSize: 9,
-          cellPadding: 3,
-        },
-        columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 60 },
-          2: { cellWidth: 40 },
-          3: { cellWidth: 50 },
-        },
-        didDrawPage: (data) => {
-          // Pied de page sur chaque page
-          doc.setFontSize(8)
-          doc.setTextColor(128, 128, 128)
-          const pageNum = doc.internal.getNumberOfPages()
-          doc.text(
-            `Page ${data.pageNumber} sur ${pageNum}`,
-            pageWidth / 2,
-            pageHeight - 10,
-            { align: "center" },
-          )
-        },
-      })
-
-      // Pied de page final
-      const finalY = doc.lastAutoTable.finalY + 10
-      doc.setFontSize(8)
-      doc.setTextColor(128, 128, 128)
-      doc.text("Logiciel SCOOPS - Gestion Coopérative", pageWidth / 2, pageHeight - 20, {
-        align: "center",
-      })
-      doc.text(`Généré le ${exportDate}`, pageWidth / 2, pageHeight - 15, { align: "center" })
-
-      const fileName = `liste-producteurs-${pdfCentreFilter ? getCentreNom(pdfCentreFilter).replace(/\s+/g, "-") : "tous"}-${new Date().toISOString().split("T")[0]}.pdf`
-      doc.save(fileName)
+      const result = await exportProducteursPDF(
+        producteurs,
+        centres,
+        pdfCentreFilter || null
+      )
 
       setShowPdfModal(false)
-      showToast(`PDF exporté avec succès (${producteursToExport.length} producteur${producteursToExport.length > 1 ? "s" : ""})`, "success")
+      showToast(
+        `PDF exporté avec succès (${result.count} producteur${result.count > 1 ? "s" : ""})`,
+        "success"
+      )
     } catch (error) {
       console.error("Erreur export PDF:", error)
       showToast("Erreur lors de l'export PDF: " + (error.message || "Erreur inconnue"), "error")

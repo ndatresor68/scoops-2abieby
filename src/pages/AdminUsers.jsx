@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { FaEdit, FaPlus, FaTrash, FaUserShield, FaTimes } from "react-icons/fa"
+import { FaEdit, FaPlus, FaTrash, FaUserShield, FaTimes, FaFilePdf } from "react-icons/fa"
 import { useAuth } from "../context/AuthContext"
 import { supabase } from "../supabaseClient"
+import { exportUsersPDF } from "../utils/exportToPDF"
+import Button from "../components/ui/Button"
 
 const INITIAL_FORM = {
   nom: "",
@@ -29,6 +31,7 @@ export default function AdminUsers() {
   const [photoFile, setPhotoFile] = useState(null)
   const [preview, setPreview] = useState("")
   const fileRef = useRef(null)
+  const [exportingPDF, setExportingPDF] = useState(false)
 
   function normalizeRole(value) {
     const nextRole = String(value || "AGENT").trim().toUpperCase()
@@ -219,6 +222,26 @@ export default function AdminUsers() {
     setShowModal(true)
   }
 
+  async function handleExportPDF() {
+    if (users.length === 0) {
+      setError("Aucun utilisateur à exporter")
+      return
+    }
+
+    setExportingPDF(true)
+    setError("")
+    setMessage("")
+    try {
+      const result = await exportUsersPDF(users, centres)
+      setMessage(`PDF exporté avec succès (${result.count} utilisateur${result.count > 1 ? "s" : ""})`)
+    } catch (error) {
+      console.error("[AdminUsers] PDF export error:", error)
+      setError("Erreur lors de l'export PDF: " + (error.message || "Erreur inconnue"))
+    } finally {
+      setExportingPDF(false)
+    }
+  }
+
   if (!isAdmin) {
     return (
       <div style={restrictedCard}>
@@ -233,9 +256,19 @@ export default function AdminUsers() {
     <div>
       <div style={topBar}>
         <h2 style={{ margin: 0 }}>Gestion des utilisateurs</h2>
-        <button style={primaryBtn} onClick={openCreateModal}>
-          <FaPlus /> Ajouter utilisateur
-        </button>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <Button
+            variant="secondary"
+            icon={<FaFilePdf />}
+            onClick={handleExportPDF}
+            disabled={exportingPDF || users.length === 0}
+          >
+            {exportingPDF ? "Export..." : "Exporter PDF"}
+          </Button>
+          <button style={primaryBtn} onClick={openCreateModal}>
+            <FaPlus /> Ajouter utilisateur
+          </button>
+        </div>
       </div>
 
       {message && <div style={successBox}>{message}</div>}

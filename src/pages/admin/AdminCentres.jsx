@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../supabaseClient"
-import { FaPlus, FaEdit, FaTrash, FaBuilding } from "react-icons/fa"
+import { FaPlus, FaEdit, FaTrash, FaBuilding, FaFilePdf } from "react-icons/fa"
 import Card from "../../components/ui/Card"
 import Button from "../../components/ui/Button"
 import Input from "../../components/ui/Input"
@@ -8,6 +8,7 @@ import Modal from "../../components/ui/Modal"
 import Table from "../../components/ui/Table"
 import ConfirmDialog from "../../components/ui/ConfirmDialog"
 import { useToast } from "../../components/ui/Toast"
+import { exportCentresPDF } from "../../utils/exportToPDF"
 
 export default function AdminCentres() {
   const { showToast } = useToast()
@@ -23,6 +24,7 @@ export default function AdminCentres() {
     localite: "",
   })
   const [errors, setErrors] = useState({})
+  const [exportingPDF, setExportingPDF] = useState(false)
 
   useEffect(() => {
     fetchCentres()
@@ -146,6 +148,24 @@ export default function AdminCentres() {
     )
   }
 
+  async function handleExportPDF() {
+    if (centres.length === 0) {
+      showToast("Aucun centre à exporter", "warning")
+      return
+    }
+
+    setExportingPDF(true)
+    try {
+      const result = await exportCentresPDF(centres)
+      showToast(`PDF exporté avec succès (${result.count} centre${result.count > 1 ? "s" : ""})`, "success")
+    } catch (error) {
+      console.error("[AdminCentres] PDF export error:", error)
+      showToast("Erreur lors de l'export PDF: " + (error.message || "Erreur inconnue"), "error")
+    } finally {
+      setExportingPDF(false)
+    }
+  }
+
   const columns = [
     {
       key: "code",
@@ -204,9 +224,19 @@ export default function AdminCentres() {
           <h2 style={headerTitle}>Gestion des Centres</h2>
           <p style={subtitle}>Gérer les centres de collecte</p>
         </div>
-        <Button onClick={openCreateModal} icon={<FaPlus />}>
-          Ajouter un centre
-        </Button>
+        <div style={headerActions}>
+          <Button
+            variant="secondary"
+            icon={<FaFilePdf />}
+            onClick={handleExportPDF}
+            disabled={exportingPDF || centres.length === 0}
+          >
+            {exportingPDF ? "Export..." : "Exporter PDF"}
+          </Button>
+          <Button onClick={openCreateModal} icon={<FaPlus />}>
+            Ajouter un centre
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -300,8 +330,15 @@ const container = {
 const header = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
+  alignItems: "flex-start",
   gap: 16,
+  flexWrap: "wrap",
+}
+
+const headerActions = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
 }
 
 const headerTitle = {
