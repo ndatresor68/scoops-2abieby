@@ -10,6 +10,7 @@ import Input from "../../components/ui/Input"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import { exportAgentsPDF } from "../../utils/exportToPDF"
+import { logPDFExported } from "../../utils/activityLogger"
 
 const INITIAL_FORM = {
   nom: "",
@@ -49,16 +50,24 @@ export default function AdminAgents() {
   async function fetchData() {
     try {
       setLoading(true)
-      const [{ data: agentsData, error: agentsError }, { data: centresData }] = await Promise.all([
+      const [{ data: agentsData, error: agentsError }, { data: centresData, error: centresError }] = await Promise.all([
         supabase
           .from("utilisateurs")
-          .select("id,user_id,nom,email,role,centre_id,avatar_url,created_at")
+          .select("*")
           .eq("role", "AGENT")
           .order("created_at", { ascending: false }),
         supabase.from("centres").select("id,nom").order("nom"),
       ])
 
-      if (agentsError) throw agentsError
+      if (agentsError) {
+        console.error("[AdminAgents] Error fetching agents:", agentsError)
+        throw new Error(`Erreur lors du chargement des agents: ${agentsError.message}`)
+      }
+
+      if (centresError) {
+        console.warn("[AdminAgents] Error fetching centres:", centresError)
+        // Centres error is not critical, continue with empty array
+      }
 
       setAgents(agentsData || [])
       setCentres(centresData || [])
@@ -137,37 +146,69 @@ export default function AdminAgents() {
         if (error) throw error
         showToast("Agent modifié avec succès", "success")
       } else {
-        // Create new agent
-        // Note: Creating auth users requires service role key
-        // This is a simplified version - in production, use server-side API
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        // Create new agent using signUp (NOT admin.createUser - requires service_role)
+        const { data: authData, error: authError } = await supabase.auth.signUp({
           email: form.email.trim(),
           password: form.password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: form.nom.trim(),
-            role: "AGENT",
+          options: {
+            data: {
+              full_name: form.nom.trim(),
+              role: "AGENT",
+            },
           },
         })
 
         if (authError) {
+          console.error("[AdminAgents] Auth signUp error:", authError)
           throw new Error(
-            authError.message ||
-              "Création refusée. Utiliser une clé service role côté serveur pour admin.createUser.",
+            authError.message || "Erreur lors de la création du compte. Vérifiez que l'email n'existe pas déjà.",
           )
         }
 
-        const { error: insertError } = await supabase.from("utilisateurs").insert([
-          {
-            user_id: authData.user.id,
-            nom: form.nom.trim(),
-            email: form.email.trim(),
-            role: "AGENT",
-            centre_id: form.centre_id || null,
-          },
-        ])
+        const newAuthUser = authData?.user
+        if (!newAuthUser?.id) {
+          throw new Error("Création du compte impossible - aucun utilisateur retourné")
+        }
 
-        if (insertError) throw insertError
+        // Build payload without status first
+        const insertPayload = {
+          user_id: newAuthUser.id,
+          nom: form.nom.trim(),
+          email: form.email.trim(),
+          role: "AGENT",
+          centre_id: form.centre_id || null,
+        }
+
+        // Try to insert with status, but handle gracefully if column doesn't exist
+        let insertedData
+        
+        const { data: dataWithStatus, error: errorWithStatus } = await supabase
+          .from("utilisateurs")
+          .insert([{ ...insertPayload, status: "active" }])
+          .select()
+
+        if (errorWithStatus && errorWithStatus.message?.includes("status")) {
+          // If status column doesn't exist, try again without it
+          console.warn("[AdminAgents] Status column doesn't exist, retrying without status")
+          const { data: dataWithoutStatus, error: errorWithoutStatus } = await supabase
+            .from("utilisateurs")
+            .insert([insertPayload])
+            .select()
+          
+          if (errorWithoutStatus) {
+            console.error("[AdminAgents] Insert error:", errorWithoutStatus)
+            throw errorWithoutStatus
+          }
+          
+          insertedData = dataWithoutStatus
+        } else if (errorWithStatus) {
+          console.error("[AdminAgents] Insert error:", errorWithStatus)
+          throw errorWithStatus
+        } else {
+          insertedData = dataWithStatus
+        }
+
+        console.log("[AdminAgents] Agent created successfully:", insertedData?.[0])
         showToast("Agent créé avec succès", "success")
       }
 
@@ -189,12 +230,15 @@ export default function AdminAgents() {
         .from("utilisateurs")
         .delete()
         .eq("id", deletingAgent.id)
+        .select()
 
-      if (deleteError) throw deleteError
-
-      if (deletingAgent.user_id) {
-        await supabase.auth.admin.deleteUser(deletingAgent.user_id)
+      if (deleteError) {
+        console.error("[AdminAgents] Delete error:", deleteError)
+        throw deleteError
       }
+
+      console.log("[AdminAgents] Agent deleted from utilisateurs table")
+      console.warn("[AdminAgents] Note: Auth user still exists. To fully delete, use server-side function with service_role key.")
 
       showToast("Agent supprimé avec succès", "success")
       setShowDeleteDialog(false)
@@ -283,6 +327,15 @@ export default function AdminAgents() {
     setExportingPDF(true)
     try {
       const result = await exportAgentsPDF(agents, centres)
+      
+      // Log activity
+      await logPDFExported(
+        "Agents",
+        `${result.count} agent${result.count > 1 ? "s" : ""} exported`,
+        user?.id || null,
+        user?.email || null,
+      )
+      
       showToast(`PDF exporté avec succès (${result.count} agent${result.count > 1 ? "s" : ""})`, "success")
     } catch (error) {
       console.error("[AdminAgents] PDF export error:", error)

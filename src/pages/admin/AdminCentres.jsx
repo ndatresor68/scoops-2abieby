@@ -12,6 +12,7 @@ import { exportCentresPDF } from "../../utils/exportToPDF"
 
 export default function AdminCentres() {
   const { showToast } = useToast()
+  const { user } = useAuth()
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -93,17 +94,38 @@ export default function AdminCentres() {
           .eq("id", editingCentre.id)
 
         if (error) throw error
+        
+        // Log activity
+        await logCentreUpdated(
+          editingCentre.id,
+          formData.nom.trim(),
+          `Updated: nom, code, localite`,
+          user?.id || null,
+          user?.email || null,
+        )
+        
         showToast("Centre modifié avec succès", "success")
       } else {
-        const { error } = await supabase.from("centres").insert([
+        const { data: insertedData, error } = await supabase.from("centres").insert([
           {
             nom: formData.nom.trim(),
             code: formData.code.trim() || null,
             localite: formData.localite.trim() || null,
           },
-        ])
+        ]).select()
 
         if (error) throw error
+        
+        // Log activity
+        if (insertedData && insertedData[0]) {
+          await logCentreCreated(
+            insertedData[0].id,
+            formData.nom.trim(),
+            user?.id || null,
+            user?.email || null,
+          )
+        }
+        
         showToast("Centre créé avec succès", "success")
       }
 
@@ -129,6 +151,15 @@ export default function AdminCentres() {
       const { error } = await supabase.from("centres").delete().eq("id", deletingCentre.id)
 
       if (error) throw error
+      
+      // Log activity
+      await logCentreDeleted(
+        deletingCentre.id,
+        deletingCentre.nom || "Unknown",
+        user?.id || null,
+        user?.email || null,
+      )
+      
       showToast("Centre supprimé avec succès", "success")
       setShowDeleteDialog(false)
       setDeletingCentre(null)
@@ -157,6 +188,15 @@ export default function AdminCentres() {
     setExportingPDF(true)
     try {
       const result = await exportCentresPDF(centres)
+      
+      // Log activity
+      await logPDFExported(
+        "Centres",
+        `${result.count} centre${result.count > 1 ? "s" : ""} exported`,
+        user?.id || null,
+        user?.email || null,
+      )
+      
       showToast(`PDF exporté avec succès (${result.count} centre${result.count > 1 ? "s" : ""})`, "success")
     } catch (error) {
       console.error("[AdminCentres] PDF export error:", error)

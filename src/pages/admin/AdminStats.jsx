@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../supabaseClient"
-import { FaUsers, FaBuilding, FaUserTie, FaBox } from "react-icons/fa"
+import { FaUsers, FaBuilding, FaUserTie, FaBox, FaCheckCircle, FaUserSlash, FaBan } from "react-icons/fa"
 import Card from "../../components/ui/Card"
 import { useMediaQuery } from "../../hooks/useMediaQuery"
 
@@ -8,6 +8,9 @@ export default function AdminStats() {
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     users: 0,
+    activeUsers: 0,
+    suspendedUsers: 0,
+    bannedUsers: 0,
     centres: 0,
     producteurs: 0,
     totalCacao: 0,
@@ -17,11 +20,19 @@ export default function AdminStats() {
 
   useEffect(() => {
     fetchStats()
+    
+    // Set up auto-refresh every 30 seconds for real-time updates
+    const refreshInterval = setInterval(() => {
+      fetchStats()
+    }, 30000)
+    
+    return () => clearInterval(refreshInterval)
   }, [])
 
   async function fetchStats() {
     try {
       setLoading(true)
+      console.log("[AdminStats] ===== FETCHING STATISTICS =====")
 
       // Fetch counts with timeout protection
       const timeoutPromise = new Promise((_, reject) =>
@@ -29,50 +40,177 @@ export default function AdminStats() {
       )
 
       const statsPromise = Promise.all([
-        supabase.from("utilisateurs").select("*", { count: "exact", head: true }),
+        // Fetch ALL users without any filters
+        supabase.from("utilisateurs").select("*"),
         supabase.from("centres").select("*", { count: "exact", head: true }),
         supabase.from("producteurs").select("*", { count: "exact", head: true }),
-        supabase.from("achats").select("quantite, poids"),
+        supabase.from("achats").select("poids, montant"),
       ])
+      
+      console.log("[AdminStats] 🔍 Executing query: supabase.from('utilisateurs').select('*')")
 
       const [usersRes, centresRes, producteursRes, achatsRes] = await Promise.race([
         statsPromise,
         timeoutPromise,
       ]).catch((err) => {
-        console.error("[AdminStats] Error fetching stats:", err)
+        console.error("[AdminStats] ❌ Error fetching stats:", err)
         return [
-          { count: 0 },
+          { data: [], error: err },
           { count: 0 },
           { count: 0 },
           { data: [] },
         ]
       })
 
-      // Calculate total cacao
+      // Log users query result
+      console.log("[AdminStats] Users query result:", {
+        dataLength: usersRes?.data?.length || 0,
+        error: usersRes?.error,
+        hasData: !!usersRes?.data,
+        errorCode: usersRes?.error?.code,
+        errorMessage: usersRes?.error?.message,
+      })
+
+      if (usersRes?.error) {
+        console.error("[AdminStats] ❌ Users query error:", usersRes.error)
+        console.error("[AdminStats] Error details:", JSON.stringify(usersRes.error, null, 2))
+        
+        // Check if it's an RLS policy issue
+        if (
+          usersRes.error.code === "42501" ||
+          usersRes.error.message?.includes("permission") ||
+          usersRes.error.message?.includes("policy") ||
+          usersRes.error.message?.includes("RLS")
+        ) {
+          console.error("[AdminStats] 🔒 RLS Policy issue detected!")
+        }
+      }
+
+      // Calculate user statistics
+      const usersData = usersRes?.data || []
+      
+      // Log ALL users fetched - CRITICAL for debugging
+      console.log("[AdminStats] 🔍 Users fetched:", usersData)
+      console.log(`[AdminStats] ✅ Loaded ${usersData.length} users from database`)
+      
+      // Log each user individually
+      if (usersData.length > 0) {
+        console.log("[AdminStats] 📋 All users details:")
+        usersData.forEach((user, index) => {
+          console.log(`[AdminStats]   User ${index + 1}:`, {
+            id: user.id,
+            user_id: user.user_id,
+            nom: user.nom,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+            hasStatus: user.hasOwnProperty("status"),
+            created_at: user.created_at,
+          })
+        })
+      } else {
+        console.warn("[AdminStats] ⚠️ No users returned from database!")
+      }
+
+      // Normalize users data - handle cases where status column might not exist
+      const normalizedUsers = usersData.map((user) => ({
+        ...user,
+        status: user.status || "active", // Default to active if status column doesn't exist
+      }))
+
+      // Total Users: Count ALL records (no filtering)
+      const totalUsers = normalizedUsers.length
+      
+      // Active Users: Filter by status = "active" or no status
+      const activeUsers = normalizedUsers.filter((u) => {
+        const status = u.status || "active"
+        return status === "active"
+      }).length
+      
+      // Suspended Users: Filter by status = "suspended"
+      const suspendedUsers = normalizedUsers.filter((u) => {
+        const status = u.status || "active"
+        return status === "suspended"
+      }).length
+      
+      // Banned Users: Filter by status = "banned"
+      const bannedUsers = normalizedUsers.filter((u) => {
+        const status = u.status || "active"
+        return status === "banned"
+      }).length
+
+      console.log("[AdminStats] 📊 Calculated statistics:", {
+        totalUsers,
+        activeUsers,
+        suspendedUsers,
+        bannedUsers,
+        breakdown: {
+          total: normalizedUsers.length,
+          active: normalizedUsers.filter((u) => (u.status || "active") === "active").length,
+          suspended: normalizedUsers.filter((u) => (u.status || "active") === "suspended").length,
+          banned: normalizedUsers.filter((u) => (u.status || "active") === "banned").length,
+        },
+      })
+      
+      // Verify: Total Users must equal the length of the array
+      if (totalUsers !== usersData.length) {
+        console.error("[AdminStats] ❌ ERROR: totalUsers !== usersData.length", {
+          totalUsers,
+          usersDataLength: usersData.length,
+        })
+      } else {
+        console.log("[AdminStats] ✅ Verification: totalUsers === usersData.length", {
+          totalUsers,
+          usersDataLength: usersData.length,
+        })
+      }
+
+      // Calculate total cacao (sum of poids from achats)
       const achatsData = achatsRes?.data || []
       const totalCacao = achatsData.reduce((sum, item) => {
-        return sum + (Number(item.quantite) || Number(item.poids) || 0)
+        return sum + (Number(item.poids) || 0)
       }, 0)
 
       setStats({
-        users: usersRes?.count || 0,
+        users: totalUsers,
+        activeUsers,
+        suspendedUsers,
+        bannedUsers,
+        centres: centresRes?.count || 0,
+        producteurs: producteursRes?.count || 0,
+        totalCacao: Math.round(totalCacao * 100) / 100,
+      })
+
+      console.log("[AdminStats] ✅ Statistics updated:", {
+        users: totalUsers,
+        activeUsers,
+        suspendedUsers,
+        bannedUsers,
         centres: centresRes?.count || 0,
         producteurs: producteursRes?.count || 0,
         totalCacao: Math.round(totalCacao * 100) / 100,
       })
 
       // Fetch recent users
-      const { data: recentUsers } = await supabase
+      const { data: recentUsers, error: recentUsersError } = await supabase
         .from("utilisateurs")
         .select("nom, email, role, created_at")
         .order("created_at", { ascending: false })
         .limit(5)
 
+      if (recentUsersError) {
+        console.error("[AdminStats] Error fetching recent users:", recentUsersError)
+      } else {
+        console.log(`[AdminStats] ✅ Loaded ${recentUsers?.length || 0} recent users`)
+      }
+
       setRecentActivity(recentUsers || [])
     } catch (error) {
-      console.error("[AdminStats] Error:", error)
+      console.error("[AdminStats] ❌ Unexpected error:", error)
+      console.error("[AdminStats] Error stack:", error.stack)
     } finally {
       setLoading(false)
+      console.log("[AdminStats] ===== FETCH COMPLETE =====")
     }
   }
 
@@ -91,9 +229,27 @@ export default function AdminStats() {
       <div style={statsGrid}>
         <StatCard
           icon={<FaUsers />}
-          label="Utilisateurs"
+          label="Total Utilisateurs"
           value={stats.users}
           color="#3b82f6"
+        />
+        <StatCard
+          icon={<FaCheckCircle />}
+          label="Utilisateurs Actifs"
+          value={stats.activeUsers}
+          color="#16a34a"
+        />
+        <StatCard
+          icon={<FaUserSlash />}
+          label="Suspendus"
+          value={stats.suspendedUsers}
+          color="#f59e0b"
+        />
+        <StatCard
+          icon={<FaBan />}
+          label="Bannis"
+          value={stats.bannedUsers}
+          color="#dc2626"
         />
         <StatCard
           icon={<FaBuilding />}

@@ -7,11 +7,15 @@ import Login from "../Login"
 import Parametres from "../Parametres"
 import Producteurs from "../Producteurs"
 import { useAuth } from "../context/AuthContext"
+import { useSettings, useSessionTimeout } from "../context/SettingsContext"
 import AdminUsers from "../pages/AdminUsers"
 import AdminDashboard from "../pages/AdminDashboard"
 import Profile from "../pages/Profile"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
+import { initializeSessionTimeout } from "../utils/sessionManager"
+import { useToast } from "./ui/Toast"
+import { t } from "../utils/i18n"
 
 const TITLES = {
   dashboard: "Tableau de Bord",
@@ -25,7 +29,9 @@ const TITLES = {
 }
 
 export default function Layout() {
-  const { user, loading, displayName, isAdmin, role } = useAuth()
+  const { user, loading, displayName, isAdmin, role, signOut } = useAuth()
+  const { showToast } = useToast()
+  const sessionTimeoutMinutes = useSessionTimeout()
   
   // Debug log to verify role source
   useEffect(() => {
@@ -37,6 +43,21 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+
+  // Initialize session timeout
+  useEffect(() => {
+    if (!user || !sessionTimeoutMinutes) return
+
+    console.log(`[Layout] Initializing session timeout: ${sessionTimeoutMinutes} minutes`)
+
+    const cleanup = initializeSessionTimeout(sessionTimeoutMinutes, async () => {
+      console.log("[Layout] Session timeout reached, logging out...")
+      showToast(t("sessionExpired"), "warning")
+      await signOut()
+    })
+
+    return cleanup
+  }, [user, sessionTimeoutMinutes, signOut, showToast])
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 900)

@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "./supabaseClient"
-import { FaPlus, FaFilePdf, FaSearch, FaCalendar } from "react-icons/fa"
-import { jsPDF } from "jspdf"
+import { FaPlus, FaFilePdf, FaSearch, FaCalendar, FaReceipt } from "react-icons/fa"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
 import Input from "./components/ui/Input"
 import Modal from "./components/ui/Modal"
 import { useToast } from "./components/ui/Toast"
 import { useAuth } from "./context/AuthContext"
+import { logAchatCreated } from "./utils/activityLogger"
 import { useMediaQuery } from "./hooks/useMediaQuery"
+import CocoaReceipt from "./components/CocoaReceipt"
 
 export default function Achats() {
   const { showToast } = useToast()
-  const { user } = useAuth()
+  const { user, displayName } = useAuth()
   const [showForm, setShowForm] = useState(false)
+  const [showReceipt, setShowReceipt] = useState(false)
+  const [selectedAchat, setSelectedAchat] = useState(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const isMobile = useMediaQuery("(max-width: 640px)")
@@ -32,24 +35,50 @@ export default function Achats() {
     [producteurs, selectedProdId],
   )
 
+  // Calculate montant automatically: montant = poids * prix_unitaire
   const montant = poids && prixKg ? Number(poids) * Number(prixKg) : 0
+
+  // Load purchases from Supabase
+  async function loadAchats() {
+    try {
+      console.log("[Achats] Loading purchases from Supabase...")
+      const { data, error } = await supabase
+        .from("achats")
+        .select("*")
+        .order("date_pesee", { ascending: false })
+
+      if (error) {
+        console.error("[Achats] Error loading purchases:", error)
+        throw error
+      }
+
+      console.log(`[Achats] Loaded ${data?.length || 0} purchases`)
+      setAchats(data || [])
+      return data || []
+    } catch (error) {
+      console.error("[Achats] Exception loading purchases:", error)
+      showToast("Erreur lors du chargement des achats", "error")
+      return []
+    }
+  }
 
   async function fetchInitialData() {
     setLoading(true)
     try {
-      const [{ data: producteursData }, { data: centresData }, { data: achatsData }] = await Promise.all([
-        supabase.from("producteurs").select("*").order("nom"),
+      const [{ data: producteursData }, { data: centresData }, achatsData] = await Promise.all([
+        supabase.from("producteurs").select("*").order("nom", { ascending: true }).order("code", { ascending: true }),
         supabase.from("centres").select("id, nom").order("nom"),
-        supabase.from("achats").select("*").order("created_at", { ascending: false }),
+        loadAchats(), // Use loadAchats function
       ])
 
-    setProducteurs(producteursData || [])
-    setCentres(centresData || [])
-    setAchats(achatsData || [])
+      setProducteurs(producteursData || [])
+      setCentres(centresData || [])
+      // setAchats is already called in loadAchats()
     } catch (error) {
+      console.error("[Achats] Error fetching initial data:", error)
       showToast("Erreur lors du chargement", "error")
     } finally {
-    setLoading(false)
+      setLoading(false)
     }
   }
 
@@ -80,26 +109,49 @@ export default function Achats() {
     }
 
     try {
-    const payload = {
-      producteur_id: selectedProd.id,
-      centre_id: selectedProd.centre_id || null,
-      nom_producteur: selectedProd.nom,
-      code_producteur: selectedProd.code,
-      sacs: Number(sacs) || 0,
-      poids: Number(poids),
-      prix_kg: Number(prixKg),
-      montant,
-      utilisateur_id: user?.id || null,
-    }
+      // Calculate montant automatically: montant = poids * prix_unitaire
+      const prixUnitaire = Number(prixKg)
+      const poidsNet = Number(poids)
+      const montantCalcule = poidsNet * prixUnitaire
 
-    const { error } = await supabase.from("achats").insert([payload])
+      const payload = {
+        producteur_id: selectedProd.id,
+        centre_id: selectedProd.centre_id || null,
+        poids: poidsNet,
+        sacs: Number(sacs) || 0,
+        prix_unitaire: prixUnitaire, // Changed from prix_kg to prix_unitaire
+        montant: montantCalcule, // Calculated automatically: poids * prix_unitaire
+        date_pesee: new Date().toISOString(), // Current date/time
+        utilisateur_id: user?.id || null,
+        nom_producteur: selectedProd.nom,
+        code_producteur: selectedProd.code,
+        nom_agent: displayName || user?.nom || user?.email?.split("@")[0] || "Unknown",
+      }
+
+      console.log("[Achats] Inserting purchase with payload:", payload)
+
+      const { data: insertedData, error } = await supabase.from("achats").insert([payload]).select()
 
       if (error) throw error
+
+      // Log activity
+      if (insertedData && insertedData[0]) {
+        await logAchatCreated(
+          insertedData[0].id,
+          selectedProd.nom || "Unknown",
+          poidsNet,
+          montantCalcule,
+          user?.id || null,
+          user?.email || null,
+        )
+      }
 
       showToast("Pesée enregistrée avec succès", "success")
       setShowForm(false)
       resetForm()
-      await fetchInitialData()
+      
+      // Reload purchases after inserting
+      await loadAchats()
     } catch (error) {
       console.error(error)
       showToast("Erreur lors de l'enregistrement", "error")
@@ -140,7 +192,11 @@ export default function Achats() {
       doc.text("Date :", 20, startY)
       doc.setFont("helvetica", "normal")
       doc.text(
-        achat.created_at ? new Date(achat.created_at).toLocaleDateString("fr-FR") : "-",
+        achat.date_pesee 
+          ? new Date(achat.date_pesee).toLocaleDateString("fr-FR")
+          : achat.created_at 
+          ? new Date(achat.created_at).toLocaleDateString("fr-FR")
+          : "-",
         50,
         startY,
       )
@@ -184,7 +240,7 @@ export default function Achats() {
       const details = [
         ["Nombre de sacs", achat.sacs || 0],
         ["Poids net (Kg)", achat.poids || 0],
-        ["Prix par Kg (FCFA)", Number(achat.prix_kg || 0).toLocaleString()],
+        ["Prix par Kg (FCFA)", Number(achat.prix_unitaire || achat.prix_kg || 0).toLocaleString()],
       ]
 
       details.forEach(([label, value]) => {
@@ -301,14 +357,13 @@ export default function Achats() {
         <table style={table}>
           <thead>
                 <tr>
-                  <th style={th}>Date</th>
+                  <th style={th}>Date Pesée</th>
                   <th style={th}>Producteur</th>
                   <th style={th}>Code</th>
-                  <th style={th}>Centre</th>
-                  <th style={th}>Sacs</th>
                   <th style={th}>Poids (Kg)</th>
                   <th style={th}>Prix/Kg</th>
                   <th style={th}>Montant</th>
+                  <th style={th}>Agent</th>
                   <th style={th}>Actions</th>
             </tr>
           </thead>
@@ -319,7 +374,19 @@ export default function Achats() {
                       <div style={dateCell}>
                         <FaCalendar style={{ color: "#6b7280", fontSize: 12, marginRight: 6 }} />
                         <span>
-                          {a.created_at ? new Date(a.created_at).toLocaleDateString("fr-FR") : "-"}
+                          {a.date_pesee 
+                            ? new Date(a.date_pesee).toLocaleDateString("fr-FR", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : a.created_at 
+                            ? new Date(a.created_at).toLocaleDateString("fr-FR", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : "-"}
                         </span>
                       </div>
                     </td>
@@ -329,30 +396,52 @@ export default function Achats() {
                     <td style={td}>
                       <span style={codeBadge}>{a.code_producteur || "-"}</span>
                     </td>
-                    <td style={td}>{getCentreNom(a.centre_id) || "-"}</td>
-                    <td style={td}>{a.sacs ?? "-"}</td>
                     <td style={td}>
                       <strong>{a.poids ?? "-"}</strong>
                     </td>
-                    <td style={td}>{Number(a.prix_kg || 0).toLocaleString()} FCFA</td>
+                    <td style={td}>
+                      {Number(a.prix_unitaire || a.prix_kg || 0).toLocaleString()} FCFA
+                    </td>
                     <td style={td}>
                       <strong style={montantText}>
                         {Number(a.montant || 0).toLocaleString()} FCFA
                       </strong>
                     </td>
                     <td style={td}>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => generatePDFReceipt(a)}
-                        icon={<FaFilePdf />}
-                        style={{
-                          width: isMobile ? "100%" : "auto",
-                          minWidth: isMobile ? "100%" : "auto",
-                        }}
-                      >
-                        PDF
-                      </Button>
+                      <span style={{ fontSize: "13px", color: "#6b7280" }}>
+                        {a.nom_agent || "-"}
+                      </span>
+                    </td>
+                    <td style={td}>
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setSelectedAchat(a)
+                            setShowReceipt(true)
+                          }}
+                          icon={<FaReceipt />}
+                          style={{
+                            width: isMobile ? "100%" : "auto",
+                            minWidth: isMobile ? "100%" : "auto",
+                          }}
+                        >
+                          Reçu
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => generatePDFReceipt(a)}
+                          icon={<FaFilePdf />}
+                          style={{
+                            width: isMobile ? "100%" : "auto",
+                            minWidth: isMobile ? "100%" : "auto",
+                          }}
+                        >
+                          PDF
+                        </Button>
+                      </div>
                 </td>
               </tr>
             ))}
@@ -477,6 +566,28 @@ export default function Achats() {
           </div>
         </form>
       </Modal>
+
+      {/* Receipt Modal */}
+      {showReceipt && selectedAchat && (
+        <Modal
+          isOpen={showReceipt}
+          onClose={() => {
+            setShowReceipt(false)
+            setSelectedAchat(null)
+          }}
+          title="Reçu de Pesée"
+          size="lg"
+        >
+          <CocoaReceipt
+            achat={selectedAchat}
+            centreNom={getCentreNom(selectedAchat.centre_id)}
+            onClose={() => {
+              setShowReceipt(false)
+              setSelectedAchat(null)
+            }}
+          />
+        </Modal>
+      )}
     </div>
   )
 }

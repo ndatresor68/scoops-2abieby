@@ -580,3 +580,101 @@ export async function exportUsersPDF(users, centres) {
     filename: "liste-utilisateurs",
   })
 }
+
+/**
+ * Export activities audit log to PDF
+ */
+export async function exportActivitiesPDF(activities) {
+  function getActionLabel(action) {
+    const labels = {
+      login: "Connexion",
+      logout: "Déconnexion",
+      user_created: "Créé",
+      user_updated: "Modifié",
+      user_deleted: "Supprimé",
+      user_suspended: "Suspendu",
+      user_banned: "Banni",
+      user_reactivated: "Réactivé",
+      producer_created: "Créé",
+      producer_updated: "Modifié",
+      producer_deleted: "Supprimé",
+      centre_created: "Créé",
+      centre_updated: "Modifié",
+      centre_deleted: "Supprimé",
+      achat_created: "Créé",
+      pdf_exported: "Exporté",
+      settings_updated: "Modifié",
+    }
+    return labels[action] || action
+  }
+
+  function getTargetLabel(target) {
+    const labels = {
+      user: "Utilisateur",
+      centre: "Centre",
+      producteur: "Producteur",
+      achat: "Achat",
+      system: "Système",
+      pdf: "PDF",
+      settings: "Paramètres",
+    }
+    return labels[target] || target
+  }
+
+  return exportToPDF({
+    data: activities,
+    columns: [
+      {
+        key: "created_at",
+        label: "Date",
+        width: 2,
+        render: (value) => (value ? new Date(value).toLocaleString("fr-FR") : "-"),
+      },
+      {
+        key: "user_email",
+        label: "Utilisateur",
+        width: 2.5,
+        render: (value) => value || "Système",
+      },
+      {
+        key: "action",
+        label: "Action",
+        width: 1.5,
+        render: (value) => getActionLabel(value),
+      },
+      {
+        key: "target",
+        label: "Cible",
+        width: 1.5,
+        render: (value) => getTargetLabel(value),
+      },
+      {
+        key: "ip_address",
+        label: "IP",
+        width: 1.5,
+        render: (value) => value || "-",
+      },
+      {
+        key: "device",
+        label: "Device",
+        width: 1.2,
+        render: (value) => value || "-",
+      },
+      {
+        key: "browser",
+        label: "Browser",
+        width: 2,
+        render: (value) => value || "-",
+      },
+      {
+        key: "details",
+        label: "Détails",
+        width: 3,
+        render: (value) => value || "-",
+      },
+    ],
+    title: "Journal d'Audit - Activités Système",
+    subtitle: `Export du ${new Date().toLocaleDateString("fr-FR")} - ${activities.length} activité${activities.length > 1 ? "s" : ""}`,
+    filename: `audit-activites-${new Date().toISOString().split("T")[0]}`,
+  })
+}

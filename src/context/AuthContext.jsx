@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { supabase } from "../supabaseClient"
+import { logUserLogin, logUserLogout } from "../utils/activityLogger"
 
 const AuthContext = createContext(null)
 const ALLOWED_ROLES = new Set(["ADMIN", "AGENT", "CENTRE"])
@@ -318,6 +319,9 @@ export function AuthProvider({ children }) {
       console.log("[AuthContext] DB ROLE after login:", profileResult.role)
       // User state is already set by loadProfileForUser with merged profile data
       console.log("[AuthContext] User state now includes role from DB:", profileResult.role)
+      
+      // Log successful login
+      await logUserLogin(response.data.user.id, response.data.user.email)
     } else {
       console.error("[AuthContext] CRITICAL: Profile not loaded after login!")
       // Don't set user without profile - we need role from DB
@@ -335,12 +339,18 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(async () => {
     console.log("[AuthContext] Signing out...")
+    
+    // Log logout before signing out
+    if (user?.id) {
+      await logUserLogout(user.id, user.email)
+    }
+    
     const response = await supabase.auth.signOut()
     if (!response.error) {
       setUser(null)
     }
     return response
-  }, [])
+  }, [user])
 
   // CRITICAL: Role is ALWAYS from user.role (merged from utilisateurs table)
   // user.role comes from profile.role loaded from DB

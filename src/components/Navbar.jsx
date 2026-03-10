@@ -7,6 +7,7 @@ import {
   FaWeightHanging,
   FaTimes,
 } from "react-icons/fa"
+import logoImage from "../assets/logo-scoops.png"
 
 const BASE_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
@@ -45,7 +46,13 @@ export default function Navbar({
         <div style={brandRow}>
           {(!collapsed || isMobile) && (
             <div style={brandContainer}>
-              <div style={brandLogo}>S</div>
+              <div style={brandLogo}>
+                <img 
+                  src={logoImage} 
+                  alt="SCOOP ASAB Logo" 
+                  style={logoImageStyle}
+                />
+              </div>
               <div>
                 <h2 style={brandTitle}>SCOOP ASAB</h2>
                 <p style={brandSubtitle}>Gestion Coopérative</p>
@@ -138,6 +145,15 @@ const brandLogo = {
   fontWeight: 800,
   color: "white",
   boxShadow: "0 4px 12px rgba(122, 31, 31, 0.4)",
+  overflow: "hidden",
+  flexShrink: 0,
+}
+
+const logoImageStyle = {
+  width: "40px",
+  height: "40px",
+  objectFit: "contain",
+  display: "block",
 }
 
 const brandTitle = {

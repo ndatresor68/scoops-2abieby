@@ -1,8 +1,13 @@
 import { useState } from "react"
 import { useAuth } from "./context/AuthContext"
+import { useUserRegistration } from "./context/SettingsContext"
+import { useTranslation } from "./utils/i18n"
+import logoImage from "./assets/logo-scoops.png"
 
 export default function Login() {
   const { signInWithPassword } = useAuth()
+  const allowRegistration = useUserRegistration()
+  const { t } = useTranslation()
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -33,6 +38,13 @@ export default function Login() {
     <div style={backgroundStyle}>
       <div style={overlayStyle}>
         <div style={cardStyle}>
+          <div style={logoContainer}>
+            <img 
+              src={logoImage} 
+              alt="SCOOP ASAB Logo" 
+              style={logoStyle}
+            />
+          </div>
           <h2 style={titleStyle}>Connexion</h2>
 
           <form onSubmit={handleLogin} style={{ width: "100%" }}>
@@ -66,6 +78,14 @@ export default function Login() {
 
             {error && <p style={errorStyle}>{error}</p>}
           </form>
+          
+          {!allowRegistration && (
+            <div style={registrationDisabledBox}>
+              <p style={registrationDisabledText}>
+                {t("registrationDisabled")}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -96,7 +116,23 @@ const cardStyle = {
   padding: 45,
   borderRadius: 18,
   width: 420,
+  maxWidth: "90vw",
   boxShadow: "0 15px 35px rgba(0,0,0,0.25)",
+}
+
+const logoContainer = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  marginBottom: 24,
+}
+
+const logoStyle = {
+  maxWidth: "260px",
+  width: "100%",
+  height: "auto",
+  objectFit: "contain",
+  display: "block",
 }
 
 const titleStyle = {
@@ -143,4 +179,19 @@ const errorStyle = {
   marginTop: 15,
   color: "red",
   textAlign: "center",
+}
+
+const registrationDisabledBox = {
+  marginTop: 20,
+  padding: "12px 16px",
+  background: "#fffbeb",
+  border: "1px solid #fde68a",
+  borderRadius: "10px",
+  textAlign: "center",
+}
+
+const registrationDisabledText = {
+  margin: 0,
+  fontSize: "13px",
+  color: "#92400e",
 }

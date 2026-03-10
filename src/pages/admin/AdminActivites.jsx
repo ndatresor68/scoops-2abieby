@@ -76,7 +76,7 @@ export default function AdminActivites() {
       if (filter === "all" || filter === "producteurs") {
         const { data: producteurs } = await supabase
           .from("producteurs")
-          .select("id,nom,prenom,created_at,updated_at")
+          .select("id,nom,code,created_at,updated_at")
           .order("updated_at", { ascending: false })
           .limit(20)
 
@@ -86,7 +86,7 @@ export default function AdminActivites() {
               id: `producteur-${producteur.id}`,
               type: "producteur",
               action: producteur.updated_at !== producteur.created_at ? "updated" : "created",
-              entity: `${producteur.nom} ${producteur.prenom}`,
+              entity: `${producteur.nom}${producteur.code ? ` (${producteur.code})` : ""}`,
               details: "Producteur",
               timestamp: producteur.updated_at || producteur.created_at,
               icon: FaUser,
@@ -99,35 +99,22 @@ export default function AdminActivites() {
       if (filter === "all" || filter === "achats") {
         const { data: achats } = await supabase
           .from("achats")
-          .select("id,producteur_id,quantite,poids,date_achat,created_at")
+          .select("id,nom_producteur,poids,montant,created_at")
           .order("created_at", { ascending: false })
           .limit(20)
 
         if (achats) {
-          for (const achat of achats) {
-            let producteurName = "Inconnu"
-            if (achat.producteur_id) {
-              const { data: producteur } = await supabase
-                .from("producteurs")
-                .select("nom,prenom")
-                .eq("id", achat.producteur_id)
-                .single()
-
-              if (producteur) {
-                producteurName = `${producteur.nom} ${producteur.prenom}`
-              }
-            }
-
+          achats.forEach((achat) => {
             activitiesList.push({
               id: `achat-${achat.id}`,
               type: "achat",
               action: "created",
-              entity: producteurName,
-              details: `${achat.quantite || achat.poids || 0} kg de cacao`,
-              timestamp: achat.created_at || achat.date_achat,
+              entity: achat.nom_producteur || "Inconnu",
+              details: `${achat.poids || 0} kg de cacao${achat.montant ? ` - ${Number(achat.montant).toLocaleString()} FCFA` : ""}`,
+              timestamp: achat.created_at,
               icon: FaBox,
             })
-          }
+          })
         }
       }
 

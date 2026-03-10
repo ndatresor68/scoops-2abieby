@@ -20,9 +20,17 @@ import ProducteurDetail from "./components/ProducteurDetail"
 import { useToast } from "./components/ui/Toast"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { exportProducteursPDF } from "./utils/exportToPDF"
+import { useAuth } from "./context/AuthContext"
+import {
+  logProducerCreated,
+  logProducerUpdated,
+  logProducerDeleted,
+  logPDFExported,
+} from "./utils/activityLogger"
 
 export default function Producteurs() {
   const { showToast } = useToast()
+  const { user } = useAuth()
   const [producteurs, setProducteurs] = useState([])
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
@@ -70,7 +78,8 @@ export default function Producteurs() {
       const queryPromise = supabase
         .from("producteurs")
         .select("*")
-        .order("created_at", { ascending: false })
+        .order("nom", { ascending: true })
+        .order("code", { ascending: true })
       
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("Query timeout")), 15000)
@@ -198,59 +207,129 @@ export default function Producteurs() {
     setGeneratedCode(`ASAB-${String(maxNumber + 1).padStart(3, "0")}`)
   }
 
+  /**
+   * Upload a file to Supabase Storage
+   * @param {File} file - The file to upload
+   * @param {string} folder - Folder name (photos or documents)
+   * @param {string} producteurId - The producteur UUID
+   * @returns {Promise<string>} Public URL of the uploaded file
+   */
+  /**
+   * STEP 1 & 2: Upload file to Supabase Storage and get public URL
+   * @param {File} file - The file to upload
+   * @param {string} folder - Folder name (photos or documents)
+   * @param {string} producteurId - The producteur UUID
+   * @returns {Promise<string>} Public URL of the uploaded file
+   */
   async function uploadFile(file, folder, producteurId) {
-    if (!file) return null
+    if (!file) {
+      console.warn("[uploadFile] No file provided")
+      return null
+    }
 
     try {
-      // Valider le type de fichier
+      console.log("[uploadFile] ===== STEP 1: VERIFY FILE UPLOAD =====")
+      console.log("[uploadFile] File:", {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      })
+
+      // Validate file type
       if (!file.type.startsWith("image/")) {
         throw new Error("Le fichier doit être une image")
       }
 
-      // Valider la taille (max 5MB)
+      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         throw new Error("L'image ne doit pas dépasser 5MB")
       }
 
+      // Generate unique filename
       const extension = file.name.split(".").pop() || "jpg"
       const timestamp = Date.now()
       const randomId = Math.random().toString(36).substring(2, 9)
-      const fileName = `${producteurId || "temp"}-${timestamp}-${randomId}.${extension}`
-      const path = `${folder}/${fileName}`
+      const fileName = `${timestamp}-${randomId}.${extension}`
+      
+      // STEP 2: Construct path - Use proper structure: photos/${producteurId}/${fileName}
+      const path = `${folder}/${producteurId}/${fileName}`
+      console.log("[uploadFile] ===== STEP 2: VERIFY GENERATED PATH =====")
+      console.log("[uploadFile] Upload path:", path)
+      console.log("[uploadFile] Folder:", folder)
+      console.log("[uploadFile] Producteur ID:", producteurId)
+      console.log("[uploadFile] File name:", fileName)
 
-      showToast("Upload de l'image en cours...", "info")
-
+      // Upload file to Supabase Storage
+      console.log("[uploadFile] Uploading file to Supabase Storage...")
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("producteurs")
         .upload(path, file, {
-          upsert: true,
+          upsert: false, // Don't overwrite existing files
           contentType: file.type,
         })
 
+      console.log("[uploadFile] Upload result:", {
+        data: uploadData,
+        error: uploadError,
+      })
+
       if (uploadError) {
-        console.error("Erreur upload:", uploadError)
-        // Si le bucket n'existe pas, on informe l'utilisateur
-        if (uploadError.message.includes("Bucket") || uploadError.message.includes("bucket")) {
+        console.error("[uploadFile] Upload error:", uploadError)
+        
+        // Check for bucket errors
+        if (uploadError.message.includes("Bucket") || uploadError.message.includes("bucket") || uploadError.message.includes("not found")) {
           throw new Error(
-            "Le bucket 'producteurs' n'existe pas dans Supabase Storage. Veuillez le créer dans votre dashboard Supabase.",
+            "Le bucket 'producteurs' n'existe pas dans Supabase Storage. Veuillez le créer dans votre dashboard Supabase et configurer les politiques RLS.",
           )
         }
-        if (uploadError.message.includes("duplicate")) {
-          // Si le fichier existe déjà, on récupère l'URL existante
-          const { data: publicUrlData } = supabase.storage.from("producteurs").getPublicUrl(path)
-          return publicUrlData.publicUrl
+        
+        // Check for permission errors
+        if (uploadError.message.includes("permission") || uploadError.message.includes("policy")) {
+          throw new Error(
+            "Vous n'avez pas la permission d'uploader des fichiers. Vérifiez les politiques RLS du bucket 'producteurs'.",
+          )
         }
-        throw new Error(uploadError.message)
+        
+        throw new Error(`Erreur lors de l'upload: ${uploadError.message}`)
       }
 
-      const { data: publicUrlData } = supabase.storage.from("producteurs").getPublicUrl(path)
+      if (!uploadData) {
+        throw new Error("Aucune donnée retournée après l'upload")
+      }
+
+      console.log("[uploadFile] File uploaded successfully to Storage")
+      console.log("[uploadFile] Upload data:", uploadData)
+
+      // STEP 3: Generate public URL using the SAME path
+      console.log("[uploadFile] ===== STEP 3: GENERATE PUBLIC URL =====")
+      
+      // Use the path from uploadData if available, otherwise use the constructed path
+      const urlPath = uploadData?.path || path
+      console.log("[uploadFile] Original path:", path)
+      console.log("[uploadFile] Upload data path:", uploadData?.path)
+      console.log("[uploadFile] Using path for public URL:", urlPath)
+      
+      const { data: publicUrlData } = supabase.storage
+        .from("producteurs")
+        .getPublicUrl(urlPath)
+
+      console.log("[uploadFile] Public URL data:", publicUrlData)
+      console.log("[uploadFile] Public URL response:", JSON.stringify(publicUrlData, null, 2))
+
       if (!publicUrlData?.publicUrl) {
+        console.error("[uploadFile] Failed to get public URL!")
+        console.error("[uploadFile] Public URL data:", publicUrlData)
         throw new Error("Impossible de récupérer l'URL publique de l'image")
       }
 
+      console.log("[uploadFile] ===== STEP 3 COMPLETE =====")
+      console.log("[uploadFile] Generated public URL:", publicUrlData.publicUrl)
+      console.log("[uploadFile] Upload success - file uploaded and URL generated")
+      
+      // Return the public URL to be saved in the database column "photo" (or "photo_cni_recto", etc.)
       return publicUrlData.publicUrl
     } catch (error) {
-      console.error("Erreur lors de l'upload:", error)
+      console.error("[uploadFile] Error:", error)
       throw error
     }
   }
@@ -336,6 +415,7 @@ export default function Producteurs() {
   async function handleSubmit(e) {
     e.preventDefault()
 
+    // Validation
     if (!formData.nom.trim()) {
       showToast("Le nom est obligatoire", "error")
       return
@@ -349,115 +429,355 @@ export default function Producteurs() {
     setUploading(true)
 
     try {
-      const producteurId = editingProducteur?.id || `temp-${Date.now()}`
-      const uploadPromises = []
-
-      // Upload des fichiers
-      if (files.photo) {
-        uploadPromises.push(
-          uploadFile(files.photo, "photos", producteurId).then((url) => ({
-            key: "photo",
-            url,
-          })),
-        )
-      }
-      if (files.photo_cni_recto) {
-        uploadPromises.push(
-          uploadFile(files.photo_cni_recto, "documents", producteurId).then((url) => ({
-            key: "photo_cni_recto",
-            url,
-          })),
-        )
-      }
-      if (files.photo_cni_verso) {
-        uploadPromises.push(
-          uploadFile(files.photo_cni_verso, "documents", producteurId).then((url) => ({
-            key: "photo_cni_verso",
-            url,
-          })),
-        )
-      }
-      if (files.carte_planteur) {
-        uploadPromises.push(
-          uploadFile(files.carte_planteur, "documents", producteurId).then((url) => ({
-            key: "carte_planteur",
-            url,
-          })),
-        )
-      }
-
-      // Upload des fichiers avec gestion d'erreurs individuelle
-      const uploadResults = await Promise.allSettled(uploadPromises)
-      const urlMap = {}
-      uploadResults.forEach((result, index) => {
-        if (result.status === "fulfilled" && result.value) {
-          const { key, url } = result.value
-          urlMap[key] = url
-        } else if (result.status === "rejected") {
-          console.error(`Erreur upload fichier ${index}:`, result.reason)
-          // On continue même si un upload échoue
-        }
-      })
-
-      // Convertir centre_id en UUID si nécessaire
+      // Convert centre_id to UUID if needed
       let centreIdValue = null
       if (formData.centre_id && formData.centre_id.trim() !== "") {
         centreIdValue = formData.centre_id
       }
 
-      const payload = {
-        code: editingProducteur ? editingProducteur.code : generatedCode,
-        nom: formData.nom.trim(),
-        telephone: formData.telephone.trim(),
-        sexe: formData.sexe || null,
-        localite: formData.localite?.trim() || null,
-        statut: formData.statut || null,
-        centre_id: centreIdValue,
-        photo: urlMap.photo || existingUrls.photo || null,
-        photo_cni_recto: urlMap.photo_cni_recto || existingUrls.photo_cni_recto || null,
-        photo_cni_verso: urlMap.photo_cni_verso || existingUrls.photo_cni_verso || null,
-        carte_planteur: urlMap.carte_planteur || existingUrls.carte_planteur || null,
-      }
-
       if (editingProducteur) {
+        // ===== UPDATE EXISTING PRODUCTEUR =====
+        console.log("[handleSubmit] Updating producteur:", editingProducteur.id)
+
+        const producteurId = editingProducteur.id
+        const uploadPromises = []
+        const urlMap = {}
+
+        // Upload only new files (if any)
+        if (files.photo) {
+          console.log("[handleSubmit] Uploading new photo")
+          uploadPromises.push(
+            uploadFile(files.photo, "photos", producteurId)
+              .then((url) => {
+                urlMap.photo = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] Photo upload failed:", error)
+                throw new Error(`Erreur upload photo: ${error.message}`)
+              }),
+          )
+        }
+        if (files.photo_cni_recto) {
+          uploadPromises.push(
+            uploadFile(files.photo_cni_recto, "documents", producteurId)
+              .then((url) => {
+                urlMap.photo_cni_recto = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] CNI recto upload failed:", error)
+                throw new Error(`Erreur upload CNI recto: ${error.message}`)
+              }),
+          )
+        }
+        if (files.photo_cni_verso) {
+          uploadPromises.push(
+            uploadFile(files.photo_cni_verso, "documents", producteurId)
+              .then((url) => {
+                urlMap.photo_cni_verso = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] CNI verso upload failed:", error)
+                throw new Error(`Erreur upload CNI verso: ${error.message}`)
+              }),
+          )
+        }
+        if (files.carte_planteur) {
+          uploadPromises.push(
+            uploadFile(files.carte_planteur, "documents", producteurId)
+              .then((url) => {
+                urlMap.carte_planteur = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] Carte planteur upload failed:", error)
+                throw new Error(`Erreur upload carte planteur: ${error.message}`)
+              }),
+          )
+        }
+
+        // Wait for all uploads to complete
+        if (uploadPromises.length > 0) {
+          await Promise.all(uploadPromises)
+        }
+
+        // STEP 4: STORE URL IN DATABASE
+        // Prepare payload: use new URLs if uploaded, otherwise keep existing
+        // IMPORTANT: Database columns are "photo", "photo_cni_recto", "photo_cni_verso" (NOT "photo_url")
+        console.log("[handleSubmit] ===== STEP 4: STORE URL IN DATABASE (UPDATE) =====")
+        console.log("[handleSubmit] URL map from uploads:", urlMap)
+        console.log("[handleSubmit] Existing URLs:", existingUrls)
+        
+      const payload = {
+          code: editingProducteur.code, // Code should not change
+          nom: formData.nom.trim(),
+          telephone: formData.telephone.trim(),
+        sexe: formData.sexe || null,
+          localite: formData.localite?.trim() || null,
+        statut: formData.statut || null,
+          centre_id: centreIdValue,
+          // Save photo URL in "photo" column (NOT "photo_url")
+          photo: urlMap.photo || existingUrls.photo || null,
+          // Save ID card images in their respective columns
+          photo_cni_recto: urlMap.photo_cni_recto || existingUrls.photo_cni_recto || null,
+          photo_cni_verso: urlMap.photo_cni_verso || existingUrls.photo_cni_verso || null,
+          carte_planteur: urlMap.carte_planteur || existingUrls.carte_planteur || null,
+        }
+
+        console.log("[handleSubmit] Update payload:", payload)
+        console.log("[handleSubmit] Photo URL to save:", payload.photo)
+        console.log("[handleSubmit] Updating producteur ID:", producteurId)
+
+        // Update producteur in database
         const { data, error } = await supabase
           .from("producteurs")
           .update(payload)
-          .eq("id", editingProducteur.id)
+          .eq("id", producteurId)
           .select()
 
+        console.log("[handleSubmit] Update result:", {
+          data: data,
+          error: error,
+        })
+
         if (error) {
-          console.error("Erreur mise à jour:", error)
-          throw new Error(error.message || "Erreur lors de la mise à jour du producteur")
+          console.error("[handleSubmit] Update error:", error)
+          console.error("[handleSubmit] Error details:", JSON.stringify(error, null, 2))
+          throw new Error(`Erreur lors de la mise à jour: ${error.message}`)
         }
 
         if (!data || data.length === 0) {
-          throw new Error("Aucun producteur mis à jour")
+          throw new Error("Aucun producteur mis à jour. Vérifiez que l'ID existe.")
         }
 
+        console.log("[handleSubmit] Producteur updated successfully:", data[0])
+        console.log("[handleSubmit] Verified photo in database:", data[0].photo)
+        console.log("[handleSubmit] Verified photo_cni_recto:", data[0].photo_cni_recto)
+        console.log("[handleSubmit] Verified photo_cni_verso:", data[0].photo_cni_verso)
+        
+        // Log activity
+        await logProducerUpdated(
+          producteurId,
+          formData.nom.trim(),
+          `Updated: nom, telephone, centre_id, statut`,
+          user?.id || null,
+          user?.email || null,
+        )
+        
         showToast("Producteur modifié avec succès", "success")
       } else {
-        const { data, error } = await supabase.from("producteurs").insert([payload]).select()
+        // ===== CREATE NEW PRODUCTEUR =====
+        console.log("[handleSubmit] Creating new producteur")
 
-        if (error) {
-          console.error("Erreur insertion:", error)
-          throw new Error(error.message || "Erreur lors de l'ajout du producteur")
+        // Step 1: Insert producteur first to get the real UUID
+        const initialPayload = {
+          code: generatedCode,
+          nom: formData.nom.trim(),
+          telephone: formData.telephone.trim(),
+          sexe: formData.sexe || null,
+          localite: formData.localite?.trim() || null,
+          statut: formData.statut || null,
+          centre_id: centreIdValue,
+          // Don't include photo URLs yet - will update after upload
         }
 
-        if (!data || data.length === 0) {
-          throw new Error("Impossible de créer le producteur")
+        console.log("[handleSubmit] Inserting producteur:", initialPayload)
+
+        const { data: insertedData, error: insertError } = await supabase
+          .from("producteurs")
+          .insert([initialPayload])
+          .select()
+
+        if (insertError) {
+          console.error("[handleSubmit] Insert error:", insertError)
+          throw new Error(`Erreur lors de la création: ${insertError.message}`)
         }
 
+        if (!insertedData || insertedData.length === 0) {
+          throw new Error("Impossible de créer le producteur. Aucune donnée retournée.")
+        }
+
+        const newProducteurId = insertedData[0].id
+        console.log("[handleSubmit] Producteur created with ID:", newProducteurId)
+
+        // Step 2: Upload files using the real producteur ID
+        const uploadPromises = []
+        const urlMap = {}
+
+        if (files.photo) {
+          console.log("[handleSubmit] Uploading photo for new producteur")
+          uploadPromises.push(
+            uploadFile(files.photo, "photos", newProducteurId)
+              .then((url) => {
+                urlMap.photo = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] Photo upload failed:", error)
+                throw new Error(`Erreur upload photo: ${error.message}`)
+              }),
+          )
+        }
+        if (files.photo_cni_recto) {
+          uploadPromises.push(
+            uploadFile(files.photo_cni_recto, "documents", newProducteurId)
+              .then((url) => {
+                urlMap.photo_cni_recto = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] CNI recto upload failed:", error)
+                throw new Error(`Erreur upload CNI recto: ${error.message}`)
+              }),
+          )
+        }
+        if (files.photo_cni_verso) {
+          uploadPromises.push(
+            uploadFile(files.photo_cni_verso, "documents", newProducteurId)
+              .then((url) => {
+                urlMap.photo_cni_verso = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] CNI verso upload failed:", error)
+                throw new Error(`Erreur upload CNI verso: ${error.message}`)
+              }),
+          )
+        }
+        if (files.carte_planteur) {
+          uploadPromises.push(
+            uploadFile(files.carte_planteur, "documents", newProducteurId)
+              .then((url) => {
+                urlMap.carte_planteur = url
+              })
+              .catch((error) => {
+                console.error("[handleSubmit] Carte planteur upload failed:", error)
+                throw new Error(`Erreur upload carte planteur: ${error.message}`)
+              }),
+          )
+        }
+
+        // Wait for all uploads to complete
+        if (uploadPromises.length > 0) {
+          await Promise.all(uploadPromises)
+        }
+
+        // Step 3: Update producteur with photo URLs
+        // STEP 4: STORE URL IN DATABASE
+        // IMPORTANT: Save URLs in correct database columns: "photo", "photo_cni_recto", "photo_cni_verso"
+        console.log("[handleSubmit] ===== STEP 4: STORE URL IN DATABASE =====")
+        console.log("[handleSubmit] URL map:", urlMap)
+        console.log("[handleSubmit] Number of URLs to save:", Object.keys(urlMap).length)
+        console.log("[handleSubmit] Producer ID to update:", newProducteurId)
+        console.log("[handleSubmit] Producer ID type:", typeof newProducteurId)
+        
+        // Verify producer ID is valid
+        if (!newProducteurId) {
+          throw new Error("ID du producteur invalide. Impossible de sauvegarder les URLs d'images.")
+        }
+
+        if (Object.keys(urlMap).length > 0) {
+          const updatePayload = {
+            // Save producer photo URL in "photo" column (NOT "photo_url")
+            photo: urlMap.photo || null,
+            // Save ID card images in their respective columns
+            photo_cni_recto: urlMap.photo_cni_recto || null,
+            photo_cni_verso: urlMap.photo_cni_verso || null,
+            carte_planteur: urlMap.carte_planteur || null,
+          }
+
+          console.log("[handleSubmit] Update payload:", updatePayload)
+          console.log("[handleSubmit] Updating producteur with ID:", newProducteurId)
+          console.log("[handleSubmit] Photo URL to save:", updatePayload.photo)
+          console.log("[handleSubmit] CNI recto URL:", updatePayload.photo_cni_recto)
+          console.log("[handleSubmit] CNI verso URL:", updatePayload.photo_cni_verso)
+
+          // First, verify the producer exists
+          const { data: verifyData, error: verifyError } = await supabase
+            .from("producteurs")
+            .select("id, nom")
+            .eq("id", newProducteurId)
+            .single()
+
+          console.log("[handleSubmit] Verification query result:", {
+            data: verifyData,
+            error: verifyError,
+          })
+
+          if (verifyError || !verifyData) {
+            console.error("[handleSubmit] Producer not found after creation!")
+            console.error("[handleSubmit] Verify error:", verifyError)
+            throw new Error(`Le producteur avec l'ID ${newProducteurId} n'a pas été trouvé. Impossible de sauvegarder les URLs.`)
+          }
+
+          console.log("[handleSubmit] Producer verified, proceeding with update...")
+
+          // Now update with photo URLs
+          const { data: updateData, error: updateError } = await supabase
+            .from("producteurs")
+            .update(updatePayload)
+            .eq("id", newProducteurId)
+            .select() // Add select to verify the update worked
+
+          console.log("[handleSubmit] Update result:", {
+            data: updateData,
+            error: updateError,
+            dataLength: updateData?.length,
+          })
+
+          if (updateError) {
+            console.error("[handleSubmit] Update photo URLs error:", updateError)
+            console.error("[handleSubmit] Error code:", updateError.code)
+            console.error("[handleSubmit] Error message:", updateError.message)
+            console.error("[handleSubmit] Error details:", JSON.stringify(updateError, null, 2))
+            // Throw error to prevent silent failure
+            throw new Error(`Erreur lors de la sauvegarde des URLs d'images: ${updateError.message || updateError.code || "Erreur inconnue"}`)
+          }
+
+          if (!updateData || updateData.length === 0) {
+            console.error("[handleSubmit] Update returned no data!")
+            console.error("[handleSubmit] This might indicate:")
+            console.error("  1. RLS policy blocking the update")
+            console.error("  2. Producer ID mismatch")
+            console.error("  3. Database connection issue")
+            
+            // Try to fetch the producer again to see if it exists
+            const { data: checkData } = await supabase
+              .from("producteurs")
+              .select("id, nom, photo")
+              .eq("id", newProducteurId)
+              .single()
+            
+            console.error("[handleSubmit] Re-check producer:", checkData)
+            
+            throw new Error(`La mise à jour des URLs d'images a échoué. Aucune donnée retournée. Producteur ID: ${newProducteurId}`)
+          }
+
+          console.log("[handleSubmit] Photo URLs saved successfully!")
+          console.log("[handleSubmit] Updated producer data:", updateData[0])
+          console.log("[handleSubmit] Saved photo:", updateData[0].photo)
+          console.log("[handleSubmit] Saved photo_cni_recto:", updateData[0].photo_cni_recto)
+          console.log("[handleSubmit] Saved photo_cni_verso:", updateData[0].photo_cni_verso)
+        } else {
+          console.log("[handleSubmit] No files to upload, skipping URL update")
+        }
+
+        console.log("[handleSubmit] Producteur created successfully")
+        
+        // Log activity
+        await logProducerCreated(
+          newProducteurId,
+          formData.nom.trim(),
+          generatedCode,
+          user?.id || null,
+          user?.email || null,
+        )
+        
         showToast("Producteur ajouté avec succès", "success")
       }
 
+      // Close form and refresh list
       closeForm()
-      // Rafraîchir la liste après un court délai pour laisser le temps à la DB
       setTimeout(() => {
       fetchProducteurs()
       }, 500)
     } catch (error) {
-      console.error("Erreur handleSubmit:", error)
+      console.error("[handleSubmit] Error:", error)
       const errorMessage =
         error.message || "Erreur lors de l'enregistrement. Vérifiez votre connexion et réessayez."
       showToast(errorMessage, "error")
@@ -474,6 +794,15 @@ export default function Producteurs() {
     try {
       const { error } = await supabase.from("producteurs").delete().eq("id", producteur.id)
       if (error) throw error
+      
+      // Log activity
+      await logProducerDeleted(
+        producteur.id,
+        producteur.nom || "Unknown",
+        user?.id || null,
+        user?.email || null,
+      )
+      
       showToast("Producteur supprimé avec succès", "success")
       fetchProducteurs()
     } catch (error) {
@@ -493,17 +822,30 @@ export default function Producteurs() {
     return centre?.nom || "-"
   }
 
-  const filteredProducteurs = producteurs.filter((producteur) => {
-    const matchesSearch =
+  const filteredProducteurs = producteurs
+    .filter((producteur) => {
+      const matchesSearch =
       producteur.nom?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       producteur.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       producteur.telephone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getCentreNom(producteur.centre_id)?.toLowerCase().includes(searchTerm.toLowerCase())
+        getCentreNom(producteur.centre_id)?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    const matchesCentre = !selectedCentre || String(producteur.centre_id) === String(selectedCentre)
+      const matchesCentre = !selectedCentre || String(producteur.centre_id) === String(selectedCentre)
 
-    return matchesSearch && matchesCentre
-  })
+      return matchesSearch && matchesCentre
+    })
+    .sort((a, b) => {
+      // Primary sort: by name (alphabetical)
+      const nameA = (a.nom || "").toLowerCase()
+      const nameB = (b.nom || "").toLowerCase()
+      if (nameA !== nameB) {
+        return nameA.localeCompare(nameB, "fr", { sensitivity: "base" })
+      }
+      // Secondary sort: by code (alphabetical/numerical)
+      const codeA = (a.code || "").toLowerCase()
+      const codeB = (b.code || "").toLowerCase()
+      return codeA.localeCompare(codeB, "fr", { numeric: true, sensitivity: "base" })
+    })
 
   function resetFilters() {
     setSearchTerm("")
@@ -522,6 +864,14 @@ export default function Producteurs() {
         producteurs,
         centres,
         pdfCentreFilter || null
+      )
+
+      // Log activity
+      await logPDFExported(
+        "Producteurs",
+        `${result.count} producteur${result.count > 1 ? "s" : ""} exported${pdfCentreFilter ? ` (filtered by centre)` : ""}`,
+        user?.id || null,
+        user?.email || null,
       )
 
       setShowPdfModal(false)

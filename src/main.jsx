@@ -2,6 +2,7 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import App from "./App.jsx"
 import { AuthProvider } from "./context/AuthContext"
+import { SettingsProvider } from "./context/SettingsContext"
 import { ToastProvider } from "./components/ui/Toast"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./index.css"
@@ -16,9 +17,11 @@ createRoot(rootElement).render(
   <StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
+        <SettingsProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </SettingsProvider>
       </AuthProvider>
     </ErrorBoundary>
   </StrictMode>,

@@ -13,12 +13,12 @@ import {
   FaTimes,
 } from "react-icons/fa"
 import AdminStats from "./admin/AdminStats"
-import AdminUsers from "./AdminUsers"
+import AdminUsers from "./admin/AdminUsers"
 import AdminCentres from "./admin/AdminCentres"
 import AdminProducteurs from "./admin/AdminProducteurs"
 import AdminSettings from "./admin/AdminSettings"
 import AdminAgents from "./admin/AdminAgents"
-import AdminActivites from "./admin/AdminActivites"
+import AdminActivities from "./admin/AdminActivities"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 
 const SECTIONS = {
@@ -91,7 +91,7 @@ export default function AdminDashboard() {
       case "producteurs":
         return <AdminProducteurs />
       case "activites":
-        return <AdminActivites />
+        return <AdminActivities />
       case "settings":
         return <AdminSettings />
       default:
