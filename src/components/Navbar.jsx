@@ -6,18 +6,41 @@ import {
   FaUsers,
   FaWeightHanging,
   FaTimes,
+  FaSeedling,
+  FaClipboardList,
+  FaTruck,
 } from "react-icons/fa"
 import logoImage from "../assets/logo-scoops.png"
+import { useAuth } from "../context/AuthContext"
 
-const BASE_MODULES = [
+// ADMIN Menu
+const ADMIN_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
   { id: "centres", label: "Centres", icon: FaStore },
+  { id: "admin-users", label: "Utilisateurs", icon: FaUsers },
   { id: "producteurs", label: "Producteurs", icon: FaUsers },
-  { id: "achats", label: "Achats", icon: FaWeightHanging },
+  { id: "achats", label: "Pesées", icon: FaWeightHanging },
+  { id: "admin", label: "Administration", icon: FaUserShield },
   { id: "parametres", label: "Paramètres", icon: FaCog },
 ]
 
-const ADMIN_MODULE = { id: "admin", label: "Administration", icon: FaUserShield }
+// AGENT Menu
+const AGENT_MODULES = [
+  { id: "dashboard", label: "Dashboard", icon: FaChartLine },
+  { id: "producteurs", label: "Producteurs", icon: FaUsers },
+  { id: "parcelles", label: "Parcelles", icon: FaSeedling },
+  { id: "activites", label: "Activités terrain", icon: FaClipboardList },
+]
+
+// CENTRE Menu
+const CENTRE_MODULES = [
+  { id: "dashboard", label: "Dashboard", icon: FaChartLine },
+  { id: "producteurs", label: "Producteurs", icon: FaUsers },
+  { id: "achats", label: "Achats", icon: FaWeightHanging },
+  { id: "parcelles", label: "Gestion Parcelles", icon: FaSeedling },
+  { id: "livraisons", label: "Livraisons", icon: FaTruck },
+  { id: "parametres", label: "Paramètres", icon: FaCog },
+]
 
 export default function Navbar({
   activePage,
@@ -26,11 +49,24 @@ export default function Navbar({
   mobileOpen,
   onCloseMobile,
   isMobile,
-  isAdmin,
 }) {
-  const modules = isAdmin
-    ? [...BASE_MODULES, ADMIN_MODULE]
-    : BASE_MODULES
+  const { isAdmin, isAgent, isCentre } = useAuth()
+
+  // Determine modules based on role
+  let modules = []
+  if (isAdmin) {
+    modules = ADMIN_MODULES
+  } else if (isAgent) {
+    modules = AGENT_MODULES
+  } else if (isCentre) {
+    modules = CENTRE_MODULES
+  } else {
+    // Fallback: basic modules
+    modules = [
+      { id: "dashboard", label: "Dashboard", icon: FaChartLine },
+      { id: "producteurs", label: "Producteurs", icon: FaUsers },
+    ]
+  }
 
   return (
     <>
@@ -147,13 +183,15 @@ const brandLogo = {
   boxShadow: "0 4px 12px rgba(122, 31, 31, 0.4)",
   overflow: "hidden",
   flexShrink: 0,
+  position: "relative",
 }
 
 const logoImageStyle = {
-  width: "40px",
-  height: "40px",
-  objectFit: "contain",
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
   display: "block",
+  border: "none",
 }
 
 const brandTitle = {

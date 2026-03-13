@@ -18,6 +18,21 @@ export default function AdminStats() {
   const [recentActivity, setRecentActivity] = useState([])
   const isMobile = useMediaQuery("(max-width: 640px)")
 
+  // Dynamic grid style based on screen size
+  const gridStyle = isMobile
+    ? {
+        display: "grid",
+        gridTemplateColumns: "repeat(2, 1fr)",
+        gap: 12,
+        width: "100%",
+      }
+    : {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        gap: 20,
+        width: "100%",
+      }
+
   useEffect(() => {
     fetchStats()
     
@@ -99,7 +114,7 @@ export default function AdminStats() {
         usersData.forEach((user, index) => {
           console.log(`[AdminStats]   User ${index + 1}:`, {
             id: user.id,
-            user_id: user.user_id,
+            // Note: user.id is the primary key matching auth.users.id
             nom: user.nom,
             email: user.email,
             role: user.role,
@@ -226,7 +241,7 @@ export default function AdminStats() {
   return (
     <div style={container}>
       {/* Stats Cards */}
-      <div style={statsGrid}>
+      <div style={gridStyle}>
         <StatCard
           icon={<FaUsers />}
           label="Total Utilisateurs"
@@ -272,22 +287,48 @@ export default function AdminStats() {
       </div>
 
       {/* Recent Activity */}
-      <Card title="Activité Récente">
+      <Card
+        title="Activité Récente"
+        style={{
+          background: "white",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+          borderRadius: "16px",
+          border: "1px solid rgba(0,0,0,0.04)",
+        }}
+      >
         <div style={activityList}>
           {recentActivity.length === 0 ? (
-            <p style={emptyText}>Aucune activité récente</p>
+            <div style={emptyState}>
+              <FaUsers size={32} style={{ color: "#cbd5e1", marginBottom: 12 }} />
+              <p style={emptyText}>Aucune activité récente</p>
+            </div>
           ) : (
             recentActivity.map((activity, index) => (
-              <div key={index} style={activityItem}>
+              <div
+                key={index}
+                style={activityItem}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#f8fafc"
+                  e.currentTarget.style.transform = "translateX(4px)"
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#f9fafb"
+                  e.currentTarget.style.transform = "translateX(0)"
+                }}
+              >
                 <div style={activityIcon}>
-                  <FaUsers size={16} />
+                  <FaUsers size={18} />
                 </div>
                 <div style={activityContent}>
                   <p style={activityTitle}>
                     {activity.nom || activity.email} ({activity.role})
                   </p>
                   <p style={activityDate}>
-                    Créé le {new Date(activity.created_at).toLocaleDateString("fr-FR")}
+                    Créé le {new Date(activity.created_at).toLocaleDateString("fr-FR", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
                   </p>
                 </div>
               </div>
@@ -301,9 +342,37 @@ export default function AdminStats() {
 
 function StatCard({ icon, label, value, color }) {
   return (
-    <Card style={statCard}>
+    <Card
+      style={{
+        ...statCard,
+        background: "white",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+        borderRadius: "16px",
+        border: "1px solid rgba(0,0,0,0.04)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-4px)"
+        e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12)"
+        const iconEl = e.currentTarget.querySelector('[data-stat-icon]')
+        if (iconEl) iconEl.style.transform = "scale(1.1)"
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)"
+        e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)"
+        const iconEl = e.currentTarget.querySelector('[data-stat-icon]')
+        if (iconEl) iconEl.style.transform = "scale(1)"
+      }}
+    >
       <div style={statContent}>
-        <div style={{ ...statIcon, background: `${color}15`, color }}>
+        <div
+          data-stat-icon
+          style={{
+            ...statIcon,
+            background: `linear-gradient(135deg, ${color}20 0%, ${color}10 100%)`,
+            color,
+            boxShadow: `0 4px 12px ${color}20`,
+          }}
+        >
           {icon}
         </div>
         <div style={statInfo}>
@@ -318,80 +387,94 @@ function StatCard({ icon, label, value, color }) {
 const container = {
   display: "flex",
   flexDirection: "column",
-  gap: 24,
+  gap: 32,
 }
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
   gap: 20,
+  "@media (max-width: 640px)": {
+    gridTemplateColumns: "repeat(2, 1fr)",
+  },
 }
 
 const statCard = {
-  padding: "24px",
+  padding: "28px",
+  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+  cursor: "default",
 }
 
 const statContent = {
   display: "flex",
-  alignItems: "center",
-  gap: 16,
+  alignItems: "flex-start",
+  gap: 20,
+  flexDirection: "column",
 }
 
 const statIcon = {
-  width: "56px",
-  height: "56px",
-  borderRadius: "12px",
+  width: "64px",
+  height: "64px",
+  borderRadius: "16px",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: "24px",
+  fontSize: "28px",
+  flexShrink: 0,
+  transition: "transform 0.2s ease",
 }
 
 const statInfo = {
   flex: 1,
+  width: "100%",
 }
 
 const statLabel = {
-  margin: "0 0 4px 0",
-  fontSize: "14px",
-  color: "#6b7280",
-  fontWeight: 500,
+  margin: "0 0 8px 0",
+  fontSize: "13px",
+  color: "#64748b",
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
 }
 
 const statValue = {
   margin: 0,
-  fontSize: "28px",
-  fontWeight: 700,
-  color: "#111827",
-  lineHeight: 1.2,
+  fontSize: "32px",
+  fontWeight: 800,
+  color: "#0f172a",
+  lineHeight: 1.1,
+  letterSpacing: "-0.02em",
 }
 
 const activityList = {
   display: "flex",
   flexDirection: "column",
-  gap: 12,
+  gap: 8,
 }
 
 const activityItem = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-  padding: "12px",
-  borderRadius: "8px",
+  gap: 16,
+  padding: "16px",
+  borderRadius: "12px",
   background: "#f9fafb",
-  transition: "background 0.2s ease",
+  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+  border: "1px solid rgba(0,0,0,0.04)",
 }
 
 const activityIcon = {
-  width: "36px",
-  height: "36px",
-  borderRadius: "8px",
-  background: "#eff6ff",
+  width: "44px",
+  height: "44px",
+  borderRadius: "12px",
+  background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
   color: "#3b82f6",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   flexShrink: 0,
+  boxShadow: "0 2px 8px rgba(59, 130, 246, 0.15)",
 }
 
 const activityContent = {
@@ -400,23 +483,34 @@ const activityContent = {
 }
 
 const activityTitle = {
-  margin: "0 0 4px 0",
-  fontSize: "14px",
+  margin: "0 0 6px 0",
+  fontSize: "15px",
   fontWeight: 600,
-  color: "#111827",
+  color: "#0f172a",
+  letterSpacing: "-0.01em",
 }
 
 const activityDate = {
   margin: 0,
-  fontSize: "12px",
-  color: "#6b7280",
+  fontSize: "13px",
+  color: "#64748b",
+  fontWeight: 500,
+}
+
+const emptyState = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "60px 20px",
+  textAlign: "center",
 }
 
 const emptyText = {
-  textAlign: "center",
-  color: "#6b7280",
-  fontSize: "14px",
-  padding: "20px",
+  color: "#94a3b8",
+  fontSize: "15px",
+  fontWeight: 500,
+  margin: 0,
 }
 
 const loadingContainer = {

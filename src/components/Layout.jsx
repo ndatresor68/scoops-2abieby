@@ -6,10 +6,16 @@ import DashboardCentral from "../DashboardCentral"
 import Login from "../Login"
 import Parametres from "../Parametres"
 import Producteurs from "../Producteurs"
+import Parcelles from "../Parcelles"
+import GestionParcelles from "../pages/GestionParcelles"
+import Livraisons from "../Livraisons"
 import { useAuth } from "../context/AuthContext"
 import { useSettings, useSessionTimeout } from "../context/SettingsContext"
 import AdminUsers from "../pages/AdminUsers"
 import AdminDashboard from "../pages/AdminDashboard"
+import AdminDashboardRole from "../pages/dashboards/AdminDashboard"
+import CentreDashboardEnhanced from "../pages/dashboards/CentreDashboardEnhanced"
+import AgentDashboard from "../pages/dashboards/AgentDashboard"
 import Profile from "../pages/Profile"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
@@ -29,7 +35,7 @@ const TITLES = {
 }
 
 export default function Layout() {
-  const { user, loading, displayName, isAdmin, role, signOut } = useAuth()
+  const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut } = useAuth()
   const { showToast } = useToast()
   const sessionTimeoutMinutes = useSessionTimeout()
   
@@ -42,6 +48,7 @@ export default function Layout() {
   const [activePage, setActivePage] = useState("dashboard")
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [loadingTimeout, setLoadingTimeout] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
   // Initialize session timeout
@@ -71,37 +78,80 @@ export default function Layout() {
     return collapsed ? 86 : 268
   }, [collapsed, isMobile])
 
-  if (loading) {
+  // Show loading screen with timeout protection
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true)
+      }, 10000) // 10 second timeout
+      
+      return () => clearTimeout(timer)
+    } else {
+      setLoadingTimeout(false)
+    }
+  }, [loading])
+
+  if (loading && !loadingTimeout) {
     return (
       <div style={loadingScreen}>
         <div style={spinner}></div>
         <p style={{ marginTop: 20, fontSize: 16, color: "#6b7280" }}>Chargement de la session...</p>
+        <p style={{ marginTop: 10, fontSize: 12, color: "#9ca3af" }}>
+          Si cette page ne se charge pas, vérifiez votre connexion internet
+        </p>
       </div>
     )
   }
 
-  if (!user) {
+  // After timeout or if not loading, show login if no user
+  if (!user || loadingTimeout) {
     return <Login />
+  }
+
+  // ADMIN users: Show only the AdminDashboard interface (no regular Layout)
+  if (isAdmin) {
+    return <AdminDashboard />
   }
 
   function renderPage() {
     switch (activePage) {
       case "dashboard":
+        // Role-specific dashboards (non-admin only)
+        if (isCentre) {
+          return <CentreDashboardEnhanced />
+        } else if (isAgent) {
+          return <AgentDashboard />
+        }
         return <DashboardCentral />
       case "centres":
-        return <Centres />
+        return <DashboardCentral />
       case "producteurs":
         return <Producteurs />
       case "achats":
-        return <Achats />
+        // Only CENTRE can access achats (admin uses AdminDashboard)
+        if (isCentre) {
+          return <Achats />
+        }
+        return <DashboardCentral />
       case "parametres":
         return <Parametres onOpenAdminUsers={() => setActivePage("admin-users")} isAdmin={isAdmin} />
       case "profile":
         return <Profile />
-      case "admin":
-        return isAdmin ? <AdminDashboard /> : <DashboardCentral />
-      case "admin-users":
-        return isAdmin ? <AdminUsers /> : <DashboardCentral />
+      case "parcelles":
+        // Parcelles management (AGENT and CENTRE) - Nouvelle version avec GPS
+        if (isAgent || isCentre) {
+          return <GestionParcelles />
+        }
+        return <DashboardCentral />
+      case "livraisons":
+        // Livraisons management (CENTRE only)
+        if (isCentre) {
+          return <Livraisons />
+        }
+        return <DashboardCentral />
+      case "activites":
+        // Field activities (AGENT only)
+        return isAgent ? <DashboardCentral /> : <DashboardCentral />
       default:
         return <DashboardCentral />
     }

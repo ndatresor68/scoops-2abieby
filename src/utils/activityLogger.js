@@ -69,7 +69,7 @@ export async function logActivity(action, target, details, userId = null, userEm
         const { data: userData } = await supabase
           .from("utilisateurs")
           .select("email")
-          .eq("user_id", userId)
+          .eq("id", userId) // id is the PRIMARY KEY
           .single()
 
         if (userData?.email) {
@@ -83,7 +83,7 @@ export async function logActivity(action, target, details, userId = null, userEm
     // Insert activity log
     const { error } = await supabase.from("activites").insert([
       {
-        user_id: userId,
+        user_id: userId, // activites.user_id references auth.users.id (not utilisateurs.id)
         user_email: userEmail,
         action,
         target,

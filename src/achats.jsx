@@ -10,6 +10,7 @@ import { useAuth } from "./context/AuthContext"
 import { logAchatCreated } from "./utils/activityLogger"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import CocoaReceipt from "./components/CocoaReceipt"
+import { canPerformAction, getAchatsQuery, getProducteursQuery } from "./utils/rolePermissions"
 
 export default function Achats() {
   const { showToast } = useToast()
@@ -38,14 +39,27 @@ export default function Achats() {
   // Calculate montant automatically: montant = poids * prix_unitaire
   const montant = poids && prixKg ? Number(poids) * Number(prixKg) : 0
 
-  // Load purchases from Supabase
+  // Load purchases from Supabase with role-based filtering
   async function loadAchats() {
     try {
       console.log("[Achats] Loading purchases from Supabase...")
-      const { data, error } = await supabase
-        .from("achats")
-        .select("*")
-        .order("date_pesee", { ascending: false })
+      
+      // Check if user can view achats
+      if (!canPerformAction(user, "view_achats")) {
+        console.log("[Achats] User does not have permission to view achats")
+        setAchats([])
+        return []
+      }
+
+      // Get filtered query based on role
+      const query = getAchatsQuery(user)
+      if (!query) {
+        console.log("[Achats] No query available for user role")
+        setAchats([])
+        return []
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.error("[Achats] Error loading purchases:", error)
@@ -65,9 +79,18 @@ export default function Achats() {
   async function fetchInitialData() {
     setLoading(true)
     try {
+      // Get role-based filtered queries
+      const producteursQuery = getProducteursQuery(user)
+      let centresQuery = supabase.from("centres").select("id, nom").order("nom")
+      
+      // For CENTRE users, only show their centre
+      if (user?.role === "CENTRE" && user?.centre_id) {
+        centresQuery = centresQuery.eq("id", user.centre_id)
+      }
+
       const [{ data: producteursData }, { data: centresData }, achatsData] = await Promise.all([
-        supabase.from("producteurs").select("*").order("nom", { ascending: true }).order("code", { ascending: true }),
-        supabase.from("centres").select("id, nom").order("nom"),
+        producteursQuery,
+        centresQuery,
         loadAchats(), // Use loadAchats function
       ])
 
@@ -114,9 +137,12 @@ export default function Achats() {
       const poidsNet = Number(poids)
       const montantCalcule = poidsNet * prixUnitaire
 
+      // For CENTRE users, ensure centre_id matches their centre
+      const centreId = user?.role === "CENTRE" ? user.centre_id : (selectedProd.centre_id || null)
+
       const payload = {
         producteur_id: selectedProd.id,
-        centre_id: selectedProd.centre_id || null,
+        centre_id: centreId,
         poids: poidsNet,
         sacs: Number(sacs) || 0,
         prix_unitaire: prixUnitaire, // Changed from prix_kg to prix_unitaire

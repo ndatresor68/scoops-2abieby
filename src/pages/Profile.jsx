@@ -127,7 +127,7 @@ export default function Profile() {
       .from("utilisateurs")
       .upsert([
         {
-          user_id: user.id,
+          id: user.id, // id is PRIMARY KEY and matches auth.users.id
           nom: payload.nom,
           email: payload.email,
           role: payload.role || null,

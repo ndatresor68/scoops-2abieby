@@ -190,15 +190,15 @@ export default function AdminActivities() {
       // Fetch historical users
       const { data: usersData } = await supabase
         .from("utilisateurs")
-        .select("user_id, email, nom, role, created_at")
+        .select("id, email, nom, role, created_at")
         .order("created_at", { ascending: false })
         .limit(200)
 
       if (usersData) {
         usersData.forEach((user) => {
           activitiesList.push({
-            id: `historical-user-${user.user_id || user.id}`,
-            user_id: user.user_id || null,
+            id: `historical-user-${user.id}`,
+            user_id: user.id, // activites.user_id references auth.users.id (same as utilisateurs.id)
             user_email: user.email || "System",
             action: "user_created",
             target: "user",
@@ -283,12 +283,12 @@ export default function AdminActivities() {
         if (userIds.length > 0) {
           const { data: usersForAchats } = await supabase
             .from("utilisateurs")
-            .select("user_id, email")
-            .in("user_id", userIds)
+            .select("id, email")
+            .in("id", userIds)
 
           if (usersForAchats) {
             usersForAchats.forEach((u) => {
-              usersMap[u.user_id] = u.email
+              usersMap[u.id] = u.email
             })
           }
         }
@@ -645,28 +645,31 @@ function getTargetLabel(target) {
 const container = {
   display: "flex",
   flexDirection: "column",
-  gap: 24,
+  gap: 32,
 }
 
 const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: 16,
+  gap: 20,
   flexWrap: "wrap",
+  marginBottom: 8,
 }
 
 const title = {
   margin: 0,
-  fontSize: "24px",
+  fontSize: "28px",
   fontWeight: 700,
-  color: "#1f2937",
+  color: "#0f172a",
+  letterSpacing: "-0.03em",
 }
 
 const subtitle = {
-  margin: "4px 0 0 0",
+  margin: "6px 0 0 0",
   fontSize: "14px",
-  color: "#6b7280",
+  color: "#64748b",
+  fontWeight: 500,
 }
 
 const filtersContainer = {

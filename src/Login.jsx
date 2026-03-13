@@ -125,14 +125,18 @@ const logoContainer = {
   justifyContent: "center",
   alignItems: "center",
   marginBottom: 24,
+  width: "100%",
+  height: "120px",
+  overflow: "hidden",
+  borderRadius: "12px",
 }
 
 const logoStyle = {
-  maxWidth: "260px",
   width: "100%",
-  height: "auto",
-  objectFit: "contain",
+  height: "100%",
+  objectFit: "cover",
   display: "block",
+  border: "none",
 }
 
 const titleStyle = {

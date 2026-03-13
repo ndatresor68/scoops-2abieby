@@ -484,7 +484,7 @@ export default function AdminAgents() {
 const container = {
   display: "flex",
   flexDirection: "column",
-  gap: 24,
+  gap: 32,
 }
 
 const header = {
@@ -492,20 +492,23 @@ const header = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   flexWrap: "wrap",
-  gap: 16,
+  gap: 20,
+  marginBottom: 8,
 }
 
 const title = {
   margin: 0,
-  fontSize: "24px",
+  fontSize: "28px",
   fontWeight: 700,
-  color: "#111827",
+  color: "#0f172a",
+  letterSpacing: "-0.03em",
 }
 
 const subtitle = {
-  margin: "4px 0 0 0",
+  margin: "6px 0 0 0",
   fontSize: "14px",
-  color: "#6b7280",
+  color: "#64748b",
+  fontWeight: 500,
 }
 
 const form = {

@@ -53,7 +53,7 @@ export async function createNotification({
 export async function broadcastNotification({ title, message, type = "info", createdBy = null }) {
   try {
     // Get all active users
-    const { data: users } = await supabase.from("utilisateurs").select("user_id").eq("status", "active")
+    const { data: users } = await supabase.from("utilisateurs").select("id").eq("status", "active")
 
     if (!users || users.length === 0) {
       return { success: false, message: "No active users found" }
@@ -64,7 +64,7 @@ export async function broadcastNotification({ title, message, type = "info", cre
       title,
       message,
       type,
-      user_id: user.user_id,
+      user_id: user.id, // notifications.user_id references auth.users.id (same as utilisateurs.id)
       created_by: createdBy,
       read: false,
     }))

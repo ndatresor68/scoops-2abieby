@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react"
-import { FaCog, FaUsers } from "react-icons/fa"
+import { FaCog, FaUsers, FaStore } from "react-icons/fa"
 import { supabase } from "./supabaseClient"
+import { useAuth } from "./context/AuthContext"
+import { getUserRoleInfo } from "./utils/rolePermissions"
+import Card from "./components/ui/Card"
+import Button from "./components/ui/Button"
+import Input from "./components/ui/Input"
+import { useToast } from "./components/ui/Toast"
 
 const INITIAL_PARAMS = {
   coop_nom: "",
@@ -13,16 +19,31 @@ const INITIAL_PARAMS = {
 }
 
 export default function Parametres({ onOpenAdminUsers, isAdmin }) {
+  const { user } = useAuth()
+  const { showToast } = useToast()
+  const { isCentre, centreId } = getUserRoleInfo(user)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingCentre, setSavingCentre] = useState(false)
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [centreData, setCentreData] = useState(null)
 
   const [formData, setFormData] = useState(INITIAL_PARAMS)
+  const [centreFormData, setCentreFormData] = useState({
+    nom: "",
+    email: "",
+    telephone: "",
+    adresse: "",
+    ville: "",
+  })
 
   useEffect(() => {
     fetchParametres()
-  }, [])
+    if (isCentre && centreId) {
+      fetchCentreData()
+    }
+  }, [isCentre, centreId])
 
   async function fetchParametres() {
     setLoading(true)
@@ -41,6 +62,59 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
     }
 
     setLoading(false)
+  }
+
+  async function fetchCentreData() {
+    if (!centreId) return
+
+    try {
+      const { data, error } = await supabase
+        .from("centres")
+        .select("*")
+        .eq("id", centreId)
+        .single()
+
+      if (error) {
+        console.error("[Parametres] Error fetching centre:", error)
+        return
+      }
+
+      if (data) {
+        setCentreData(data)
+        setCentreFormData({
+          nom: data.nom || "",
+          email: data.email || "",
+          telephone: data.telephone || "",
+          adresse: data.adresse || "",
+          ville: data.ville || "",
+        })
+      }
+    } catch (error) {
+      console.error("[Parametres] Exception fetching centre:", error)
+    }
+  }
+
+  async function handleSaveCentre(e) {
+    e.preventDefault()
+    if (!centreId) return
+
+    setSavingCentre(true)
+    try {
+      const { error } = await supabase
+        .from("centres")
+        .update(centreFormData)
+        .eq("id", centreId)
+
+      if (error) throw error
+
+      showToast("Informations du centre mises à jour avec succès", "success")
+      fetchCentreData()
+    } catch (error) {
+      console.error("[Parametres] Error updating centre:", error)
+      showToast("Erreur lors de la mise à jour", "error")
+    } finally {
+      setSavingCentre(false)
+    }
   }
 
   async function handleSave(e) {
@@ -116,25 +190,57 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
           />
         </Card>
 
-        <Card title="Administration">
-          <Field
-            label="Roles autorises"
-            value={formData.roles_disponibles}
-            onChange={(v) => setFormData((p) => ({ ...p, roles_disponibles: v }))}
-          />
+        {isCentre && centreData && (
+          <Card title="Informations du Centre">
+            <form onSubmit={handleSaveCentre}>
+              <Field
+                label="Nom du centre"
+                value={centreFormData.nom}
+                onChange={(v) => setCentreFormData((p) => ({ ...p, nom: v }))}
+              />
+              <Field
+                label="Email"
+                type="email"
+                value={centreFormData.email}
+                onChange={(v) => setCentreFormData((p) => ({ ...p, email: v }))}
+              />
+              <Field
+                label="Téléphone"
+                value={centreFormData.telephone}
+                onChange={(v) => setCentreFormData((p) => ({ ...p, telephone: v }))}
+              />
+              <Field
+                label="Adresse"
+                value={centreFormData.adresse}
+                onChange={(v) => setCentreFormData((p) => ({ ...p, adresse: v }))}
+              />
+              <Field
+                label="Ville"
+                value={centreFormData.ville}
+                onChange={(v) => setCentreFormData((p) => ({ ...p, ville: v }))}
+              />
+              <button type="submit" style={saveBtn} disabled={savingCentre}>
+                {savingCentre ? "Enregistrement..." : "Enregistrer les informations du centre"}
+              </button>
+            </form>
+          </Card>
+        )}
 
-          <div style={{ marginTop: 14 }}>
-            {isAdmin ? (
+        {isAdmin && (
+          <Card title="Administration">
+            <Field
+              label="Roles autorises"
+              value={formData.roles_disponibles}
+              onChange={(v) => setFormData((p) => ({ ...p, roles_disponibles: v }))}
+            />
+
+            <div style={{ marginTop: 14 }}>
               <button type="button" style={adminBtn} onClick={onOpenAdminUsers}>
                 <FaUsers /> Gestion des utilisateurs
               </button>
-            ) : (
-              <p style={{ margin: 0, color: "#6b7280" }}>
-                Section reservee aux administrateurs.
-              </p>
-            )}
-          </div>
-        </Card>
+            </div>
+          </Card>
+        )}
 
         <button type="submit" style={saveBtn}>
           {saving ? "Enregistrement..." : "Enregistrer les parametres"}
@@ -144,20 +250,16 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
   )
 }
 
-function Card({ title, children }) {
-  return (
-    <section style={card}>
-      <h3 style={{ marginTop: 0, marginBottom: 16 }}>{title}</h3>
-      {children}
-    </section>
-  )
-}
-
-function Field({ label, value, onChange }) {
+function Field({ label, value, onChange, type = "text" }) {
   return (
     <label style={field}>
       <span style={labelStyle}>{label}</span>
-      <input value={value || ""} onChange={(e) => onChange(e.target.value)} style={input} />
+      <input
+        type={type}
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        style={input}
+      />
     </label>
   )
 }
@@ -173,13 +275,6 @@ const pageHeader = {
 const formLayout = {
   display: "grid",
   gap: 16,
-}
-
-const card = {
-  background: "white",
-  borderRadius: 14,
-  boxShadow: "0 10px 24px rgba(0,0,0,0.07)",
-  padding: 18,
 }
 
 const field = {

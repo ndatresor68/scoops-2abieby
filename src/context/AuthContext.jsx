@@ -46,51 +46,39 @@ export function AuthProvider({ children }) {
       console.log("[AuthContext] User email:", authUser.email)
       
       // CRITICAL: ALWAYS read from public.utilisateurs table
-      // Try user_id first (foreign key to auth.users.id), then id, then email
+      // id is the PRIMARY KEY and matches auth.users.id
       // NEVER use auth.user.role, session.role, or any auth metadata
       let profile = null
       let error = null
       
-      // First try: user_id (most common structure)
-      const { data: profileByUserId, error: error1 } = await supabase
+      // Primary lookup: id matches auth.users.id
+      const { data: profileById, error: error1 } = await supabase
         .from("utilisateurs")
         .select("*")
-        .eq("user_id", authUser.id)
+        .eq("id", authUser.id)
         .single()
       
-      if (!error1 && profileByUserId) {
-        profile = profileByUserId
-        console.log("[AuthContext] Profile found by user_id")
+      if (!error1 && profileById) {
+        profile = profileById
+        console.log("[AuthContext] Profile found by id")
       } else {
-        // Second try: id (if id matches auth.users.id)
-        const { data: profileById, error: error2 } = await supabase
-          .from("utilisateurs")
-          .select("*")
-          .eq("id", authUser.id)
-          .single()
-        
-        if (!error2 && profileById) {
-          profile = profileById
-          console.log("[AuthContext] Profile found by id")
+        // Fallback: try email if id lookup fails
+        if (authUser.email) {
+          console.log("[AuthContext] Trying fallback with email...")
+          const { data: profileByEmail, error: emailError } = await supabase
+            .from("utilisateurs")
+            .select("*")
+            .eq("email", authUser.email)
+            .single()
+          
+          if (!emailError && profileByEmail) {
+            profile = profileByEmail
+            console.log("[AuthContext] Profile found by email fallback")
+          } else {
+            error = emailError || error1
+          }
         } else {
-          error = error2 || error1
-        }
-      }
-
-      // If profile not found by user_id or id, try email as fallback
-      if (!profile && authUser.email) {
-        console.log("[AuthContext] Trying fallback with email...")
-        const { data: profileByEmail, error: emailError } = await supabase
-          .from("utilisateurs")
-          .select("*")
-          .eq("email", authUser.email)
-          .single()
-        
-        if (!emailError && profileByEmail) {
-          profile = profileByEmail
-          console.log("[AuthContext] Profile found by email fallback")
-        } else {
-          error = emailError || error
+          error = error1
         }
       }
       
@@ -162,16 +150,23 @@ export function AuthProvider({ children }) {
     try {
       console.log("[AuthContext] Starting auth state sync...")
       
-      // Timeout protection: max 10 seconds for auth check
+      // Timeout protection: max 5 seconds for auth check (reduced from 10)
       const authPromise = supabase.auth.getUser()
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Auth timeout")), 10000)
+        setTimeout(() => reject(new Error("Auth timeout")), 5000)
       )
       
-      const { data, error } = await Promise.race([authPromise, timeoutPromise]).catch((err) => {
+      let authResult
+      try {
+        authResult = await Promise.race([authPromise, timeoutPromise])
+      } catch (err) {
         console.error("[AuthContext] Auth check timeout or error:", err)
-        return { data: null, error: err }
-      })
+        // On timeout/error, assume no user - allow app to render login
+        setUser(null)
+        return null
+      }
+      
+      const { data, error } = authResult || { data: null, error: null }
       
       if (error) {
         console.error("[AuthContext] Auth error:", error)
@@ -185,19 +180,25 @@ export function AuthProvider({ children }) {
       if (nextUser) {
         console.log("[AuthContext] User authenticated, loading profile from DB...")
         try {
+          // Reduced timeout to 5 seconds
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Profile load timeout")), 8000)
+            setTimeout(() => reject(new Error("Profile load timeout")), 5000)
           )
           
           // Load profile from utilisateurs table using id
           // This will merge profile data (role, nom) into user state
-          // CRITICAL: Do NOT set user until profile is loaded - we need role from DB
           const profileResult = await Promise.race([
             loadProfileForUser(nextUser),
             timeoutPromise
           ]).catch((err) => {
-            console.error("[AuthContext] Profile load timeout:", err)
-            // Don't set user without profile - wait for retry
+            console.error("[AuthContext] Profile load timeout or error:", err)
+            // If profile load fails, still set user with basic auth data
+            // This allows the app to render, user can retry login
+            setUser({
+              ...nextUser,
+              role: null, // Will be set when profile loads
+              nom: nextUser.email?.split("@")[0] || "User",
+            })
             return null
           })
           
@@ -205,13 +206,17 @@ export function AuthProvider({ children }) {
             console.log("[AuthContext] Profile loaded successfully in syncAuthState")
             // User state is already set by loadProfileForUser with merged profile data
           } else {
-            console.warn("[AuthContext] Profile not loaded in syncAuthState")
-            // Don't set user without profile - we need role from DB
-            // User will be set when profile loads successfully
+            console.warn("[AuthContext] Profile not loaded - user set with basic auth data")
+            // User is already set above with basic data
           }
         } catch (err) {
           console.error("[AuthContext] Error loading profile:", err)
-          // Don't set user without profile - we need role from DB
+          // Set user with basic auth data to allow app to render
+          setUser({
+            ...nextUser,
+            role: null,
+            nom: nextUser.email?.split("@")[0] || "User",
+          })
         }
       } else {
         console.log("[AuthContext] No user, clearing state")
@@ -222,6 +227,7 @@ export function AuthProvider({ children }) {
       return nextUser
     } catch (error) {
       console.error("[AuthContext] Error syncing auth state:", error)
+      // Always clear user on error to allow login screen
       setUser(null)
       return null
     }
@@ -239,13 +245,13 @@ export function AuthProvider({ children }) {
 
     async function initializeSession() {
       try {
-        // Safety timeout: always set loading to false after max 12 seconds
+        // Safety timeout: always set loading to false after max 8 seconds (reduced)
         timeoutId = setTimeout(() => {
           if (mounted) {
             console.warn("[AuthContext] Safety timeout reached, forcing loading to false")
             setLoading(false)
           }
-        }, 12000)
+        }, 8000)
 
         await syncAuthState()
         
@@ -256,8 +262,10 @@ export function AuthProvider({ children }) {
         }
       } catch (error) {
         console.error("[AuthContext] Error in initializeSession:", error)
+        // Always set loading to false on error to allow app to render
         if (mounted) {
           setLoading(false)
+          setUser(null) // Clear user on error
           if (timeoutId) clearTimeout(timeoutId)
         }
       }
@@ -265,24 +273,43 @@ export function AuthProvider({ children }) {
 
     initializeSession()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
-      if (!mounted) return
-      console.log("[AuthContext] Auth state changed:", event)
-      
-      try {
-        await syncAuthState()
-        if (mounted) setLoading(false)
-      } catch (error) {
-        console.error("[AuthContext] Error in auth state change:", error)
-        if (mounted) setLoading(false)
+    // Set up auth state change listener with error handling
+    let authListener = null
+    try {
+      const listenerData = supabase.auth.onAuthStateChange(async (event) => {
+        if (!mounted) return
+        console.log("[AuthContext] Auth state changed:", event)
+        
+        try {
+          await syncAuthState()
+          if (mounted) setLoading(false)
+        } catch (error) {
+          console.error("[AuthContext] Error in auth state change:", error)
+          // Always set loading to false on error
+          if (mounted) {
+            setLoading(false)
+            setUser(null)
+          }
+        }
+      })
+      authListener = listenerData
+    } catch (error) {
+      console.error("[AuthContext] Error setting up auth listener:", error)
+      // If listener setup fails, still allow app to render
+      if (mounted) {
+        setLoading(false)
       }
-    })
+    }
 
     return () => {
       mounted = false
       if (timeoutId) clearTimeout(timeoutId)
-      if (authListener?.subscription) {
-        authListener.subscription.unsubscribe()
+      if (authListener?.data?.subscription) {
+        try {
+          authListener.data.subscription.unsubscribe()
+        } catch (err) {
+          console.warn("[AuthContext] Error unsubscribing auth listener:", err)
+        }
       }
     }
   }, [syncAuthState])
@@ -388,13 +415,25 @@ export function AuthProvider({ children }) {
     console.log("[AuthContext] ==============================")
   }, [user, effectiveRole, effectiveIsAdmin])
 
+  const effectiveIsAgent = effectiveRole === "AGENT"
+  const effectiveIsCentre = effectiveRole === "CENTRE"
+
   const value = useMemo(
     () => {
+      // Safe fallbacks for role-based checks
+      const safeRole = effectiveRole || null
+      const safeIsAdmin = effectiveIsAdmin || false
+      const safeIsAgent = effectiveIsAgent || false
+      const safeIsCentre = effectiveIsCentre || false
+      
       const ctxValue = {
         user,
         // Role is ALWAYS from user.role (merged from utilisateurs table)
-        role: effectiveRole,
-        isAdmin: effectiveIsAdmin,
+        role: safeRole,
+        isAdmin: safeIsAdmin,
+        isAgent: safeIsAgent,
+        isCentre: safeIsCentre,
+        centreId: user?.centre_id || null,
         loading,
         isAuthenticated: !!user,
         displayName: getDisplayName(user),
@@ -403,18 +442,23 @@ export function AuthProvider({ children }) {
         refreshUser,
       }
       
-      // Debug log when context value changes
-      console.log("[AuthContext] Context value updated:", {
-        hasUser: !!ctxValue.user,
-        userRole: ctxValue.user?.role,
-        role: ctxValue.role,
-        isAdmin: ctxValue.isAdmin,
-        displayName: ctxValue.displayName
-      })
+      // Debug log when context value changes (only in dev)
+      if (import.meta.env.DEV) {
+        console.log("[AuthContext] Context value updated:", {
+          hasUser: !!ctxValue.user,
+          userRole: ctxValue.user?.role,
+          role: ctxValue.role,
+          isAdmin: ctxValue.isAdmin,
+          isAgent: ctxValue.isAgent,
+          isCentre: ctxValue.isCentre,
+          centreId: ctxValue.centreId,
+          loading: ctxValue.loading,
+        })
+      }
       
       return ctxValue
     },
-    [user, effectiveRole, effectiveIsAdmin, loading, signInWithPassword, signOut, refreshUser],
+    [user, effectiveRole, effectiveIsAdmin, effectiveIsAgent, effectiveIsCentre, loading, signInWithPassword, signOut, refreshUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -21,6 +21,7 @@ import { useToast } from "./components/ui/Toast"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { exportProducteursPDF } from "./utils/exportToPDF"
 import { useAuth } from "./context/AuthContext"
+import { getProducteursQuery, getUserRoleInfo } from "./utils/rolePermissions"
 import {
   logProducerCreated,
   logProducerUpdated,
@@ -74,12 +75,11 @@ export default function Producteurs() {
     try {
       console.log("[Producteurs] Fetching producteurs...")
       
+      // Get role-based filtered query
+      const query = getProducteursQuery(user)
+      
       // Timeout protection: max 15 seconds
-      const queryPromise = supabase
-        .from("producteurs")
-        .select("*")
-        .order("nom", { ascending: true })
-        .order("code", { ascending: true })
+      const queryPromise = query
       
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("Query timeout")), 15000)
@@ -117,8 +117,18 @@ export default function Producteurs() {
     try {
       console.log("[Producteurs] Fetching centres...")
       
+      const { isAdmin, isCentre, centreId } = getUserRoleInfo(user)
+      
+      // Build query based on role
+      let query = supabase.from("centres").select("id, nom").order("nom")
+      
+      // CENTRE users: Only see their own centre
+      if (isCentre && centreId) {
+        query = query.eq("id", centreId)
+      }
+      
       // Timeout protection: max 10 seconds
-      const queryPromise = supabase.from("centres").select("id, nom").order("nom")
+      const queryPromise = query
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error("Query timeout")), 10000)
       )
@@ -173,38 +183,83 @@ export default function Producteurs() {
     }
   }, [])
 
+  /**
+   * Génère un code producteur unique basé sur le dernier code dans la base de données
+   * Format: ASAB-XXX (ex: ASAB-001, ASAB-002, etc.)
+   * Le compteur est global pour toute la coopérative, pas par centre
+   * 
+   * IMPORTANT : Toujours calcule depuis la base de données, jamais de code fixe
+   * 
+   * @returns {Promise<string>} Le code généré
+   */
   async function generateCode() {
-    const { data, error } = await supabase
-      .from("producteurs")
-      .select("code")
-      .not("code", "is", null)
+    try {
+      console.log("[generateCode] Fetching last code from database...")
+      
+      // Récupérer tous les codes depuis Supabase pour trouver le maximum numérique
+      // On ne peut pas trier numériquement directement en SQL, donc on récupère tous les codes
+      // et on trouve le max côté client
+      const { data, error } = await supabase
+        .from("producteurs")
+        .select("code")
+        .not("code", "is", null)
+        .like("code", "ASAB-%")
 
-    if (error) {
-      console.error(error)
-      setGeneratedCode("ASAB-001")
-      return
-    }
+      if (error) {
+        console.error("[generateCode] Error fetching codes:", error)
+        showToast("Erreur lors de la récupération des codes existants", "error")
+        // En cas d'erreur, ne pas utiliser de code fixe - retourner null pour forcer une nouvelle tentative
+        return null
+      }
 
-    if (!data || data.length === 0) {
-      setGeneratedCode("ASAB-001")
-      return
-    }
+      // Si aucun code n'existe, commencer à 001
+      if (!data || data.length === 0) {
+        console.log("[generateCode] No existing codes found, starting at ASAB-001")
+        const firstCode = "ASAB-001"
+        setGeneratedCode(firstCode)
+        return firstCode
+      }
 
-    const numbers = data
-      .map((item) => {
-        if (!item.code) return null
+      // Extraire tous les numéros et trouver le maximum
+      let maxNumber = 0
+      let lastValidCode = null
+
+      for (const item of data) {
+        if (!item.code) continue
+        
         const parts = item.code.split("-")
-        return parseInt(parts[1])
-      })
-      .filter((n) => !isNaN(n))
+        if (parts.length !== 2 || parts[0] !== "ASAB") {
+          continue // Ignorer les codes au format invalide
+        }
 
-    if (numbers.length === 0) {
-      setGeneratedCode("ASAB-001")
-      return
+        const number = parseInt(parts[1], 10)
+        if (!isNaN(number) && number > maxNumber) {
+          maxNumber = number
+          lastValidCode = item.code
+        }
+      }
+
+      // Si aucun code valide trouvé, commencer à 001
+      if (maxNumber === 0) {
+        console.log("[generateCode] No valid codes found, starting at ASAB-001")
+        const firstCode = "ASAB-001"
+        setGeneratedCode(firstCode)
+        return firstCode
+      }
+
+      // Ajouter +1 et générer le nouveau code
+      const nextNumber = maxNumber + 1
+      const newCode = `ASAB-${String(nextNumber).padStart(3, "0")}`
+      
+      console.log(`[generateCode] Last code found: ${lastValidCode} (number: ${maxNumber}), Next code: ${newCode}`)
+      setGeneratedCode(newCode)
+      return newCode
+    } catch (error) {
+      console.error("[generateCode] Exception:", error)
+      showToast("Erreur lors de la génération du code", "error")
+      // En cas d'exception, ne pas utiliser de code fixe
+      return null
     }
-
-    const maxNumber = Math.max(...numbers)
-    setGeneratedCode(`ASAB-${String(maxNumber + 1).padStart(3, "0")}`)
   }
 
   /**
@@ -334,8 +389,9 @@ export default function Producteurs() {
     }
   }
 
-  function openForm(producteur = null) {
+  async function openForm(producteur = null) {
     if (producteur) {
+      // Mode édition : utiliser le code existant
       setEditingProducteur(producteur)
       setFormData({
         nom: producteur.nom || "",
@@ -358,17 +414,23 @@ export default function Producteurs() {
         photo_cni_verso: null,
         carte_planteur: null,
       })
+      setShowForm(true)
     } else {
+      // Mode création : générer un nouveau code depuis la base de données
       setEditingProducteur(null)
+      
+      // For CENTRE users, automatically set their centre_id
+      const { isCentre, centreId } = getUserRoleInfo(user)
       setFormData({
         nom: "",
         telephone: "",
         sexe: "",
         localite: "",
         statut: "",
-        centre_id: "",
+        centre_id: isCentre && centreId ? String(centreId) : "",
       })
-      setGeneratedCode("")
+      
+      // Réinitialiser les autres états
       setExistingUrls({
         photo: "",
         photo_cni_recto: "",
@@ -381,9 +443,22 @@ export default function Producteurs() {
         photo_cni_verso: null,
         carte_planteur: null,
       })
-      generateCode()
+      
+      // IMPORTANT : Toujours calculer le code depuis la base de données
+      // Ne jamais utiliser un code fixe comme "ASAB-001"
+      console.log("[openForm] Generating new code from database...")
+      const newCode = await generateCode()
+      
+      if (!newCode) {
+        console.error("[openForm] Failed to generate code")
+        showToast("Erreur lors de la génération du code producteur", "error")
+        return
+      }
+      
+      console.log("[openForm] Generated code:", newCode)
+      setGeneratedCode(newCode)
+      setShowForm(true)
     }
-    setShowForm(true)
   }
 
   function closeForm() {
@@ -424,6 +499,20 @@ export default function Producteurs() {
     if (!formData.telephone.trim()) {
       showToast("Le téléphone est obligatoire", "error")
       return
+    }
+
+    // Pour la création, s'assurer qu'un code a été généré
+    let codeToUse = generatedCode
+    if (!editingProducteur) {
+      if (!codeToUse) {
+        console.warn("[handleSubmit] No code generated, generating now...")
+        codeToUse = await generateCode()
+        if (!codeToUse) {
+          showToast("Erreur lors de la génération du code producteur", "error")
+          setUploading(false)
+          return
+        }
+      }
     }
 
     setUploading(true)
@@ -569,7 +658,7 @@ export default function Producteurs() {
 
         // Step 1: Insert producteur first to get the real UUID
         const initialPayload = {
-          code: generatedCode,
+          code: codeToUse,
           nom: formData.nom.trim(),
           telephone: formData.telephone.trim(),
           sexe: formData.sexe || null,
@@ -1193,10 +1282,16 @@ export default function Producteurs() {
             <select
               value={formData.centre_id}
               onChange={(e) => setFormData({ ...formData, centre_id: e.target.value })}
-                  style={formSelect}
+              disabled={getUserRoleInfo(user).isCentre}
+                  style={{
+                    ...formSelect,
+                    ...(getUserRoleInfo(user).isCentre ? { background: "#f9fafb", cursor: "not-allowed" } : {}),
+                  }}
                   onFocus={(e) => {
-                    e.target.style.borderColor = "#7a1f1f"
-                    e.target.style.boxShadow = "0 0 0 3px rgba(122, 31, 31, 0.1)"
+                    if (!getUserRoleInfo(user).isCentre) {
+                      e.target.style.borderColor = "#7a1f1f"
+                      e.target.style.boxShadow = "0 0 0 3px rgba(122, 31, 31, 0.1)"
+                    }
                   }}
                   onBlur={(e) => {
                     e.target.style.borderColor = "#d1d5db"
@@ -1821,9 +1916,9 @@ const sectionTitle = {
 }
 
 const cardsContainer = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 16,
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: 12,
 }
 
 const producteurCard = {

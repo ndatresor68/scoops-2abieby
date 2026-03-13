@@ -29,6 +29,8 @@ import {
   logUserBanned,
   logUserReactivated,
 } from "../../utils/activityLogger"
+import { useSettings, useExportFormat, usePasswordPolicy } from "../../context/SettingsContext"
+import { validatePassword } from "../../utils/passwordValidator"
 
 const INITIAL_FORM = {
   nom: "",
@@ -53,6 +55,16 @@ export default function AdminUsers() {
   const exportFormat = useExportFormat()
   const passwordPolicy = usePasswordPolicy()
   const isMobile = useMediaQuery("(max-width: 640px)")
+  
+  // Debug: Log when component mounts
+  useEffect(() => {
+    console.log("[AdminUsers] Component mounted, isAdmin:", isAdmin)
+  }, [isAdmin])
+  
+  // Dynamic grid columns based on screen size
+  const statsGridStyle = isMobile 
+    ? { ...statsContainer, gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }
+    : statsContainer
 
   const [users, setUsers] = useState([])
   const [centres, setCentres] = useState([])
@@ -76,10 +88,13 @@ export default function AdminUsers() {
   const [preview, setPreview] = useState("")
 
   useEffect(() => {
+    console.log("[AdminUsers] useEffect triggered, isAdmin:", isAdmin)
     if (!isAdmin) {
+      console.log("[AdminUsers] Not admin, skipping fetch")
       setLoading(false)
       return
     }
+    console.log("[AdminUsers] Fetching data...")
     fetchData()
   }, [isAdmin])
 
@@ -241,7 +256,7 @@ export default function AdminUsers() {
       if (editingUser) {
         // Update existing user
         if (photoFile) {
-          avatarUrl = await uploadAvatar(photoFile, editingUser.user_id || editingUser.id)
+          avatarUrl = await uploadAvatar(photoFile, editingUser.id)
         }
 
         const { error: updateError } = await supabase
@@ -296,9 +311,10 @@ export default function AdminUsers() {
         }
 
         // Insert into utilisateurs table
+        // id is the PRIMARY KEY and must match auth.users.id
         // Build payload without status first, then add it if column exists
         const insertPayload = {
-          user_id: newAuthUser.id,
+          id: newAuthUser.id, // id matches auth.users.id
           nom: form.nom,
           email: form.email,
           role,
@@ -628,7 +644,7 @@ export default function AdminUsers() {
   return (
     <div style={container}>
       {/* Statistics Cards */}
-      <div style={statsContainer}>
+      <div style={statsGridStyle}>
         <div style={statCard}>
           <div style={statIcon} style={{ background: "#eff6ff", color: "#2563eb" }}>
             <FaUserShield />
@@ -1047,23 +1063,25 @@ export default function AdminUsers() {
 const container = {
   display: "flex",
   flexDirection: "column",
-  gap: 24,
+  gap: 32,
 }
 
 const statsContainer = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: 16,
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 20,
 }
 
 const statCard = {
   background: "white",
-  borderRadius: "12px",
-  padding: "20px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  borderRadius: "16px",
+  padding: "24px",
+  boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+  border: "1px solid rgba(0,0,0,0.04)",
   display: "flex",
   alignItems: "center",
   gap: 16,
+  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
 }
 
 const statIcon = {
@@ -1093,21 +1111,24 @@ const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: 16,
+  gap: 20,
   flexWrap: "wrap",
+  marginBottom: 8,
 }
 
 const title = {
   margin: 0,
-  fontSize: "24px",
+  fontSize: "28px",
   fontWeight: 700,
-  color: "#1f2937",
+  color: "#0f172a",
+  letterSpacing: "-0.03em",
 }
 
 const subtitle = {
-  margin: "4px 0 0 0",
+  margin: "6px 0 0 0",
   fontSize: "14px",
-  color: "#6b7280",
+  color: "#64748b",
+  fontWeight: 500,
 }
 
 const headerActions = {
@@ -1118,9 +1139,10 @@ const headerActions = {
 
 const searchContainer = {
   background: "white",
-  borderRadius: "12px",
-  padding: "12px 16px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  borderRadius: "16px",
+  padding: "16px 20px",
+  boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+  border: "1px solid rgba(0,0,0,0.04)",
 }
 
 const searchWrapper = {
@@ -1131,8 +1153,9 @@ const searchWrapper = {
 
 const tableCard = {
   background: "white",
-  borderRadius: "12px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  borderRadius: "16px",
+  boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+  border: "1px solid rgba(0,0,0,0.04)",
   overflow: "hidden",
 }
 
