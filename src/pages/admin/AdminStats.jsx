@@ -16,9 +16,10 @@ export default function AdminStats() {
     totalCacao: 0,
   })
   const [recentActivity, setRecentActivity] = useState([])
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isMobile = useMediaQuery("(max-width: 768px)")
+  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
 
-  // Dynamic grid style based on screen size
+  // Responsive grid: 2 columns (mobile), 3 (tablet), 4 (desktop)
   const gridStyle = isMobile
     ? {
         display: "grid",
@@ -26,9 +27,16 @@ export default function AdminStats() {
         gap: 12,
         width: "100%",
       }
+    : isTablet
+    ? {
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        gap: 16,
+        width: "100%",
+      }
     : {
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        gridTemplateColumns: "repeat(4, 1fr)",
         gap: 20,
         width: "100%",
       }
@@ -346,19 +354,19 @@ function StatCard({ icon, label, value, color }) {
       style={{
         ...statCard,
         background: "white",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-        borderRadius: "16px",
-        border: "1px solid rgba(0,0,0,0.04)",
+        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)",
+        borderRadius: "12px",
+        border: "1px solid #e5e7eb",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-4px)"
-        e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.12)"
+        e.currentTarget.style.transform = "translateY(-2px)"
+        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)"
         const iconEl = e.currentTarget.querySelector('[data-stat-icon]')
-        if (iconEl) iconEl.style.transform = "scale(1.1)"
+        if (iconEl) iconEl.style.transform = "scale(1.05)"
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0)"
-        e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)"
+        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)"
         const iconEl = e.currentTarget.querySelector('[data-stat-icon]')
         if (iconEl) iconEl.style.transform = "scale(1)"
       }}
@@ -368,16 +376,15 @@ function StatCard({ icon, label, value, color }) {
           data-stat-icon
           style={{
             ...statIcon,
-            background: `linear-gradient(135deg, ${color}20 0%, ${color}10 100%)`,
+            background: `linear-gradient(135deg, ${color}15 0%, ${color}08 100%)`,
             color,
-            boxShadow: `0 4px 12px ${color}20`,
           }}
         >
           {icon}
         </div>
         <div style={statInfo}>
-          <p style={statLabel}>{label}</p>
           <p style={statValue}>{value}</p>
+          <p style={statLabel}>{label}</p>
         </div>
       </div>
     </Card>
@@ -388,6 +395,10 @@ const container = {
   display: "flex",
   flexDirection: "column",
   gap: 32,
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
 }
 
 const statsGrid = {
@@ -400,51 +411,61 @@ const statsGrid = {
 }
 
 const statCard = {
-  padding: "28px",
-  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+  padding: "24px",
+  transition: "all 0.2s ease",
   cursor: "default",
+  height: "100%",
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "140px",
 }
 
 const statContent = {
   display: "flex",
-  alignItems: "flex-start",
-  gap: 20,
   flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "16px",
+  flex: 1,
+  width: "100%",
+  textAlign: "center",
 }
 
 const statIcon = {
-  width: "64px",
-  height: "64px",
-  borderRadius: "16px",
+  width: "56px",
+  height: "56px",
+  borderRadius: "12px",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  fontSize: "28px",
+  fontSize: "24px",
   flexShrink: 0,
   transition: "transform 0.2s ease",
 }
 
 const statInfo = {
-  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: "4px",
   width: "100%",
-}
-
-const statLabel = {
-  margin: "0 0 8px 0",
-  fontSize: "13px",
-  color: "#64748b",
-  fontWeight: 600,
-  textTransform: "uppercase",
-  letterSpacing: "0.5px",
 }
 
 const statValue = {
   margin: 0,
   fontSize: "32px",
-  fontWeight: 800,
+  fontWeight: 700,
   color: "#0f172a",
-  lineHeight: 1.1,
+  lineHeight: 1.2,
   letterSpacing: "-0.02em",
+}
+
+const statLabel = {
+  margin: 0,
+  fontSize: "13px",
+  color: "#64748b",
+  fontWeight: 500,
+  textAlign: "center",
 }
 
 const activityList = {

@@ -11,6 +11,9 @@
     "create-admin": "node scripts/create-admin.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
     "@supabase/supabase-js": "2.49.4",
     "@turf/turf": "^7.3.4",
     "dompurify": "^3.3.0",

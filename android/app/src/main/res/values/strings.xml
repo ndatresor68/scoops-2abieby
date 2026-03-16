@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SCOOP ASAB</string>
+    <string name="title_activity_main">SCOOP ASAB</string>
+    <string name="package_name">com.scoopasab.coop</string>
+    <string name="custom_url_scheme">com.scoopasab.coop</string>
+</resources>
