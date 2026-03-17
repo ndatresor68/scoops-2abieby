@@ -9,8 +9,6 @@ import {
   FaShieldAlt,
   FaUserFriends,
   FaHistory,
-  FaBars,
-  FaTimes,
   FaMapMarkerAlt,
   FaSignOutAlt,
   FaUserCircle,
@@ -19,6 +17,8 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaTimesCircle,
+  FaEdit,
+  FaWeightHanging,
 } from "react-icons/fa"
 import AdminStats from "./admin/AdminStats"
 import AdminUsers from "./admin/AdminUsers"
@@ -28,6 +28,8 @@ import AdminSettings from "./admin/AdminSettings"
 import AdminAgents from "./admin/AdminAgents"
 import AdminActivities from "./admin/AdminActivities"
 import AdminParcelles from "./admin/AdminParcelles"
+import AdminPesees from "./admin/AdminPesees"
+import Profile from "./Profile"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
 import { useSettings } from "../context/SettingsContext"
@@ -40,6 +42,7 @@ const SECTIONS = {
   agents: { id: "agents", label: "Agents", icon: FaUserFriends },
   centres: { id: "centres", label: "Centres", icon: FaBuilding },
   producteurs: { id: "producteurs", label: "Producteurs", icon: FaUserTie },
+  pesees: { id: "pesees", label: "Pesées", icon: FaWeightHanging },
   parcelles: { id: "parcelles", label: "Parcelles", icon: FaMapMarkerAlt },
   activites: { id: "activites", label: "Activités", icon: FaHistory },
   settings: { id: "settings", label: "Paramètres", icon: FaCog },
@@ -50,8 +53,9 @@ export default function AdminDashboard() {
   const { showToast } = useToast()
   const { settings } = useSettings()
   const [activeSection, setActiveSection] = useState("stats")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [profileEditMode, setProfileEditMode] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -72,19 +76,7 @@ export default function AdminDashboard() {
         .slice(0, 2)
     : user?.email?.[0]?.toUpperCase() || "A"
 
-  // Close sidebar on mobile when section changes
-  useEffect(() => {
-    if (isMobile && activeSection) {
-      setSidebarOpen(false)
-    }
-  }, [activeSection, isMobile])
-
-  // Close sidebar on desktop resize
-  useEffect(() => {
-    if (!isMobile) {
-      setSidebarOpen(false)
-    }
-  }, [isMobile])
+  // Sidebar is always visible, no mobile drawer behavior needed
 
   // Load notifications
   useEffect(() => {
@@ -189,6 +181,10 @@ export default function AdminDashboard() {
   }
 
   function renderSection() {
+    if (showProfile) {
+      return <Profile initialEditMode={profileEditMode} />
+    }
+    
     switch (activeSection) {
       case "stats":
         return <AdminStats />
@@ -200,6 +196,8 @@ export default function AdminDashboard() {
         return <AdminCentres />
       case "producteurs":
         return <AdminProducteurs />
+      case "pesees":
+        return <AdminPesees />
       case "parcelles":
         return <AdminParcelles />
       case "activites":
@@ -210,26 +208,19 @@ export default function AdminDashboard() {
         return <AdminStats />
     }
   }
+  
+  // Reset profile view when navigating to other sections
+  useEffect(() => {
+    if (activeSection !== "settings" && showProfile) {
+      setShowProfile(false)
+      setProfileEditMode(false)
+    }
+  }, [activeSection, showProfile])
 
   return (
     <div style={styles.appContainer}>
-      {/* Mobile Overlay */}
-      {isMobile && sidebarOpen && (
-        <div style={styles.overlay} onClick={() => setSidebarOpen(false)} />
-      )}
-
       {/* Top Navigation Bar */}
       <header style={styles.topNav}>
-        <div style={styles.topNavLeft}>
-          <button
-            style={styles.menuButton}
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="Toggle menu"
-          >
-            {sidebarOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
-          </button>
-        </div>
-
         <div style={styles.topNavRight}>
           {/* Notifications */}
           <div style={styles.notificationWrapper}>
@@ -321,37 +312,70 @@ export default function AdminDashboard() {
                   style={styles.userMenuItem}
                   onClick={() => {
                     setUserMenuOpen(false)
+                    setShowProfile(true)
+                    setProfileEditMode(false)
                     setActiveSection("settings")
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#f8fafc"
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent"
                   }}
                 >
                   <FaUserCircle size={16} />
-                  <span>Mon Profil</span>
+                  <span>Voir mon profil</span>
                 </button>
                 <button
                   style={styles.userMenuItem}
                   onClick={() => {
                     setUserMenuOpen(false)
+                    setShowProfile(true)
+                    setProfileEditMode(true)
                     setActiveSection("settings")
                   }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#f8fafc"
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent"
+                  }}
                 >
-                  <FaCog size={16} />
-                  <span>Paramètres</span>
+                  <FaEdit size={16} />
+                  <span>Modifier mon profil</span>
                 </button>
                 <button
                   style={styles.userMenuItem}
                   onClick={() => {
                     setUserMenuOpen(false)
+                    // TODO: Open change password modal
+                    showToast("Fonctionnalité à venir", "info")
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#f8fafc"
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent"
                   }}
                 >
                   <FaKey size={16} />
-                  <span>Changer mot de passe</span>
+                  <span>Changer le mot de passe</span>
                 </button>
                 <div style={styles.userMenuDivider} />
                 <button
                   style={styles.userMenuItem}
                   onClick={async () => {
+                    setUserMenuOpen(false)
                     await signOut()
                     showToast("Déconnexion réussie", "success")
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#fef2f2"
+                    e.currentTarget.style.color = "#dc2626"
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent"
+                    e.currentTarget.style.color = "#334155"
                   }}
                 >
                   <FaSignOutAlt size={16} />
@@ -364,18 +388,8 @@ export default function AdminDashboard() {
       </header>
 
       <div style={styles.layout}>
-        {/* Sidebar */}
-        <aside
-          style={{
-            ...styles.sidebar,
-            ...(isMobile
-              ? {
-                  ...styles.sidebarMobile,
-                  transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
-                }
-              : {}),
-          }}
-        >
+        {/* Sidebar - Always visible */}
+        <aside style={styles.sidebar}>
           <div style={styles.sidebarHeader}>
             <div style={styles.sidebarLogo}>
               <img
@@ -402,7 +416,18 @@ export default function AdminDashboard() {
                   key={section.id}
                   onClick={() => {
                     setActiveSection(section.id)
-                    if (isMobile) setSidebarOpen(false)
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = "rgba(122, 31, 31, 0.05)"
+                      e.currentTarget.style.color = "#7a1f1f"
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = "transparent"
+                      e.currentTarget.style.color = "#64748b"
+                    }
                   }}
                   style={{
                     ...styles.sidebarNavItem,
@@ -448,8 +473,8 @@ const styles = {
   topNav: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: "12px 16px",
+    justifyContent: "flex-end",
+    padding: "12px 24px",
     background: "#ffffff",
     borderBottom: "1px solid #e5e7eb",
     position: "sticky",
@@ -460,30 +485,10 @@ const styles = {
     boxSizing: "border-box",
   },
 
-  topNavLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-
   topNavRight: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-  },
-
-  menuButton: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "40px",
-    height: "40px",
-    border: "none",
-    background: "transparent",
-    borderRadius: "8px",
-    cursor: "pointer",
-    color: "#64748b",
-    transition: "all 0.2s ease",
+    gap: "12px",
   },
 
   iconButton: {
@@ -771,6 +776,8 @@ const styles = {
     textAlign: "left",
     transition: "background 0.2s ease",
   },
+  
+  // Hover effects applied inline in JSX
 
   // Layout
   layout: {
@@ -783,31 +790,19 @@ const styles = {
     minWidth: 0,
   },
 
-  // Sidebar
+  // Sidebar - Always visible and stable
   sidebar: {
     width: "280px",
     background: "#ffffff",
     borderRight: "1px solid #e5e7eb",
     display: "flex",
     flexDirection: "column",
-    position: "relative",
-    zIndex: 100,
+    position: "sticky",
+    top: "64px", // Below header
+    height: "calc(100vh - 64px)",
+    zIndex: 90,
     flexShrink: 0,
     overflow: "hidden",
-  },
-
-  sidebarMobile: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    height: "100vh",
-    width: "280px",
-    maxWidth: "85vw",
-    boxShadow: "4px 0 24px rgba(0, 0, 0, 0.15)",
-    transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-    zIndex: 1000,
-    overflowY: "auto",
-    overflowX: "hidden",
   },
 
   sidebarHeader: {
@@ -879,6 +874,7 @@ const styles = {
     gap: "4px",
     flex: 1,
     overflowY: "auto",
+    overflowX: "hidden",
   },
 
   sidebarNavItem: {
@@ -897,6 +893,8 @@ const styles = {
     textAlign: "left",
     width: "100%",
   },
+  
+  // Hover effect will be applied inline in JSX
 
   sidebarNavItemActive: {
     background: "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)",
@@ -928,21 +926,6 @@ const styles = {
     boxSizing: "border-box",
   },
 
-  // Overlay
-  overlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: "rgba(0, 0, 0, 0.5)",
-    backdropFilter: "blur(2px)",
-    zIndex: 999,
-    transition: "opacity 0.3s ease",
-    width: "100vw",
-    height: "100vh",
-    overflow: "hidden",
-  },
 
   // Loading & Restricted
   loadingContainer: {

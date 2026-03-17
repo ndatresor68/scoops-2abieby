@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../supabaseClient"
-import { FaUsers, FaBuilding, FaUserTie, FaBox, FaCheckCircle, FaUserSlash, FaBan } from "react-icons/fa"
+import { FaUsers, FaBuilding, FaUserTie, FaBox, FaCheckCircle, FaUserSlash, FaBan, FaWeightHanging, FaUserFriends, FaDollarSign, FaPaperPlane } from "react-icons/fa"
 import Card from "../../components/ui/Card"
+import Button from "../../components/ui/Button"
+import Modal from "../../components/ui/Modal"
+import Input from "../../components/ui/Input"
 import { useMediaQuery } from "../../hooks/useMediaQuery"
+import { useToast } from "../../components/ui/Toast"
+import { useAuth } from "../../context/AuthContext"
+import { broadcastNotification } from "../../utils/notifications"
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 
 export default function AdminStats() {
+  const { user } = useAuth()
+  const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     users: 0,
@@ -13,9 +22,20 @@ export default function AdminStats() {
     bannedUsers: 0,
     centres: 0,
     producteurs: 0,
-    totalCacao: 0,
+    agents: 0,
+    totalPoids: 0,
+    totalTransactions: 0,
+    totalMontant: 0,
   })
   const [recentActivity, setRecentActivity] = useState([])
+  const [poidsParCentre, setPoidsParCentre] = useState([])
+  const [evolutionPoids, setEvolutionPoids] = useState([])
+  const [showNotificationModal, setShowNotificationModal] = useState(false)
+  const [sendingNotification, setSendingNotification] = useState(false)
+  const [notificationForm, setNotificationForm] = useState({
+    title: "",
+    message: "",
+  })
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
 
@@ -65,22 +85,24 @@ export default function AdminStats() {
       const statsPromise = Promise.all([
         // Fetch ALL users without any filters
         supabase.from("utilisateurs").select("*"),
-        supabase.from("centres").select("*", { count: "exact", head: true }),
+        supabase.from("centres").select("id, nom"),
         supabase.from("producteurs").select("*", { count: "exact", head: true }),
-        supabase.from("achats").select("poids, montant"),
+        supabase.from("achats").select("poids, montant, centre_id, date_pesee, created_at"),
+        supabase.from("utilisateurs").select("id").eq("role", "AGENT"),
       ])
       
       console.log("[AdminStats] 🔍 Executing query: supabase.from('utilisateurs').select('*')")
 
-      const [usersRes, centresRes, producteursRes, achatsRes] = await Promise.race([
+      const [usersRes, centresRes, producteursRes, achatsRes, agentsRes] = await Promise.race([
         statsPromise,
         timeoutPromise,
       ]).catch((err) => {
         console.error("[AdminStats] ❌ Error fetching stats:", err)
         return [
           { data: [], error: err },
+          { data: [] },
           { count: 0 },
-          { count: 0 },
+          { data: [] },
           { data: [] },
         ]
       })
@@ -188,21 +210,63 @@ export default function AdminStats() {
         })
       }
 
-      // Calculate total cacao (sum of poids from achats)
+      // Calculate statistics from achats
       const achatsData = achatsRes?.data || []
-      const totalCacao = achatsData.reduce((sum, item) => {
-        return sum + (Number(item.poids) || 0)
-      }, 0)
+      const totalPoids = achatsData.reduce((sum, item) => sum + (Number(item.poids) || 0), 0)
+      const totalMontant = achatsData.reduce((sum, item) => sum + (Number(item.montant) || 0), 0)
+      const totalTransactions = achatsData.length
+
+      // Calculate poids par centre
+      const centresData = centresRes?.data || []
+      const poidsParCentreData = centresData.map((centre) => {
+        const centreAchats = achatsData.filter((a) => String(a.centre_id) === String(centre.id))
+        const poidsTotal = centreAchats.reduce((sum, a) => sum + (Number(a.poids) || 0), 0)
+        return {
+          centre: centre.nom,
+          poids: Math.round(poidsTotal * 100) / 100,
+        }
+      }).filter((c) => c.poids > 0).sort((a, b) => b.poids - a.poids)
+
+      // Calculate evolution du poids dans le temps (last 12 months)
+      const evolutionData = []
+      const now = new Date()
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+        const monthName = date.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })
+        
+        const monthAchats = achatsData.filter((a) => {
+          const achatDate = a.date_pesee || a.created_at
+          if (!achatDate) return false
+          const achatDateObj = new Date(achatDate)
+          return (
+            achatDateObj.getFullYear() === date.getFullYear() &&
+            achatDateObj.getMonth() === date.getMonth()
+          )
+        })
+        
+        const poidsMois = monthAchats.reduce((sum, a) => sum + (Number(a.poids) || 0), 0)
+        evolutionData.push({
+          mois: monthName,
+          poids: Math.round(poidsMois * 100) / 100,
+        })
+      }
 
       setStats({
         users: totalUsers,
         activeUsers,
         suspendedUsers,
         bannedUsers,
-        centres: centresRes?.count || 0,
+        centres: centresData.length,
         producteurs: producteursRes?.count || 0,
-        totalCacao: Math.round(totalCacao * 100) / 100,
+        agents: agentsRes?.data?.length || 0,
+        totalPoids: Math.round(totalPoids * 100) / 100,
+        totalTransactions,
+        totalMontant: Math.round(totalMontant * 100) / 100,
       })
+
+      setPoidsParCentre(poidsParCentreData)
+      setEvolutionPoids(evolutionData)
 
       console.log("[AdminStats] ✅ Statistics updated:", {
         users: totalUsers,
@@ -246,8 +310,49 @@ export default function AdminStats() {
     )
   }
 
+  async function handleSendNotification() {
+    if (!notificationForm.title || !notificationForm.message) {
+      showToast("Veuillez remplir le titre et le message", "error")
+      return
+    }
+
+    try {
+      setSendingNotification(true)
+      const result = await broadcastNotification({
+        title: notificationForm.title,
+        message: notificationForm.message,
+        type: "info",
+        createdBy: user?.id || null,
+      })
+
+      if (result.success) {
+        showToast(`Notification envoyée à ${result.count} utilisateur(s)`, "success")
+        setShowNotificationModal(false)
+        setNotificationForm({ title: "", message: "" })
+      } else {
+        showToast(result.message || "Erreur lors de l'envoi", "error")
+      }
+    } catch (error) {
+      console.error("[AdminStats] Error sending notification:", error)
+      showToast("Erreur lors de l'envoi de la notification", "error")
+    } finally {
+      setSendingNotification(false)
+    }
+  }
+
   return (
     <div style={container}>
+      {/* Header with Send Notification Button */}
+      <div style={headerActions}>
+        <Button
+          variant="primary"
+          icon={<FaPaperPlane />}
+          onClick={() => setShowNotificationModal(true)}
+        >
+          Envoyer notification
+        </Button>
+      </div>
+
       {/* Stats Cards */}
       <div style={gridStyle}>
         <StatCard
@@ -287,11 +392,102 @@ export default function AdminStats() {
           color="#f59e0b"
         />
         <StatCard
-          icon={<FaBox />}
-          label="Cacao Total (kg)"
-          value={stats.totalCacao.toLocaleString("fr-FR")}
+          icon={<FaWeightHanging />}
+          label="Poids Total (kg)"
+          value={stats.totalPoids.toLocaleString("fr-FR")}
           color="#7a1f1f"
         />
+        <StatCard
+          icon={<FaUserFriends />}
+          label="Agents"
+          value={stats.agents}
+          color="#8b5cf6"
+        />
+        <StatCard
+          icon={<FaDollarSign />}
+          label="Transactions"
+          value={stats.totalTransactions}
+          color="#06b6d4"
+        />
+      </div>
+
+      {/* Charts */}
+      <div style={chartsContainer}>
+        {/* Bar Chart: Poids par centre */}
+        {poidsParCentre.length > 0 && (
+          <Card
+            title="Poids par Centre"
+            style={{
+              background: "white",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+              borderRadius: "16px",
+              border: "1px solid rgba(0,0,0,0.04)",
+            }}
+          >
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={poidsParCentre}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="centre"
+                  stroke="#64748b"
+                  fontSize={12}
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis stroke="#64748b" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: "white",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "8px",
+                  }}
+                  formatter={(value) => [`${Number(value).toLocaleString("fr-FR")} kg`, "Poids"]}
+                />
+                <Legend />
+                <Bar dataKey="poids" fill="#7a1f1f" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
+
+        {/* Line Chart: Evolution du poids */}
+        {evolutionPoids.length > 0 && (
+          <Card
+            title="Évolution du Poids"
+            style={{
+              background: "white",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+              borderRadius: "16px",
+              border: "1px solid rgba(0,0,0,0.04)",
+            }}
+          >
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={evolutionPoids}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="mois" stroke="#64748b" fontSize={12} />
+                <YAxis stroke="#64748b" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: "white",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "8px",
+                  }}
+                  formatter={(value) => [`${Number(value).toLocaleString("fr-FR")} kg`, "Poids"]}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="poids"
+                  stroke="#7a1f1f"
+                  strokeWidth={3}
+                  dot={{ fill: "#7a1f1f", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
       </div>
 
       {/* Recent Activity */}
@@ -344,6 +540,58 @@ export default function AdminStats() {
           )}
         </div>
       </Card>
+
+      {/* Send Notification Modal */}
+      <Modal
+        isOpen={showNotificationModal}
+        onClose={() => {
+          setShowNotificationModal(false)
+          setNotificationForm({ title: "", message: "" })
+        }}
+        title="Envoyer une notification"
+        size="md"
+      >
+        <div style={notificationFormStyle}>
+          <Input
+            label="Titre *"
+            value={notificationForm.title}
+            onChange={(v) => setNotificationForm({ ...notificationForm, title: v })}
+            placeholder="Ex: Nouvelle campagne de collecte"
+            required
+          />
+          <div>
+            <label style={label}>Message *</label>
+            <textarea
+              value={notificationForm.message}
+              onChange={(e) => setNotificationForm({ ...notificationForm, message: e.target.value })}
+              placeholder="Ex: La nouvelle campagne de collecte commence le 1er janvier..."
+              style={textareaInput}
+              rows={5}
+              required
+            />
+          </div>
+          <div style={formActions}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowNotificationModal(false)
+                setNotificationForm({ title: "", message: "" })
+              }}
+              disabled={sendingNotification}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="primary"
+              icon={<FaPaperPlane />}
+              onClick={handleSendNotification}
+              disabled={sendingNotification}
+            >
+              {sendingNotification ? "Envoi..." : "Envoyer"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -399,6 +647,13 @@ const container = {
   maxWidth: "100%",
   minWidth: 0,
   boxSizing: "border-box",
+}
+
+const chartsContainer = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
+  gap: 24,
+  width: "100%",
 }
 
 const statsGrid = {
@@ -555,4 +810,45 @@ const spinner = {
 const loadingText = {
   color: "#6b7280",
   fontSize: "14px",
+}
+
+const headerActions = {
+  display: "flex",
+  justifyContent: "flex-end",
+  marginBottom: 24,
+}
+
+const notificationFormStyle = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 20,
+}
+
+const label = {
+  display: "block",
+  fontSize: "13px",
+  color: "#374151",
+  fontWeight: 600,
+  marginBottom: "8px",
+}
+
+const textareaInput = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: "10px",
+  border: "1px solid #d1d5db",
+  fontSize: "14px",
+  background: "white",
+  color: "#111827",
+  outline: "none",
+  transition: "all 0.2s ease",
+  fontFamily: "inherit",
+  resize: "vertical",
+}
+
+const formActions = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 12,
+  marginTop: 8,
 }

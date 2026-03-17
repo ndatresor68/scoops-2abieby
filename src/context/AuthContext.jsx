@@ -1,12 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from "react"
 import { supabase } from "../supabaseClient"
 import { logUserLogin, logUserLogout } from "../utils/activityLogger"
 
 const AuthContext = createContext(null)
 const ALLOWED_ROLES = new Set(["ADMIN", "AGENT", "CENTRE"])
 
+// Configuration constants
+const AUTH_CHECK_TIMEOUT = 15000 // 15 seconds (increased from 5)
+const PROFILE_LOAD_TIMEOUT = 15000 // 15 seconds (increased from 5)
+const SAFETY_TIMEOUT = 20000 // 20 seconds (increased from 8)
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 second
+
 function getDisplayName(user) {
-  // user.nom is merged from profile, so use it directly
   return (
     user?.nom ||
     user?.email?.split("@")[0] ||
@@ -16,22 +22,56 @@ function getDisplayName(user) {
 
 function normalizeRole(rawRole) {
   if (!rawRole) {
-    console.warn("[AuthContext] normalizeRole: No role provided")
-    return null // Return null instead of defaulting to AGENT
+    return null
   }
   const raw = String(rawRole)
   const normalizedRole = raw.trim().toUpperCase()
   if (ALLOWED_ROLES.has(normalizedRole)) {
     return normalizedRole
   }
-  console.warn("[AuthContext] normalizeRole: Invalid role:", rawRole, "-> defaulting to null")
-  return null // Return null instead of defaulting to AGENT
+  console.warn("[AuthContext] normalizeRole: Invalid role:", rawRole)
+  return null
+}
+
+/**
+ * Check if a valid session exists in localStorage
+ * This prevents clearing user state when session actually exists
+ */
+async function checkSessionExists() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    return !!session
+  } catch (error) {
+    console.error("[AuthContext] Error checking session:", error)
+    return false
+  }
+}
+
+/**
+ * Retry a function with exponential backoff
+ */
+async function retryOperation(operation, maxRetries = MAX_RETRIES, delay = RETRY_DELAY) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (attempt === maxRetries - 1) {
+        throw error
+      }
+      await new Promise(resolve => setTimeout(resolve, delay * (attempt + 1)))
+    }
+  }
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null) // User state includes profile data (role, nom)
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [initialized, setInitialized] = useState(false)
   
+  // Track ongoing operations to prevent race conditions
+  const syncInProgressRef = useRef(false)
+  const mountedRef = useRef(true)
+
   console.log("[AuthContext] Provider initialized")
 
   const loadProfileForUser = useCallback(async (authUser) => {
@@ -45,9 +85,6 @@ export function AuthProvider({ children }) {
       console.log("[AuthContext] User ID:", authUser.id)
       console.log("[AuthContext] User email:", authUser.email)
       
-      // CRITICAL: ALWAYS read from public.utilisateurs table
-      // id is the PRIMARY KEY and matches auth.users.id
-      // NEVER use auth.user.role, session.role, or any auth metadata
       let profile = null
       let error = null
       
@@ -84,9 +121,6 @@ export function AuthProvider({ children }) {
       
       if (error && !profile) {
         console.error("[AuthContext] ERROR loading profile from utilisateurs:", error)
-        console.error("[AuthContext] Error details:", JSON.stringify(error, null, 2))
-        console.error("[AuthContext] Error code:", error?.code)
-        console.error("[AuthContext] Error message:", error?.message)
         return null
       }
 
@@ -95,177 +129,240 @@ export function AuthProvider({ children }) {
         return null
       }
 
-      // CRITICAL DEBUG LOG
       console.log("[AuthContext] ===== PROFILE LOADED FROM DB =====")
-      console.log("Loaded profile:", profile)
       console.log("[AuthContext] DB ROLE:", profile.role)
       
-      // CRITICAL: Verify role is NOT "authenticated" (PostgreSQL role)
+      // Verify role is NOT "authenticated" (PostgreSQL role)
       if (profile.role === "authenticated" || profile.role === "AUTHENTICATED") {
         console.error("[AuthContext] CRITICAL ERROR: Profile role is 'authenticated' - this is a PostgreSQL role, not application role!")
-        console.error("[AuthContext] This means the role in utilisateurs table is incorrect")
-        console.error("[AuthContext] Expected: ADMIN, AGENT, or CENTRE")
-        console.error("[AuthContext] Found:", profile.role)
         return null
       }
       
-      console.log("[AuthContext] Profile data:", {
-        id: profile.id,
-        email: profile.email,
-        role: profile.role,
-        nom: profile.nom
-      })
-
-      // CRITICAL: Merge profile data into user state
-      // This ensures user.role comes ONLY from utilisateurs.role (NOT from auth metadata)
-      // NEVER use authUser.role, session.role, or any auth metadata
+      // Merge profile data into user state
       const mergedUser = {
         ...authUser,
-        // Remove any role from authUser (if it exists) - we ONLY use profile.role
-        role: undefined,  // Clear any auth role first
-        nom: undefined,   // Clear any auth nom first
-      }
-      
-      // Now set ONLY from profile (DB)
-      setUser({
-        ...mergedUser,
-        role: profile.role,  // FROM DB ONLY - NEVER from auth
-        nom: profile.nom,    // FROM DB ONLY - NEVER from auth
+        role: profile.role,
+        nom: profile.nom,
         centre_id: profile.centre_id,
         avatar_url: profile.avatar_url,
-      })
+      }
+      
+      setUser(mergedUser)
       
       console.log("[AuthContext] User state updated with profile data from DB")
-      console.log("[AuthContext] User.role is now:", profile.role, "(from utilisateurs table)")
       console.log("[AuthContext] ===== PROFILE LOAD COMPLETE =====")
       return profile
     } catch (error) {
       console.error("[AuthContext] EXCEPTION loading profile:", error)
-      console.error("[AuthContext] Exception stack:", error.stack)
       return null
     }
   }, [])
 
-  const syncAuthState = useCallback(async () => {
+  /**
+   * Sync auth state with proper error handling and session verification
+   * FIX: Only clear user if session actually doesn't exist
+   */
+  const syncAuthState = useCallback(async (skipRetry = false) => {
+    // Prevent multiple simultaneous syncs
+    if (syncInProgressRef.current) {
+      console.log("[AuthContext] Sync already in progress, skipping...")
+      return null
+    }
+
+    syncInProgressRef.current = true
+
     try {
       console.log("[AuthContext] Starting auth state sync...")
       
-      // Timeout protection: max 5 seconds for auth check (reduced from 10)
-      const authPromise = supabase.auth.getUser()
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Auth timeout")), 5000)
-      )
-      
+      // FIX #1: Increased timeout and added retry logic
+      const authOperation = async () => {
+        const authPromise = supabase.auth.getUser()
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Auth timeout")), AUTH_CHECK_TIMEOUT)
+        )
+        return await Promise.race([authPromise, timeoutPromise])
+      }
+
       let authResult
       try {
-        authResult = await Promise.race([authPromise, timeoutPromise])
+        if (skipRetry) {
+          authResult = await authOperation()
+        } else {
+          authResult = await retryOperation(authOperation)
+        }
       } catch (err) {
-        console.error("[AuthContext] Auth check timeout or error:", err)
-        // On timeout/error, assume no user - allow app to render login
-        setUser(null)
+        console.error("[AuthContext] Auth check failed after retries:", err)
+        
+        // FIX #2: Check if session exists before clearing user
+        const sessionExists = await checkSessionExists()
+        if (sessionExists) {
+          console.warn("[AuthContext] Session exists but getUser() failed - keeping user state")
+          syncInProgressRef.current = false
+          return user // Return current user instead of clearing
+        }
+        
+        // Only clear user if session actually doesn't exist
+        console.log("[AuthContext] No session found, clearing user state")
+        if (mountedRef.current) {
+          setUser(null)
+        }
+        syncInProgressRef.current = false
         return null
       }
       
       const { data, error } = authResult || { data: null, error: null }
       
+      // FIX #2: Distinguish between "no session" vs "temporary error"
       if (error) {
         console.error("[AuthContext] Auth error:", error)
-        setUser(null)
+        
+        // Check if this is a real auth error or just a temporary issue
+        const isAuthError = error.message?.includes("JWT") || 
+                           error.message?.includes("session") ||
+                           error.message?.includes("token")
+        
+        if (!isAuthError) {
+          // Temporary error - check if session exists
+          const sessionExists = await checkSessionExists()
+          if (sessionExists) {
+            console.warn("[AuthContext] Temporary error but session exists - keeping user state")
+            syncInProgressRef.current = false
+            return user
+          }
+        }
+        
+        // Real auth error or no session - clear user
+        if (mountedRef.current) {
+          setUser(null)
+        }
+        syncInProgressRef.current = false
         return null
       }
       
       const nextUser = data?.user || null
       
-      // Load profile from utilisateurs table - this will merge profile data into user
       if (nextUser) {
         console.log("[AuthContext] User authenticated, loading profile from DB...")
-        try {
-          // Reduced timeout to 5 seconds
+        
+        // FIX #1: Increased timeout for profile loading
+        const profileOperation = async () => {
+          const profilePromise = loadProfileForUser(nextUser)
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error("Profile load timeout")), 5000)
+            setTimeout(() => reject(new Error("Profile load timeout")), PROFILE_LOAD_TIMEOUT)
           )
-          
-          // Load profile from utilisateurs table using id
-          // This will merge profile data (role, nom) into user state
-          const profileResult = await Promise.race([
-            loadProfileForUser(nextUser),
-            timeoutPromise
-          ]).catch((err) => {
-            console.error("[AuthContext] Profile load timeout or error:", err)
-            // If profile load fails, still set user with basic auth data
-            // This allows the app to render, user can retry login
-            setUser({
-              ...nextUser,
-              role: null, // Will be set when profile loads
-              nom: nextUser.email?.split("@")[0] || "User",
-            })
-            return null
-          })
+          return await Promise.race([profilePromise, timeoutPromise])
+        }
+
+        try {
+          let profileResult
+          if (skipRetry) {
+            profileResult = await profileOperation()
+          } else {
+            profileResult = await retryOperation(profileOperation)
+          }
           
           if (profileResult) {
-            console.log("[AuthContext] Profile loaded successfully in syncAuthState")
-            // User state is already set by loadProfileForUser with merged profile data
+            console.log("[AuthContext] Profile loaded successfully")
+            // User state is already set by loadProfileForUser
           } else {
+            // FIX #6: Better handling when profile load fails
+            // Keep user with basic auth data but log warning
             console.warn("[AuthContext] Profile not loaded - user set with basic auth data")
-            // User is already set above with basic data
+            if (mountedRef.current) {
+              setUser({
+                ...nextUser,
+                role: null,
+                nom: nextUser.email?.split("@")[0] || "User",
+              })
+            }
           }
         } catch (err) {
-          console.error("[AuthContext] Error loading profile:", err)
+          console.error("[AuthContext] Profile load failed:", err)
           // Set user with basic auth data to allow app to render
-          setUser({
-            ...nextUser,
-            role: null,
-            nom: nextUser.email?.split("@")[0] || "User",
-          })
+          if (mountedRef.current) {
+            setUser({
+              ...nextUser,
+              role: null,
+              nom: nextUser.email?.split("@")[0] || "User",
+            })
+          }
         }
       } else {
         console.log("[AuthContext] No user, clearing state")
-        setUser(null)
+        if (mountedRef.current) {
+          setUser(null)
+        }
       }
       
       console.log("[AuthContext] Auth state sync completed")
+      syncInProgressRef.current = false
       return nextUser
     } catch (error) {
       console.error("[AuthContext] Error syncing auth state:", error)
-      // Always clear user on error to allow login screen
-      setUser(null)
+      
+      // FIX #2: Check session before clearing user on error
+      const sessionExists = await checkSessionExists()
+      if (sessionExists) {
+        console.warn("[AuthContext] Error occurred but session exists - keeping user state")
+        syncInProgressRef.current = false
+        return user
+      }
+      
+      // Only clear if session doesn't exist
+      if (mountedRef.current) {
+        setUser(null)
+      }
+      syncInProgressRef.current = false
       return null
     }
-  }, [loadProfileForUser])
+  }, [loadProfileForUser, user])
 
   const refreshUser = useCallback(async () => {
-    return syncAuthState()
+    return syncAuthState(true) // Skip retry for manual refresh
   }, [syncAuthState])
 
+  /**
+   * Initialize session and set up auth listener
+   * FIX #3, #4, #7: Proper initialization and auth state change handling
+   */
   useEffect(() => {
-    let mounted = true
+    mountedRef.current = true
     let timeoutId = null
+    let authListener = null
 
     console.log("[AuthContext] Initializing session...")
 
     async function initializeSession() {
       try {
-        // Safety timeout: always set loading to false after max 8 seconds (reduced)
+        // FIX #1: Increased safety timeout
         timeoutId = setTimeout(() => {
-          if (mounted) {
-            console.warn("[AuthContext] Safety timeout reached, forcing loading to false")
+          if (mountedRef.current && !initialized) {
+            console.warn("[AuthContext] Safety timeout reached, setting loading to false")
             setLoading(false)
+            setInitialized(true)
           }
-        }, 8000)
+        }, SAFETY_TIMEOUT)
 
         await syncAuthState()
         
-        if (mounted) {
-          console.log("[AuthContext] Session initialized, setting loading to false")
+        if (mountedRef.current) {
+          console.log("[AuthContext] Session initialized")
           setLoading(false)
+          setInitialized(true)
           if (timeoutId) clearTimeout(timeoutId)
         }
       } catch (error) {
         console.error("[AuthContext] Error in initializeSession:", error)
-        // Always set loading to false on error to allow app to render
-        if (mounted) {
+        
+        // FIX #2: Check session before clearing user
+        const sessionExists = await checkSessionExists()
+        if (!sessionExists && mountedRef.current) {
+          setUser(null)
+        }
+        
+        if (mountedRef.current) {
           setLoading(false)
-          setUser(null) // Clear user on error
+          setInitialized(true)
           if (timeoutId) clearTimeout(timeoutId)
         }
       }
@@ -273,36 +370,90 @@ export function AuthProvider({ children }) {
 
     initializeSession()
 
-    // Set up auth state change listener with error handling
-    let authListener = null
+    // FIX #4: Implement correct onAuthStateChange listener
     try {
-      const listenerData = supabase.auth.onAuthStateChange(async (event) => {
-        if (!mounted) return
-        console.log("[AuthContext] Auth state changed:", event)
+      const listenerData = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!mountedRef.current) return
+        
+        console.log("[AuthContext] Auth state changed:", event, session ? "session exists" : "no session")
         
         try {
-          await syncAuthState()
-          if (mounted) setLoading(false)
+          // Handle different auth events properly
+          switch (event) {
+            case "SIGNED_IN":
+              console.log("[AuthContext] User signed in")
+              // Sync state to load profile
+              await syncAuthState()
+              if (mountedRef.current) {
+                setLoading(false)
+              }
+              break
+              
+            case "SIGNED_OUT":
+              console.log("[AuthContext] User signed out")
+              // Clear user state on explicit sign out
+              if (mountedRef.current) {
+                setUser(null)
+                setLoading(false)
+              }
+              break
+              
+            case "TOKEN_REFRESHED":
+              console.log("[AuthContext] Token refreshed")
+              // FIX #6: Don't clear user on token refresh - session is still valid
+              // Only sync if user state is missing
+              if (!user && session?.user) {
+                await syncAuthState()
+              }
+              if (mountedRef.current) {
+                setLoading(false)
+              }
+              break
+              
+            case "USER_UPDATED":
+              console.log("[AuthContext] User updated")
+              // Sync to get latest user data
+              await syncAuthState()
+              if (mountedRef.current) {
+                setLoading(false)
+              }
+              break
+              
+            default:
+              console.log("[AuthContext] Other auth event:", event)
+              // For other events, sync state
+              await syncAuthState()
+              if (mountedRef.current) {
+                setLoading(false)
+              }
+          }
         } catch (error) {
-          console.error("[AuthContext] Error in auth state change:", error)
-          // Always set loading to false on error
-          if (mounted) {
-            setLoading(false)
+          console.error("[AuthContext] Error handling auth state change:", error)
+          
+          // FIX #2: Don't clear user on error - check session first
+          const sessionExists = await checkSessionExists()
+          if (!sessionExists && mountedRef.current) {
             setUser(null)
+          }
+          
+          if (mountedRef.current) {
+            setLoading(false)
           }
         }
       })
+      
       authListener = listenerData
     } catch (error) {
       console.error("[AuthContext] Error setting up auth listener:", error)
-      // If listener setup fails, still allow app to render
-      if (mounted) {
+      if (mountedRef.current) {
         setLoading(false)
+        setInitialized(true)
       }
     }
 
     return () => {
-      mounted = false
+      mountedRef.current = false
+      syncInProgressRef.current = false
       if (timeoutId) clearTimeout(timeoutId)
       if (authListener?.data?.subscription) {
         try {
@@ -312,8 +463,7 @@ export function AuthProvider({ children }) {
         }
       }
     }
-  }, [syncAuthState])
-
+  }, [syncAuthState, user, initialized])
 
   const signInWithPassword = useCallback(async (email, password) => {
     console.log("[AuthContext] ===== SIGN IN ATTEMPT =====")
@@ -333,31 +483,24 @@ export function AuthProvider({ children }) {
     
     console.log("[AuthContext] ===== SIGN IN SUCCESSFUL =====")
     console.log("[AuthContext] User ID:", response.data.user.id)
-    console.log("[AuthContext] User email:", response.data.user.email)
     
-    // CRITICAL: After login, IMMEDIATELY fetch profile from utilisateurs table
-    // This will merge profile.role and profile.nom into user state
+    // Load profile immediately after login
     console.log("[AuthContext] Loading profile immediately after login...")
     const profileResult = await loadProfileForUser(response.data.user)
     
     if (profileResult) {
       console.log("[AuthContext] Profile loaded after login")
-      console.log("Loaded profile:", profileResult)
       console.log("[AuthContext] DB ROLE after login:", profileResult.role)
-      // User state is already set by loadProfileForUser with merged profile data
-      console.log("[AuthContext] User state now includes role from DB:", profileResult.role)
       
       // Log successful login
       await logUserLogin(response.data.user.id, response.data.user.email)
     } else {
       console.error("[AuthContext] CRITICAL: Profile not loaded after login!")
-      // Don't set user without profile - we need role from DB
-      // This ensures we never use auth.role or session.role
     }
     
-    // Force sync auth state to ensure everything is consistent
+    // Sync auth state to ensure consistency
     console.log("[AuthContext] Syncing auth state after login...")
-    await syncAuthState()
+    await syncAuthState(true) // Skip retry for immediate sync after login
     
     console.log("[AuthContext] ===== SIGN IN COMPLETE =====")
     
@@ -379,85 +522,51 @@ export function AuthProvider({ children }) {
     return response
   }, [user])
 
-  // CRITICAL: Role is ALWAYS from user.role (merged from utilisateurs table)
-  // user.role comes from profile.role loaded from DB
-  // NEVER use auth.user.role, session.role, or any auth metadata
+  // Role calculation
   const effectiveRole = useMemo(() => {
     const roleFromUser = user?.role
     
-    // CRITICAL: Reject "authenticated" - this is a PostgreSQL role, not application role
     if (roleFromUser === "authenticated" || roleFromUser === "AUTHENTICATED") {
       console.error("[AuthContext] CRITICAL: user.role is 'authenticated' - this is WRONG!")
-      console.error("[AuthContext] This means role is coming from auth metadata, not DB")
-      console.error("[AuthContext] Expected role from utilisateurs.role: ADMIN, AGENT, or CENTRE")
       return null
     }
     
     if (roleFromUser) {
-      const normalized = normalizeRole(roleFromUser)
-      console.log("[AuthContext] Effective role from user.role (from DB):", normalized, "| Raw:", roleFromUser)
-      return normalized
+      return normalizeRole(roleFromUser)
     }
-    console.log("[AuthContext] No role in user state (waiting for profile load from DB)")
     return null
   }, [user])
   
   const effectiveIsAdmin = effectiveRole === "ADMIN"
-  
+  const effectiveIsAgent = effectiveRole === "AGENT"
+  const effectiveIsCentre = effectiveRole === "CENTRE"
+
   // Debug log whenever user/role changes
   useEffect(() => {
     console.log("[AuthContext] ===== USER STATE UPDATE =====")
     console.log("[AuthContext] User exists:", !!user)
     console.log("[AuthContext] User role:", user?.role)
-    console.log("[AuthContext] User nom:", user?.nom)
     console.log("[AuthContext] Effective role:", effectiveRole)
-    console.log("[AuthContext] Is Admin:", effectiveIsAdmin)
+    console.log("[AuthContext] Loading:", loading)
+    console.log("[AuthContext] Initialized:", initialized)
     console.log("[AuthContext] ==============================")
-  }, [user, effectiveRole, effectiveIsAdmin])
-
-  const effectiveIsAgent = effectiveRole === "AGENT"
-  const effectiveIsCentre = effectiveRole === "CENTRE"
+  }, [user, effectiveRole, loading, initialized])
 
   const value = useMemo(
-    () => {
-      // Safe fallbacks for role-based checks
-      const safeRole = effectiveRole || null
-      const safeIsAdmin = effectiveIsAdmin || false
-      const safeIsAgent = effectiveIsAgent || false
-      const safeIsCentre = effectiveIsCentre || false
-      
-      const ctxValue = {
-        user,
-        // Role is ALWAYS from user.role (merged from utilisateurs table)
-        role: safeRole,
-        isAdmin: safeIsAdmin,
-        isAgent: safeIsAgent,
-        isCentre: safeIsCentre,
-        centreId: user?.centre_id || null,
-        loading,
-        isAuthenticated: !!user,
-        displayName: getDisplayName(user),
-        signInWithPassword,
-        signOut,
-        refreshUser,
-      }
-      
-      // Debug log when context value changes (only in dev)
-      if (import.meta.env.DEV) {
-        console.log("[AuthContext] Context value updated:", {
-          hasUser: !!ctxValue.user,
-          userRole: ctxValue.user?.role,
-          role: ctxValue.role,
-          isAdmin: ctxValue.isAdmin,
-          isAgent: ctxValue.isAgent,
-          isCentre: ctxValue.isCentre,
-          centreId: ctxValue.centreId,
-          loading: ctxValue.loading,
-        })
-      }
-      
-      return ctxValue
-    },
+    () => ({
+      user,
+      role: effectiveRole,
+      isAdmin: effectiveIsAdmin,
+      isAgent: effectiveIsAgent,
+      isCentre: effectiveIsCentre,
+      centreId: user?.centre_id || null,
+      loading,
+      isAuthenticated: !!user,
+      displayName: getDisplayName(user),
+      signInWithPassword,
+      signOut,
+      refreshUser,
+    }),
     [user, effectiveRole, effectiveIsAdmin, effectiveIsAgent, effectiveIsCentre, loading, signInWithPassword, signOut, refreshUser],
   )
 

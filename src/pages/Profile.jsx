@@ -14,7 +14,7 @@ function getInitialForm(user) {
   }
 }
 
-export default function Profile() {
+export default function Profile({ initialEditMode = false }) {
   const { user, role, refreshUser } = useAuth()
   
   // Debug log to verify role source
@@ -26,7 +26,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditing, setIsEditing] = useState(initialEditMode)
 
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
@@ -36,6 +36,11 @@ export default function Profile() {
   const [previewUrl, setPreviewUrl] = useState("")
 
   const fileInputRef = useRef(null)
+
+  // Update edit mode when prop changes
+  useEffect(() => {
+    setIsEditing(initialEditMode)
+  }, [initialEditMode])
 
   useEffect(() => {
     fetchProfile()

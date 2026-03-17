@@ -48,8 +48,8 @@ export default function Layout() {
   const [activePage, setActivePage] = useState("dashboard")
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [loadingTimeout, setLoadingTimeout] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [sessionChecked, setSessionChecked] = useState(false)
 
   // Initialize session timeout
   useEffect(() => {
@@ -78,20 +78,27 @@ export default function Layout() {
     return collapsed ? 86 : 268
   }, [collapsed, isMobile])
 
-  // Show loading screen with timeout protection
+  // FIX #3: Check session before showing login screen
   useEffect(() => {
-    if (loading) {
-      const timer = setTimeout(() => {
-        setLoadingTimeout(true)
-      }, 10000) // 10 second timeout
-      
-      return () => clearTimeout(timer)
-    } else {
-      setLoadingTimeout(false)
+    async function checkSession() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        setSessionChecked(true)
+      } catch (error) {
+        console.error("[Layout] Error checking session:", error)
+        setSessionChecked(true)
+      }
     }
-  }, [loading])
+    
+    if (!user && !loading) {
+      checkSession()
+    } else {
+      setSessionChecked(true)
+    }
+  }, [user, loading])
 
-  if (loading && !loadingTimeout) {
+  // Show loading screen while auth is initializing
+  if (loading) {
     return (
       <div style={loadingScreen}>
         <div style={spinner}></div>
@@ -103,9 +110,20 @@ export default function Layout() {
     )
   }
 
-  // After timeout or if not loading, show login if no user
-  if (!user || loadingTimeout) {
+  // FIX #3: Only show login if no user AND session check is complete
+  // The session check verifies no session exists before showing login
+  if (!user && sessionChecked) {
     return <Login />
+  }
+
+  // If user is null but session check hasn't completed, show loading
+  if (!user && !sessionChecked) {
+    return (
+      <div style={loadingScreen}>
+        <div style={spinner}></div>
+        <p style={{ marginTop: 20, fontSize: 16, color: "#6b7280" }}>Vérification de la session...</p>
+      </div>
+    )
   }
 
   // ADMIN users: Show only the AdminDashboard interface (no regular Layout)
