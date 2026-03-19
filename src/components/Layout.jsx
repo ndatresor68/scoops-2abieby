@@ -40,6 +40,14 @@ export default function Layout() {
   const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut } = useAuth()
   const { showToast } = useToast()
   const sessionTimeoutMinutes = useSessionTimeout()
+  const [notificationPermission, setNotificationPermission] = useState(() => {
+    if (typeof Notification === "undefined") return "unsupported"
+    return Notification.permission
+  })
+  const [notificationPermissionResolved, setNotificationPermissionResolved] = useState(() => {
+    if (typeof Notification === "undefined") return true
+    return Notification.permission === "granted" || Notification.permission === "denied"
+  })
   const [fcmDebug, setFcmDebug] = useState(() => {
     if (typeof window === "undefined") return null
     return window.__FCM_DEBUG__ || null
@@ -58,6 +66,7 @@ export default function Layout() {
   const [sessionChecked, setSessionChecked] = useState(false)
   const fcmListenerSetupRef = useRef(false)
   const fcmTokenSetupRef = useRef(false)
+  const notificationPermissionRequestedRef = useRef(false)
 
   // Initialize session timeout
   useEffect(() => {
@@ -91,6 +100,49 @@ export default function Layout() {
     return () => window.removeEventListener("fcm-debug-update", handleFcmDebugUpdate)
   }, [])
 
+  useEffect(() => {
+    if (!user?.id) return
+    if (typeof Notification === "undefined") {
+      setNotificationPermission("unsupported")
+      setNotificationPermissionResolved(true)
+      return
+    }
+
+    const currentPermission = Notification.permission
+    setNotificationPermission(currentPermission)
+
+    if (currentPermission === "granted") {
+      setNotificationPermissionResolved(true)
+      return
+    }
+
+    if (currentPermission === "denied") {
+      setNotificationPermissionResolved(true)
+      return
+    }
+
+    if (notificationPermissionRequestedRef.current) {
+      setNotificationPermissionResolved(true)
+      return
+    }
+
+    notificationPermissionRequestedRef.current = true
+    setNotificationPermissionResolved(false)
+
+    ;(async () => {
+      try {
+        await requestNotificationPermission({ userId: user.id })
+      } catch (error) {
+        console.warn("[FCM] Notification permission gate request failed:", error)
+      } finally {
+        const updatedPermission =
+          typeof Notification === "undefined" ? "unsupported" : Notification.permission
+        setNotificationPermission(updatedPermission)
+        setNotificationPermissionResolved(true)
+      }
+    })()
+  }, [user?.id])
+
   // FCM: listen for foreground messages + register device token in DB.
   // This is best-effort: it must never break the app if FCM isn't available/configured.
   useEffect(() => {
@@ -113,6 +165,7 @@ export default function Layout() {
 
   useEffect(() => {
     if (!user?.id) return
+    if (notificationPermission !== "granted") return
     if (fcmTokenSetupRef.current) return
     fcmTokenSetupRef.current = true
 
@@ -152,7 +205,7 @@ export default function Layout() {
         fcmTokenSetupRef.current = false
       }
     })()
-  }, [user?.id, user?.role, isAdmin])
+  }, [user?.id, user?.role, isAdmin, notificationPermission])
 
   const sidebarWidth = useMemo(() => {
     if (isMobile) return 0
@@ -203,6 +256,46 @@ export default function Layout() {
       <div style={loadingScreen}>
         <div style={spinner}></div>
         <p style={{ marginTop: 20, fontSize: 16, color: "#6b7280" }}>Vérification de la session...</p>
+      </div>
+    )
+  }
+
+  if (user && !notificationPermissionResolved) {
+    return (
+      <div style={permissionScreen}>
+        <div style={permissionCard}>
+          <h1 style={permissionTitle}>Activation des notifications</h1>
+          <p style={permissionMessage}>
+            Une demande d'autorisation est en cours. Veuillez accepter les notifications pour
+            continuer.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (user && notificationPermission === "denied") {
+    return (
+      <div style={permissionScreen}>
+        <div style={permissionCard}>
+          <h1 style={permissionTitle}>Notifications requises</h1>
+          <p style={permissionMessage}>
+            Les notifications sont obligatoires pour utiliser l'application
+          </p>
+          <p style={permissionHelp}>
+            Android Chrome: Paramètres &gt; Notifications &gt; Autoriser
+          </p>
+          <button
+            type="button"
+            style={permissionButton}
+            onClick={() => {
+              window.alert("Paramètres > Notifications > Autoriser")
+              window.location.reload()
+            }}
+          >
+            Activer les notifications
+          </button>
+        </div>
       </div>
     )
   }
@@ -430,6 +523,64 @@ const spinner = {
   borderTopColor: "#7a1f1f",
   borderRadius: "50%",
   animation: "spin 0.8s linear infinite",
+}
+
+const permissionScreen = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "24px",
+  background:
+    "radial-gradient(circle at top, rgba(122,31,31,0.12), transparent 38%), linear-gradient(180deg, #fff7ed 0%, #fff 100%)",
+}
+
+const permissionCard = {
+  width: "100%",
+  maxWidth: 460,
+  padding: "32px 24px",
+  borderRadius: 24,
+  background: "#ffffff",
+  boxShadow: "0 24px 60px rgba(122, 31, 31, 0.14)",
+  border: "1px solid rgba(122, 31, 31, 0.12)",
+  textAlign: "center",
+}
+
+const permissionTitle = {
+  margin: 0,
+  marginBottom: 16,
+  fontSize: "clamp(24px, 4vw, 32px)",
+  fontWeight: 800,
+  lineHeight: 1.1,
+  color: "#7a1f1f",
+}
+
+const permissionMessage = {
+  margin: 0,
+  color: "#1f2937",
+  fontSize: 16,
+  lineHeight: 1.6,
+}
+
+const permissionHelp = {
+  margin: "16px 0 0",
+  color: "#6b7280",
+  fontSize: 14,
+  lineHeight: 1.6,
+}
+
+const permissionButton = {
+  marginTop: 24,
+  width: "100%",
+  minHeight: 52,
+  border: "none",
+  borderRadius: 14,
+  background: "linear-gradient(135deg, #7a1f1f 0%, #a63a3a 100%)",
+  color: "#ffffff",
+  fontSize: 16,
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 16px 32px rgba(122, 31, 31, 0.22)",
 }
 
 const fcmDebugPanel = {
