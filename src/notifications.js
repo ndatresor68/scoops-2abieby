@@ -1,7 +1,9 @@
 import { messaging } from "./firebase"
-import { getToken as firebaseGetToken, onMessage } from "firebase/messaging"
+import { getToken, onMessage } from "firebase/messaging"
+import { supabase } from "./supabaseClient"
 
-// VAPID public key (configure in env, not hardcoded in the repo)
+// Public (non-secret) Web Push VAPID key.
+// Configure via environment variable to avoid hardcoding in the repo.
 const DEFAULT_VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY
 if (typeof window !== "undefined") {
   const masked = DEFAULT_VAPID_KEY ? `${String(DEFAULT_VAPID_KEY).slice(0, 10)}...` : "(missing)"
@@ -29,22 +31,15 @@ export async function getFcmToken(vapidKey = DEFAULT_VAPID_KEY) {
 
     const serviceWorkerRegistration = await registerServiceWorkerIfNeeded()
 
-    const token = await firebaseGetToken(messaging, {
+    return await getToken(messaging, {
       vapidKey,
       serviceWorkerRegistration: serviceWorkerRegistration || undefined,
     })
-    if (token) {
-      console.log("FCM TOKEN:", token)
-    }
-    return token
   } catch (error) {
     console.error("[notifications] Error getting FCM token:", error)
     return null
   }
 }
-
-// Alias for convenience
-export const getToken = getFcmToken
 
 export const requestNotificationPermission = async (vapidKey = DEFAULT_VAPID_KEY) => {
   try {
@@ -56,7 +51,44 @@ export const requestNotificationPermission = async (vapidKey = DEFAULT_VAPID_KEY
 
     if (permission !== "granted") return null
 
-    return await getFcmToken(vapidKey)
+    const token = await getFcmToken(vapidKey)
+
+    console.log("FCM TOKEN:", token)
+
+    if (token) {
+      try {
+        const { data: authData, error: authError } = await supabase.auth.getUser()
+        if (authError) {
+          console.warn("[FCM] Could not fetch current user for token storage:", authError)
+        }
+
+        const userId = authData?.user?.id || null
+
+        if (!userId) {
+          console.warn("[FCM] No authenticated user; skipping token storage in Supabase.")
+        } else {
+          const { error: saveError } = await supabase.from("device_tokens").upsert(
+            {
+              token,
+              user_id: userId,
+              created_at: new Date().toISOString(),
+              status: "active",
+            },
+            { onConflict: "token" }
+          )
+
+          if (saveError) {
+            console.error("[FCM] Token save error:", saveError)
+          } else {
+            console.log("[FCM] Token saved/updated in Supabase successfully.")
+          }
+        }
+      } catch (saveErr) {
+        console.error("[FCM] Exception during token storage:", saveErr)
+      }
+    }
+
+    return token
   } catch (error) {
     console.error("[notifications] Permission/token error:", error)
     return null
