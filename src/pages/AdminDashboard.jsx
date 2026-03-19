@@ -19,6 +19,7 @@ import {
   FaTimesCircle,
   FaEdit,
   FaWeightHanging,
+  FaPaperPlane,
 } from "react-icons/fa"
 import AdminStats from "./admin/AdminStats"
 import AdminUsers from "./admin/AdminUsers"
@@ -29,6 +30,7 @@ import AdminAgents from "./admin/AdminAgents"
 import AdminActivities from "./admin/AdminActivities"
 import AdminParcelles from "./admin/AdminParcelles"
 import AdminPesees from "./admin/AdminPesees"
+import AdminNotifications from "./admin/AdminNotifications"
 import Profile from "./Profile"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
@@ -45,14 +47,36 @@ const SECTIONS = {
   pesees: { id: "pesees", label: "Pesées", icon: FaWeightHanging },
   parcelles: { id: "parcelles", label: "Parcelles", icon: FaMapMarkerAlt },
   activites: { id: "activites", label: "Activités", icon: FaHistory },
+  notifications: { id: "notifications", label: "Notifications", icon: FaPaperPlane },
   settings: { id: "settings", label: "Paramètres", icon: FaCog },
+}
+
+const SECTION_PATHS = {
+  stats: "/admin",
+  users: "/admin/users",
+  agents: "/admin/agents",
+  centres: "/admin/centres",
+  producteurs: "/admin/producteurs",
+  pesees: "/admin/pesees",
+  parcelles: "/admin/parcelles",
+  activites: "/admin/activites",
+  notifications: "/admin/notifications",
+  settings: "/admin/settings",
+}
+
+function getSectionFromPath(pathname) {
+  const match = Object.entries(SECTION_PATHS).find(([, path]) => path === pathname)
+  return match?.[0] || "stats"
 }
 
 export default function AdminDashboard() {
   const { isAdmin, role, loading: authLoading, user, displayName, signOut } = useAuth()
   const { showToast } = useToast()
   const { settings } = useSettings()
-  const [activeSection, setActiveSection] = useState("stats")
+  const [activeSection, setActiveSection] = useState(() => {
+    if (typeof window === "undefined") return "stats"
+    return getSectionFromPath(window.location.pathname)
+  })
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [profileEditMode, setProfileEditMode] = useState(false)
@@ -202,6 +226,8 @@ export default function AdminDashboard() {
         return <AdminParcelles />
       case "activites":
         return <AdminActivities />
+      case "notifications":
+        return <AdminNotifications />
       case "settings":
         return <AdminSettings />
       default:
@@ -214,6 +240,25 @@ export default function AdminDashboard() {
     if (activeSection !== "settings" && showProfile) {
       setShowProfile(false)
       setProfileEditMode(false)
+    }
+  }, [activeSection, showProfile])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined
+    const handlePopState = () => {
+      setShowProfile(false)
+      setProfileEditMode(false)
+      setActiveSection(getSectionFromPath(window.location.pathname))
+    }
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || showProfile) return
+    const nextPath = SECTION_PATHS[activeSection] || "/admin"
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, "", nextPath)
     }
   }, [activeSection, showProfile])
 
@@ -425,6 +470,8 @@ export default function AdminDashboard() {
                 <button
                   key={section.id}
                   onClick={() => {
+                    setShowProfile(false)
+                    setProfileEditMode(false)
                     setActiveSection(section.id)
                   }}
                   onMouseEnter={(e) => {
