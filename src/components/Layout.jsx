@@ -40,6 +40,10 @@ export default function Layout() {
   const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut } = useAuth()
   const { showToast } = useToast()
   const sessionTimeoutMinutes = useSessionTimeout()
+  const [fcmDebug, setFcmDebug] = useState(() => {
+    if (typeof window === "undefined") return null
+    return window.__FCM_DEBUG__ || null
+  })
   
   // Debug log to verify role source
   useEffect(() => {
@@ -75,6 +79,16 @@ export default function Layout() {
     onResize()
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined
+    const handleFcmDebugUpdate = (event) => {
+      setFcmDebug(event.detail || window.__FCM_DEBUG__ || null)
+    }
+    window.addEventListener("fcm-debug-update", handleFcmDebugUpdate)
+    setFcmDebug(window.__FCM_DEBUG__ || null)
+    return () => window.removeEventListener("fcm-debug-update", handleFcmDebugUpdate)
   }, [])
 
   // FCM: listen for foreground messages + register device token in DB.
@@ -308,6 +322,18 @@ export default function Layout() {
           padding: isMobile ? "16px" : "32px",
         }}>{renderPage()}</main>
       </div>
+      {fcmDebug ? (
+        <div style={fcmDebugPanel}>
+          <div style={fcmDebugTitle}>FCM Debug</div>
+          <div style={fcmDebugMeta}>permission: {String(fcmDebug.permission ?? "n/a")}</div>
+          <div style={fcmDebugMeta}>token: {fcmDebug.token || "null"}</div>
+          <div style={fcmDebugMeta}>user_id: {fcmDebug.authUserId || fcmDebug.requestedUserId || "null"}</div>
+          <div style={fcmDebugMeta}>
+            insert: {fcmDebug.saveResult ? JSON.stringify(fcmDebug.saveResult) : JSON.stringify(fcmDebug.insertResult)}
+          </div>
+          <pre style={fcmDebugPre}>{JSON.stringify(fcmDebug, null, 2)}</pre>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -404,4 +430,40 @@ const spinner = {
   borderTopColor: "#7a1f1f",
   borderRadius: "50%",
   animation: "spin 0.8s linear infinite",
+}
+
+const fcmDebugPanel = {
+  position: "fixed",
+  right: 12,
+  bottom: 12,
+  width: "min(420px, calc(100vw - 24px))",
+  maxHeight: "50vh",
+  overflow: "auto",
+  padding: 12,
+  borderRadius: 12,
+  background: "rgba(15, 23, 42, 0.96)",
+  color: "#f8fafc",
+  boxShadow: "0 18px 50px rgba(15, 23, 42, 0.35)",
+  zIndex: 2000,
+  fontSize: 12,
+  lineHeight: 1.45,
+}
+
+const fcmDebugTitle = {
+  fontSize: 13,
+  fontWeight: 700,
+  marginBottom: 8,
+}
+
+const fcmDebugMeta = {
+  marginBottom: 6,
+  wordBreak: "break-word",
+}
+
+const fcmDebugPre = {
+  margin: 0,
+  marginTop: 8,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  fontSize: 11,
 }
