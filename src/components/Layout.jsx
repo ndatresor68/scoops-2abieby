@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { FaBars, FaChevronLeft, FaChevronRight } from "react-icons/fa"
 import Achats from "../achats"
 import Centres from "../Centres"
@@ -22,6 +22,8 @@ import UserMenu from "./UserMenu"
 import { initializeSessionTimeout } from "../utils/sessionManager"
 import { useToast } from "./ui/Toast"
 import { t } from "../utils/i18n"
+import { supabase } from "../supabaseClient"
+import { listenNotifications, requestNotificationPermission } from "../notifications"
 
 const TITLES = {
   dashboard: "Tableau de Bord",
@@ -50,6 +52,8 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [sessionChecked, setSessionChecked] = useState(false)
+  const fcmListenerSetupRef = useRef(false)
+  const fcmTokenSetupRef = useRef(false)
 
   // Initialize session timeout
   useEffect(() => {
@@ -72,6 +76,64 @@ export default function Layout() {
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
   }, [])
+
+  // FCM: listen for foreground messages + register device token in DB.
+  // This is best-effort: it must never break the app if FCM isn't available/configured.
+  useEffect(() => {
+    if (!user || isAdmin) return
+    if (fcmListenerSetupRef.current) return
+    fcmListenerSetupRef.current = true
+
+    const unsubscribe = listenNotifications((payload) => {
+      const title = payload?.notification?.title || payload?.data?.title || "Notification"
+      const body = payload?.notification?.body || payload?.data?.body || ""
+      const text = body ? `${title} - ${body}` : title
+      showToast(text, "info", 4500)
+    })
+
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe()
+      fcmListenerSetupRef.current = false
+    }
+  }, [user?.id, isAdmin, showToast])
+
+  useEffect(() => {
+    if (!user || isAdmin) return
+    if (fcmTokenSetupRef.current) return
+    fcmTokenSetupRef.current = true
+
+    ;(async () => {
+      try {
+        // Avoid prompting permission if a token already exists.
+        const { data: existing, error: existingError } = await supabase
+          .from("device_tokens")
+          .select("token")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .maybeSingle()
+
+        if (existingError && existingError.code !== "PGRST116") {
+          console.warn("[FCM] Existing token lookup failed:", existingError)
+        } else if (existing?.token) {
+          return
+        }
+
+        const token = await requestNotificationPermission()
+        if (!token) return
+
+        const { error: saveError } = await supabase.from("device_tokens").upsert(
+          { user_id: user.id, token, status: "active" },
+          { onConflict: "token" }
+        )
+
+        if (saveError) {
+          console.warn("[FCM] Token save failed:", saveError)
+        }
+      } catch (error) {
+        console.warn("[FCM] Token registration error:", error)
+      }
+    })()
+  }, [user?.id, isAdmin])
 
   const sidebarWidth = useMemo(() => {
     if (isMobile) return 0

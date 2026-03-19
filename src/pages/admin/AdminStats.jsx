@@ -310,6 +310,27 @@ export default function AdminStats() {
     )
   }
 
+  /**
+   * Send push notification via secure backend endpoint (/api/send-notification).
+   * Does not replace the existing Supabase notification broadcast; it augments it.
+   */
+  async function sendNotification(title, body) {
+    const resp = await fetch("/api/send-notification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, body }),
+    })
+
+    const data = await resp.json().catch(() => ({}))
+
+    if (!resp.ok) {
+      console.warn("[AdminStats] FCM endpoint error:", data)
+      return { success: false, details: data }
+    }
+
+    return data
+  }
+
   async function handleSendNotification() {
     if (!notificationForm.title || !notificationForm.message) {
       showToast("Veuillez remplir le titre et le message", "error")
@@ -327,6 +348,29 @@ export default function AdminStats() {
 
       if (result.success) {
         showToast(`Notification envoyée à ${result.count} utilisateur(s)`, "success")
+
+        // Push notifications (best-effort). Never fail the existing Supabase path.
+        try {
+          const fcmRes = await sendNotification(notificationForm.title, notificationForm.message)
+          if (fcmRes?.success) {
+            const sentCount =
+              typeof fcmRes.sentTotal === "number"
+                ? fcmRes.sentTotal
+                : typeof fcmRes.count === "number"
+                  ? fcmRes.count
+                  : undefined
+            showToast(
+              sentCount !== undefined ? `Push FCM envoyée à ${sentCount} appareil(s)` : "Push FCM envoyée",
+              "success",
+              3000
+            )
+          } else {
+            showToast("Push FCM indisponible (optionnel)", "warning", 3000)
+          }
+        } catch (fcmErr) {
+          console.warn("[AdminStats] FCM send failed (non-blocking):", fcmErr)
+        }
+
         setShowNotificationModal(false)
         setNotificationForm({ title: "", message: "" })
       } else {
