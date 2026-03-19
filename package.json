@@ -17,6 +17,7 @@
     "@supabase/supabase-js": "2.49.4",
     "@turf/turf": "^7.3.4",
     "dompurify": "^3.3.0",
+    "firebase": "^12.11.0",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
