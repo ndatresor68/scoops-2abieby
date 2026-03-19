@@ -303,9 +303,20 @@ export default function AdminStats() {
 
   if (loading) {
     return (
-      <div style={loadingContainer}>
-        <div style={spinner}></div>
-        <p style={loadingText}>Chargement des statistiques...</p>
+      <div style={container}>
+        <div style={headerActions}>
+          <Button
+            variant="primary"
+            icon={<FaPaperPlane />}
+            disabled
+          >
+            Envoyer notification
+          </Button>
+        </div>
+        <div style={loadingContainer}>
+          <div style={spinner}></div>
+          <p style={loadingText}>Chargement des statistiques...</p>
+        </div>
       </div>
     )
   }
@@ -315,20 +326,25 @@ export default function AdminStats() {
    * Does not replace the existing Supabase notification broadcast; it augments it.
    */
   async function sendNotification(title, body) {
-    const resp = await fetch("/api/send-notification", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, body }),
-    })
+    try {
+      const resp = await fetch("/api/send-notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, body }),
+      })
 
-    const data = await resp.json().catch(() => ({}))
+      const data = await resp.json().catch(() => ({}))
 
-    if (!resp.ok) {
-      console.warn("[AdminStats] FCM endpoint error:", data)
-      return { success: false, details: data }
+      if (!resp.ok) {
+        console.warn("[AdminStats] FCM endpoint error:", { status: resp.status, data })
+        return { success: false, status: resp.status, details: data }
+      }
+
+      return data
+    } catch (error) {
+      console.warn("[AdminStats] FCM endpoint fetch failed:", error)
+      return { success: false, error: "fetch_failed" }
     }
-
-    return data
   }
 
   async function handleSendNotification() {
@@ -369,6 +385,7 @@ export default function AdminStats() {
           }
         } catch (fcmErr) {
           console.warn("[AdminStats] FCM send failed (non-blocking):", fcmErr)
+          showToast("Push FCM indisponible (optionnel)", "warning", 3000)
         }
 
         setShowNotificationModal(false)
@@ -695,7 +712,8 @@ const container = {
 
 const chartsContainer = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
+  // Important for mobile: don't force 400px min widths which clips the UI inside the admin layout.
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   gap: 24,
   width: "100%",
 }

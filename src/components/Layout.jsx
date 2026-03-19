@@ -80,7 +80,7 @@ export default function Layout() {
   // FCM: listen for foreground messages + register device token in DB.
   // This is best-effort: it must never break the app if FCM isn't available/configured.
   useEffect(() => {
-    if (!user || isAdmin) return
+    if (!user) return
     if (fcmListenerSetupRef.current) return
     fcmListenerSetupRef.current = true
 
@@ -95,15 +95,21 @@ export default function Layout() {
       if (typeof unsubscribe === "function") unsubscribe()
       fcmListenerSetupRef.current = false
     }
-  }, [user?.id, isAdmin, showToast])
+  }, [user?.id, showToast])
 
   useEffect(() => {
-    if (!user || isAdmin) return
+    if (!user?.id) return
     if (fcmTokenSetupRef.current) return
     fcmTokenSetupRef.current = true
 
     ;(async () => {
       try {
+        console.log("[FCM] Starting authenticated token registration", {
+          userId: user.id,
+          role: user.role,
+          isAdmin,
+        })
+
         // Avoid prompting permission if a token already exists.
         const { data: existing, error: existingError } = await supabase
           .from("device_tokens")
@@ -115,25 +121,24 @@ export default function Layout() {
         if (existingError && existingError.code !== "PGRST116") {
           console.warn("[FCM] Existing token lookup failed:", existingError)
         } else if (existing?.token) {
+          console.log("[FCM] Active token already registered for user:", user.id)
           return
         }
 
-        const token = await requestNotificationPermission()
-        if (!token) return
-
-        const { error: saveError } = await supabase.from("device_tokens").upsert(
-          { user_id: user.id, token, status: "active" },
-          { onConflict: "token" }
-        )
-
-        if (saveError) {
-          console.warn("[FCM] Token save failed:", saveError)
+        const token = await requestNotificationPermission({ userId: user.id })
+        if (!token) {
+          console.warn("[FCM] Token registration returned no token for user:", user.id)
+          return
         }
+
+        console.log("[FCM] Token registration flow completed for user:", user.id)
       } catch (error) {
         console.warn("[FCM] Token registration error:", error)
+      } finally {
+        fcmTokenSetupRef.current = false
       }
     })()
-  }, [user?.id, isAdmin])
+  }, [user?.id, user?.role, isAdmin])
 
   const sidebarWidth = useMemo(() => {
     if (isMobile) return 0

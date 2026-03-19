@@ -220,7 +220,12 @@ export default function AdminDashboard() {
   return (
     <div style={styles.appContainer}>
       {/* Top Navigation Bar */}
-      <header style={styles.topNav}>
+      <header
+        style={{
+          ...styles.topNav,
+          padding: isMobile ? "12px 16px" : styles.topNav.padding,
+        }}
+      >
         <div style={styles.topNavRight}>
           {/* Notifications */}
           <div style={styles.notificationWrapper}>
@@ -389,7 +394,12 @@ export default function AdminDashboard() {
 
       <div style={styles.layout}>
         {/* Sidebar - Always visible */}
-        <aside style={styles.sidebar}>
+        <aside
+          style={{
+            ...styles.sidebar,
+            width: isMobile ? "220px" : styles.sidebar.width,
+          }}
+        >
           <div style={styles.sidebarHeader}>
             <div style={styles.sidebarLogo}>
               <img

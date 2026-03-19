@@ -40,13 +40,7 @@ CREATE POLICY "Admins can create notifications"
 ON public.notifications
 FOR INSERT
 TO authenticated
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.utilisateurs
-    WHERE user_id = auth.uid()
-    AND role = 'ADMIN'
-  )
-);
+WITH CHECK (public.is_admin(auth.uid()));
 
 -- Grant permissions
 GRANT SELECT ON public.notifications TO authenticated;

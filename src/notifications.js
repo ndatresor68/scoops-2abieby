@@ -21,6 +21,14 @@ async function registerServiceWorkerIfNeeded() {
   }
 }
 
+function getPlatformLabel() {
+  if (typeof navigator === "undefined") return "web"
+  const ua = navigator.userAgent || ""
+  if (/android/i.test(ua)) return "android-web"
+  if (/iphone|ipad|ipod/i.test(ua)) return "ios-web"
+  return "web"
+}
+
 export async function getFcmToken(vapidKey = DEFAULT_VAPID_KEY) {
   try {
     if (!messaging) return null
@@ -41,10 +49,70 @@ export async function getFcmToken(vapidKey = DEFAULT_VAPID_KEY) {
   }
 }
 
-export const requestNotificationPermission = async (vapidKey = DEFAULT_VAPID_KEY) => {
+export async function saveFcmToken({ token, userId }) {
+  if (!token) {
+    console.warn("[FCM] saveFcmToken called without token")
+    return { success: false, error: "missing_token" }
+  }
+
+  if (!userId) {
+    console.warn("[FCM] saveFcmToken called without authenticated userId")
+    return { success: false, error: "missing_user_id" }
+  }
+
+  try {
+    const now = new Date().toISOString()
+    const payload = {
+      token,
+      user_id: userId,
+      created_at: now,
+      updated_at: now,
+      status: "active",
+      platform: getPlatformLabel(),
+    }
+
+    console.log("[FCM] Saving token to Supabase", {
+      userId,
+      platform: payload.platform,
+      tokenPreview: `${String(token).slice(0, 12)}...`,
+    })
+
+    const { data, error } = await supabase
+      .from("device_tokens")
+      .upsert(payload, { onConflict: "token" })
+      .select("id, user_id, status, created_at")
+      .maybeSingle()
+
+    if (error) {
+      console.error("[FCM] Token save error:", error)
+      return { success: false, error }
+    }
+
+    if (!data?.id) {
+      console.error("[FCM] Token save returned no row")
+      return { success: false, error: "missing_saved_row" }
+    }
+
+    console.log("[FCM] Token verified in DB:", data)
+    return { success: true, data }
+  } catch (error) {
+    console.error("[FCM] Exception during token storage:", error)
+    return { success: false, error }
+  }
+}
+
+export const requestNotificationPermission = async ({
+  vapidKey = DEFAULT_VAPID_KEY,
+  userId = null,
+  persist = true,
+} = {}) => {
   try {
     if (typeof Notification === "undefined") return null
     if (!messaging) return null
+    if (persist && !userId) {
+      console.warn("[FCM] requestNotificationPermission requires authenticated userId before saving token")
+      return null
+    }
 
     const permission =
       Notification.permission === "granted" ? "granted" : await Notification.requestPermission()
@@ -55,36 +123,10 @@ export const requestNotificationPermission = async (vapidKey = DEFAULT_VAPID_KEY
 
     console.log("FCM TOKEN:", token)
 
-    if (token) {
-      try {
-        const { data: authData, error: authError } = await supabase.auth.getUser()
-        if (authError) {
-          console.warn("[FCM] Could not fetch current user for token storage:", authError)
-        }
-
-        const userId = authData?.user?.id || null
-
-        if (!userId) {
-          console.warn("[FCM] No authenticated user; skipping token storage in Supabase.")
-        } else {
-          const { error: saveError } = await supabase.from("device_tokens").upsert(
-            {
-              token,
-              user_id: userId,
-              created_at: new Date().toISOString(),
-              status: "active",
-            },
-            { onConflict: "token" }
-          )
-
-          if (saveError) {
-            console.error("[FCM] Token save error:", saveError)
-          } else {
-            console.log("[FCM] Token saved/updated in Supabase successfully.")
-          }
-        }
-      } catch (saveErr) {
-        console.error("[FCM] Exception during token storage:", saveErr)
+    if (token && persist) {
+      const saveResult = await saveFcmToken({ token, userId })
+      if (!saveResult.success) {
+        console.warn("[FCM] Token generated but not persisted:", saveResult.error)
       }
     }
 

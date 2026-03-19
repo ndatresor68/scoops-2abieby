@@ -53,3 +53,6 @@ TO authenticated
 USING (public.is_admin(auth.uid()))
 WITH CHECK (public.is_admin(auth.uid()));
 
+GRANT SELECT ON public.device_tokens TO authenticated;
+GRANT INSERT ON public.device_tokens TO authenticated;
+GRANT UPDATE ON public.device_tokens TO authenticated;

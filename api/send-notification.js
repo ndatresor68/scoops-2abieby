@@ -23,6 +23,15 @@ function chunkArray(arr, chunkSize) {
   return out
 }
 
+function normalizeTokenError(error) {
+  if (!error) return null
+  return String(error)
+}
+
+function isInvalidTokenError(error) {
+  return ["InvalidRegistration", "NotRegistered", "MismatchSenderId"].includes(error)
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -38,10 +47,27 @@ export default async function handler(req, res) {
     }
 
     const serverKey = process.env.FCM_SERVER_KEY
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+
     if (!serverKey) {
       res.status(500).json({ success: false, error: "FCM_SERVER_KEY is not configured" })
       return
     }
+
+    if (!supabaseUrl) {
+      res.status(500).json({ success: false, error: "SUPABASE_URL is not configured" })
+      return
+    }
+
+    if (!supabaseServiceKey) {
+      res.status(500).json({ success: false, error: "SUPABASE_SERVICE_ROLE_KEY is not configured" })
+      return
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
 
     // Normalize tokens (optional).
     // If tokens aren't provided, fetch active device tokens from Supabase using service role.
@@ -57,21 +83,6 @@ export default async function handler(req, res) {
           .filter(Boolean)
       }
     } else {
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-
-      if (!supabaseUrl || !supabaseServiceKey) {
-        res.status(500).json({
-          success: false,
-          error: "Supabase server configuration missing (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required)",
-        })
-        return
-      }
-
-      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
-
       const { data: tokenRows, error: tokenFetchError } = await supabase
         .from("device_tokens")
         .select("token")
@@ -93,6 +104,10 @@ export default async function handler(req, res) {
     const tokenChunks = chunkArray(tokenList, MAX_TOKENS_PER_REQUEST)
 
     const results = []
+    const invalidTokens = []
+    let successCount = 0
+    let failureCount = 0
+
     for (const chunk of tokenChunks) {
       const payload = {
         registration_ids: chunk,
@@ -114,25 +129,88 @@ export default async function handler(req, res) {
 
       const data = await fcmRes.json().catch(() => ({}))
 
+      const perTokenResults = Array.isArray(data?.results)
+        ? chunk.map((token, index) => {
+            const result = data.results[index] || {}
+            const error = normalizeTokenError(result.error)
+            const item = {
+              token,
+              ok: !error,
+              messageId: result.message_id || null,
+              registrationId: result.registration_id || null,
+              error,
+            }
+
+            if (item.ok) {
+              successCount += 1
+            } else {
+              failureCount += 1
+              if (isInvalidTokenError(item.error)) {
+                invalidTokens.push(token)
+              }
+            }
+
+            return item
+          })
+        : []
+
+      if (!perTokenResults.length) {
+        if (fcmRes.ok) {
+          successCount += chunk.length
+        } else {
+          failureCount += chunk.length
+        }
+      }
+
       results.push({
         ok: fcmRes.ok,
         status: fcmRes.status,
-        sent: chunk.length,
+        attempted: chunk.length,
+        successCount: perTokenResults.filter((item) => item.ok).length,
+        failureCount: perTokenResults.filter((item) => !item.ok).length,
         response: data,
+        results: perTokenResults,
       })
 
       if (!fcmRes.ok) {
+        console.error("[api/send-notification] FCM HTTP error:", {
+          status: fcmRes.status,
+          response: data,
+        })
         // Continue sending other chunks, but mark failure.
         continue
       }
     }
 
-    const successChunks = results.filter((r) => r.ok)
-    const sentTotal = results.reduce((sum, r) => sum + (r.sent || 0), 0)
+    if (invalidTokens.length > 0) {
+      const uniqueInvalidTokens = [...new Set(invalidTokens)]
+      const { error: deactivateError } = await supabase
+        .from("device_tokens")
+        .update({ status: "inactive", updated_at: new Date().toISOString() })
+        .in("token", uniqueInvalidTokens)
+
+      if (deactivateError) {
+        console.error("[api/send-notification] Failed to deactivate invalid tokens:", deactivateError)
+      } else {
+        console.warn("[api/send-notification] Deactivated invalid tokens:", uniqueInvalidTokens.length)
+      }
+    }
+
+    const success = successCount > 0
+
+    console.log("[api/send-notification] Send summary:", {
+      attempted: tokenList.length,
+      successCount,
+      failureCount,
+      invalidTokenCount: [...new Set(invalidTokens)].length,
+    })
 
     res.status(200).json({
-      success: successChunks.length > 0,
-      sentTotal,
+      success,
+      attemptedTotal: tokenList.length,
+      sentTotal: successCount,
+      failureTotal: failureCount,
+      invalidTokenCount: [...new Set(invalidTokens)].length,
       chunks: results,
     })
   } catch (error) {
@@ -140,4 +218,3 @@ export default async function handler(req, res) {
     res.status(500).json({ success: false, error: "Internal server error" })
   }
 }
-
