@@ -1,18 +1,6 @@
-/**
- * Secure FCM sender endpoint (server-side only).
- *
- * Receives:
- * - title (string)
- * - body (string)
- * - tokens (array<string>) optional. If omitted, the endpoint fetches active device tokens from Supabase.
- *
- * Uses:
- * - process.env.FCM_SERVER_KEY (FCM server key MUST be kept server-side)
- */
-
 import { createClient } from "@supabase/supabase-js"
+import admin from "firebase-admin"
 
-const FCM_ENDPOINT = "https://fcm.googleapis.com/fcm/send"
 const MAX_TOKENS_PER_REQUEST = 500 // conservative to avoid payload limits
 const LOG_INSERT_CHUNK_SIZE = 500
 
@@ -30,12 +18,37 @@ function normalizeTokenError(error) {
 }
 
 function isInvalidTokenError(error) {
-  return ["InvalidRegistration", "NotRegistered", "MismatchSenderId"].includes(error)
+  return [
+    "InvalidRegistration",
+    "NotRegistered",
+    "MismatchSenderId",
+    "messaging/invalid-registration-token",
+    "messaging/registration-token-not-registered",
+    "messaging/mismatched-credential",
+  ].includes(error)
 }
 
 function normalizeTarget(target) {
   if (target === "user" || target === "specific_user") return "user"
   return "all"
+}
+
+function getFirebaseAdmin() {
+  const rawServiceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
+
+  if (!rawServiceAccount) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT is not configured")
+  }
+
+  const serviceAccount = JSON.parse(rawServiceAccount)
+
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    })
+  }
+
+  return admin
 }
 
 export default async function handler(req, res) {
@@ -72,14 +85,8 @@ export default async function handler(req, res) {
       return
     }
 
-    const serverKey = process.env.FCM_SERVER_KEY
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
-
-    if (!serverKey) {
-      res.status(500).json({ success: false, error: "FCM_SERVER_KEY is not configured" })
-      return
-    }
 
     if (!supabaseUrl) {
       res.status(500).json({ success: false, error: "SUPABASE_URL is not configured" })
@@ -94,6 +101,8 @@ export default async function handler(req, res) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     })
+    const firebaseAdmin = getFirebaseAdmin()
+    const messaging = firebaseAdmin.messaging()
 
     let tokenRows = []
 
@@ -171,101 +180,64 @@ export default async function handler(req, res) {
     let failureCount = 0
 
     for (const chunk of tokenChunks) {
-      const chunkTokens = chunk.map((row) => row.token)
-      const payload = {
-        registration_ids: chunkTokens,
-        notification: {
-          title,
-          body: normalizedMessage,
-        },
-        priority: "high",
-      }
+      const perTokenResults = await Promise.all(
+        chunk.map(async (row) => {
+          try {
+            const messageId = await messaging.send({
+              token: row.token,
+              notification: {
+                title,
+                body: normalizedMessage,
+              },
+            })
 
-      const fcmRes = await fetch(FCM_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `key=${serverKey}`,
-        },
-        body: JSON.stringify(payload),
-      })
+            successCount += 1
 
-      const data = await fcmRes.json().catch(() => ({}))
-
-      const perTokenResults = Array.isArray(data?.results)
-        ? chunk.map((row, index) => {
-            const result = data.results[index] || {}
-            const error = normalizeTokenError(result.error)
-            const item = {
+            return {
               token: row.token,
               user_id: row.user_id,
-              ok: !error,
-              messageId: result.message_id || null,
-              registrationId: result.registration_id || null,
-              error,
+              ok: true,
+              messageId,
+              error: null,
+            }
+          } catch (error) {
+            const normalizedError = normalizeTokenError(error?.code || error?.message || error)
+            failureCount += 1
+
+            if (isInvalidTokenError(normalizedError)) {
+              invalidTokens.push(row.token)
             }
 
-            if (item.ok) {
-              successCount += 1
-            } else {
-              failureCount += 1
-              if (isInvalidTokenError(item.error)) {
-                invalidTokens.push(token)
-              }
+            return {
+              token: row.token,
+              user_id: row.user_id,
+              ok: false,
+              messageId: null,
+              error: normalizedError,
             }
+          }
+        }),
+      )
 
-            return item
-          })
-        : []
-
-      if (!perTokenResults.length) {
-        if (fcmRes.ok) {
-          successCount += chunk.length
-        } else {
-          failureCount += chunk.length
-        }
-
-        const genericStatus = fcmRes.ok ? "success" : "failed"
-        const genericError = fcmRes.ok ? null : `FCM HTTP ${fcmRes.status}`
-        for (const row of chunk) {
-          logRows.push({
-            notification_id: notificationRow.id,
-            user_id: row.user_id,
-            token: row.token,
-            status: genericStatus,
-            error_message: genericError,
-          })
-        }
-      } else {
-        for (const item of perTokenResults) {
-          logRows.push({
-            notification_id: notificationRow.id,
-            user_id: item.user_id,
-            token: item.token,
-            status: item.ok ? "success" : "failed",
-            error_message: item.error,
-          })
-        }
+      for (const item of perTokenResults) {
+        logRows.push({
+          notification_id: notificationRow.id,
+          user_id: item.user_id,
+          token: item.token,
+          status: item.ok ? "success" : "failed",
+          error_message: item.error,
+        })
       }
 
       results.push({
-        ok: fcmRes.ok,
-        status: fcmRes.status,
+        ok: perTokenResults.every((item) => item.ok),
+        status: perTokenResults.every((item) => item.ok) ? 200 : 207,
         attempted: chunk.length,
         successCount: perTokenResults.filter((item) => item.ok).length,
         failureCount: perTokenResults.filter((item) => !item.ok).length,
-        response: data,
+        response: null,
         results: perTokenResults,
       })
-
-      if (!fcmRes.ok) {
-        console.error("[api/send-notification] FCM HTTP error:", {
-          status: fcmRes.status,
-          response: data,
-        })
-        // Continue sending other chunks, but mark failure.
-        continue
-      }
     }
 
     for (const chunk of chunkArray(logRows, LOG_INSERT_CHUNK_SIZE)) {
@@ -317,6 +289,6 @@ export default async function handler(req, res) {
     })
   } catch (error) {
     console.error("[api/send-notification] Error:", error)
-    res.status(500).json({ success: false, error: "Internal server error" })
+    res.status(500).json({ success: false, error: error?.message || "Internal server error" })
   }
 }
