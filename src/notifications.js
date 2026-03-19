@@ -7,7 +7,10 @@ const FCM_DEBUG_EVENT = "fcm-debug-update"
 
 // Public (non-secret) Web Push VAPID key.
 // Configure via environment variable to avoid hardcoding in the repo.
-const DEFAULT_VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY
+console.log("ENV VAPID:", import.meta.env.VITE_FCM_VAPID_KEY)
+const DEFAULT_VAPID_KEY =
+  import.meta.env.VITE_FCM_VAPID_KEY ||
+  "BNjWLklI2oSWyebaq217FTcMSf836uoG9thZ4h130_hoZDGOMgl7wErmGgwhiICLQImewAQi_29VeesMWEWHpGg"
 if (typeof window !== "undefined") {
   const masked = DEFAULT_VAPID_KEY ? `${String(DEFAULT_VAPID_KEY).slice(0, 10)}...` : "(missing)"
   console.log("[FCM] VAPID key (masked):", masked)
