@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { Resend } from "resend"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
+const SPAM_TERMS = ["free", "urgent", "click now"]
 
 function getSupabaseClients() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -22,22 +23,47 @@ function getSupabaseClients() {
   }
 }
 
-function buildEmailHtml(message) {
-  const safeMessage = String(message || "").replace(/\n/g, "<br />")
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+function containsSpamTerms(value) {
+  const normalized = String(value || "").toLowerCase()
+  return SPAM_TERMS.some((term) => normalized.includes(term))
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim())
+}
+
+function buildEmailHtml(subject, message) {
+  const safeSubject = escapeHtml(subject)
+  const safeMessage = escapeHtml(message).replace(/\n/g, "<br />")
 
   return `
-    <div style="margin:0;padding:32px;background:#f8fafc;font-family:Arial,sans-serif;color:#0f172a;">
-      <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 24px 50px rgba(15,23,42,0.08);">
-        <div style="padding:28px 32px;background:linear-gradient(135deg,#991b1b 0%,#dc2626 100%);color:#ffffff;">
-          <div style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;opacity:.82;font-weight:700;">Cooperative Communication</div>
-          <h2 style="margin:10px 0 0;font-size:28px;line-height:1.1;">SCOOP ASAB</h2>
-          <p style="margin:10px 0 0;font-size:14px;line-height:1.6;opacity:.9;">Message officiel envoye depuis le systeme de gestion cooperative.</p>
+    <div style="font-family: Arial, sans-serif; background:#f4f4f4; padding:20px;">
+      <div style="max-width:600px; margin:auto; background:white; border-radius:10px; overflow:hidden;">
+        <div style="background:#ff3b3b; color:white; padding:20px; text-align:center;">
+          <h1 style="margin:0;">SCOOP ASAB</h1>
+          <p style="margin:8px 0 0;">Gestion coopérative intelligente</p>
         </div>
-        <div style="padding:32px;">
-          <div style="font-size:15px;line-height:1.8;color:#334155;">${safeMessage}</div>
+        <div style="padding:20px; color:#333;">
+          <h2 style="margin-top:0;">${safeSubject}</h2>
+          <p style="margin:0; line-height:1.7;">${safeMessage}</p>
         </div>
-        <div style="padding:18px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;font-size:12px;color:#64748b;">
-          Powered by SCOOP ASAB System
+        <div style="padding:20px; background:#fafafa; font-size:12px; color:#777;">
+          <p>Vous recevez cet email car vous êtes membre de SCOOP ASAB.</p>
+          <hr style="margin:15px 0;" />
+          <p><strong>Fondateur :</strong> NDA TRESOR (CERVEAU 3.0)</p>
+          <p><strong>Rôle :</strong> Créateur et concepteur du système</p>
+          <p><strong>Email :</strong> ndatresor68@gmail.com</p>
+          <p><strong>Téléphone :</strong> +2250715887556</p>
+          <p><strong>WhatsApp :</strong> https://wa.me/2250715887555</p>
         </div>
       </div>
     </div>
@@ -100,27 +126,62 @@ export default async function handler(req, res) {
     }
 
     const { to, subject, message } = req.body || {}
-    const recipients = Array.isArray(to) ? to.filter(Boolean) : typeof to === "string" ? [to] : []
+    const recipients = (Array.isArray(to) ? to : typeof to === "string" ? [to] : [])
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean)
 
-    if (!recipients.length || !subject || !message) {
+    const normalizedSubject = String(subject || "").trim()
+    const normalizedMessage = String(message || "").trim()
+
+    if (!recipients.length || !normalizedSubject || !normalizedMessage) {
       res.status(400).json({ error: "Missing recipients, subject or message" })
       return
     }
 
-    const response = await resend.emails.send({
-      from: "SCOOP ASAB <onboarding@resend.dev>",
-      to: recipients,
-      subject: String(subject).trim(),
-      html: buildEmailHtml(message),
-    })
+    const invalidRecipients = recipients.filter((email) => !isValidEmail(email))
+    if (invalidRecipients.length > 0) {
+      res.status(400).json({ error: "Some recipient emails are invalid" })
+      return
+    }
+
+    if (containsSpamTerms(normalizedSubject) || containsSpamTerms(normalizedMessage)) {
+      res.status(400).json({ error: "Email content contains blocked spam terms" })
+      return
+    }
+
+    const results = await Promise.allSettled(
+      recipients.map((recipient) =>
+        resend.emails.send({
+          from: "SCOOP ASAB <contact@scoopasab.com>",
+          reply_to: "ndatresor68@gmail.com",
+          to: recipient,
+          subject: normalizedSubject,
+          text: normalizedMessage,
+          html: buildEmailHtml(normalizedSubject, normalizedMessage),
+        }),
+      ),
+    )
+
+    const successes = results.filter((result) => result.status === "fulfilled").map((result) => result.value)
+    const failures = results.filter((result) => result.status === "rejected")
+
+    if (successes.length === 0) {
+      res.status(500).json({ error: "Email error" })
+      return
+    }
 
     await logEmailAction(
       adminClient,
       profile,
-      `Email sent to ${recipients.length} recipient(s) - ${String(subject).trim()}`,
+      `Email sent to ${successes.length}/${recipients.length} recipient(s) - ${normalizedSubject}`,
     )
 
-    res.status(200).json(response)
+    res.status(200).json({
+      success: true,
+      sent: successes.length,
+      failed: failures.length,
+      results: successes,
+    })
   } catch (error) {
     console.error("[api/send-email] Error:", error)
     res.status(500).json({ error: "Email error" })
