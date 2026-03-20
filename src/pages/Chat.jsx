@@ -38,7 +38,7 @@ function formatTimestamp(dateString) {
 }
 
 export default function Chat({ adminMode = false }) {
-  const { user, isAdmin } = useAuth()
+  const { isAdmin } = useAuth()
   const { showToast } = useToast()
   const isMobile = useMediaQuery("(max-width: 900px)")
   const scrollRef = useRef(null)
@@ -46,6 +46,7 @@ export default function Chat({ adminMode = false }) {
   const chunksRef = useRef([])
   const selectedContactRef = useRef(null)
 
+  const [currentUser, setCurrentUser] = useState(null)
   const [contacts, setContacts] = useState([])
   const [contactsLoading, setContactsLoading] = useState(true)
   const [selectedContact, setSelectedContact] = useState(null)
@@ -123,8 +124,10 @@ export default function Chat({ adminMode = false }) {
         } = await supabase.auth.getUser()
 
         console.log("[Chat] AUTH USER:", authUser)
+        console.log("CURRENT USER:", authUser)
 
         if (!cancelled) {
+          setCurrentUser(authUser || null)
           setDebugAuthUser(authUser || null)
         }
 
@@ -143,14 +146,14 @@ export default function Chat({ adminMode = false }) {
   }, [])
 
   const loadContacts = useCallback(async () => {
-    if (!user?.id) {
+    if (!currentUser?.id) {
       pushDebugError("loadContacts", "User is null while loading contacts")
       return
     }
     setContactsLoading(true)
 
     try {
-      const nextContacts = await fetchChatContacts(user.id, canSeeAllUsers)
+      const nextContacts = await fetchChatContacts(currentUser.id, canSeeAllUsers)
       console.log("[Chat] USERS:", nextContacts)
       setDebugUsers(nextContacts)
       setContacts(nextContacts)
@@ -162,15 +165,15 @@ export default function Chat({ adminMode = false }) {
     } finally {
       setContactsLoading(false)
     }
-  }, [canSeeAllUsers, showToast, user?.id])
+  }, [canSeeAllUsers, currentUser?.id, showToast])
 
   const loadMessages = useCallback(async () => {
-    if (!user?.id) {
+    if (!currentUser?.id) {
       debugWarn("[Chat] loadMessages skipped: user is null")
-      console.log("[Chat] FETCH PARAMS:", user?.id, selectedContact?.id)
+      console.log("[Chat] FETCH PARAMS:", currentUser?.id, selectedContact?.id)
       setDebugLastFetchResult({
         params: {
-          userId: user?.id || null,
+          userId: currentUser?.id || null,
           selectedUserId: selectedContact?.id || null,
         },
         data: [],
@@ -183,10 +186,10 @@ export default function Chat({ adminMode = false }) {
 
     if (!selectedContact?.id) {
       debugWarn("[Chat] loadMessages skipped: selected user is null")
-      console.log("[Chat] FETCH PARAMS:", user?.id, selectedContact?.id)
+      console.log("[Chat] FETCH PARAMS:", currentUser?.id, selectedContact?.id)
       setDebugLastFetchResult({
         params: {
-          userId: user?.id || null,
+          userId: currentUser?.id || null,
           selectedUserId: selectedContact?.id || null,
         },
         data: [],
@@ -199,13 +202,13 @@ export default function Chat({ adminMode = false }) {
 
     setMessagesLoading(true)
     try {
-      console.log("[Chat] FETCH PARAMS:", user.id, selectedContact.id)
+      console.log("[Chat] FETCH PARAMS:", currentUser.id, selectedContact.id)
 
       const { data, error } = await supabase
         .from("messages")
         .select("*")
         .or(
-          `and(sender_id.eq.${user.id},receiver_id.eq.${selectedContact.id}), and(sender_id.eq.${selectedContact.id},receiver_id.eq.${user.id})`,
+          `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedContact.id}), and(sender_id.eq.${selectedContact.id},receiver_id.eq.${currentUser.id})`,
         )
         .order("created_at", { ascending: true })
 
@@ -213,7 +216,7 @@ export default function Chat({ adminMode = false }) {
 
       setDebugLastFetchResult({
         params: {
-          userId: user.id,
+          userId: currentUser.id,
           selectedUserId: selectedContact.id,
         },
         data: data || [],
@@ -231,36 +234,37 @@ export default function Chat({ adminMode = false }) {
     } finally {
       setMessagesLoading(false)
     }
-  }, [selectedContact, showToast, user?.id])
+  }, [currentUser?.id, selectedContact, showToast])
 
   useEffect(() => {
     selectedContactRef.current = selectedContact
   }, [selectedContact])
 
   useEffect(() => {
+    if (!currentUser) return
     loadContacts()
-  }, [loadContacts])
+  }, [currentUser, loadContacts])
 
   useEffect(() => {
     loadMessages()
   }, [loadMessages])
 
   useEffect(() => {
-    if (!user?.id) return undefined
+    if (!currentUser?.id) return undefined
 
-    return subscribeToUserMessages(user.id, (nextMessage) => {
+    return subscribeToUserMessages(currentUser.id, (nextMessage) => {
       const currentContactId = selectedContactRef.current?.id
       const belongsToCurrentConversation =
         currentContactId &&
-        ((nextMessage.sender_id === user.id && nextMessage.receiver_id === currentContactId) ||
-          (nextMessage.receiver_id === user.id && nextMessage.sender_id === currentContactId))
+        ((nextMessage.sender_id === currentUser.id && nextMessage.receiver_id === currentContactId) ||
+          (nextMessage.receiver_id === currentUser.id && nextMessage.sender_id === currentContactId))
 
       if (belongsToCurrentConversation) {
         setMessages((current) => mergeMessage(current, nextMessage))
       }
 
       setContacts((current) => {
-        const contactId = nextMessage.sender_id === user.id ? nextMessage.receiver_id : nextMessage.sender_id
+        const contactId = nextMessage.sender_id === currentUser.id ? nextMessage.receiver_id : nextMessage.sender_id
         const index = current.findIndex((item) => item.id === contactId)
         if (index <= 0) return current
         const nextContacts = [...current]
@@ -269,7 +273,7 @@ export default function Chat({ adminMode = false }) {
         return nextContacts
       })
     })
-  }, [user?.id])
+  }, [currentUser?.id])
 
   useEffect(() => {
     const channel = supabase
@@ -343,7 +347,7 @@ export default function Chat({ adminMode = false }) {
   }, [])
 
   async function handleSendMessage() {
-    if (!user?.id) {
+    if (!currentUser?.id) {
       debugWarn("[Chat] send skipped: user is null")
       pushDebugError("handleSendMessage", "User is null")
       return
@@ -357,7 +361,7 @@ export default function Chat({ adminMode = false }) {
     if (!trimmedDraft || sending) return
 
     console.log("SENDING:", {
-      sender: user?.id,
+      sender: currentUser?.id,
       receiver: selectedContact?.id,
       text: trimmedDraft,
     })
@@ -368,7 +372,7 @@ export default function Chat({ adminMode = false }) {
         .from("messages")
         .insert([
           {
-            sender_id: user.id,
+            sender_id: currentUser.id,
             receiver_id: selectedContact.id,
             message: trimmedDraft,
           },
@@ -404,7 +408,7 @@ export default function Chat({ adminMode = false }) {
   }
 
   async function startRecording() {
-    if (!supportsAudioRecording || !user?.id || !selectedConversationId) {
+    if (!supportsAudioRecording || !currentUser?.id || !selectedConversationId) {
       showToast("Enregistrement audio indisponible.", "warning")
       return
     }
@@ -431,7 +435,7 @@ export default function Chat({ adminMode = false }) {
         setSending(true)
         try {
           const insertedMessage = await sendAudioMessage({
-            senderId: user.id,
+            senderId: currentUser.id,
             receiverId: selectedConversationId,
             audioBlob,
           })
@@ -558,7 +562,7 @@ export default function Chat({ adminMode = false }) {
                     <div style={styles.emptyState}>Chargement des messages...</div>
                   ) : messages.length ? (
                     messages.map((messageItem) => {
-                      const isOwnMessage = messageItem.sender_id === user?.id
+                      const isOwnMessage = messageItem.sender_id === currentUser?.id
                       const audioSrc = messageItem.audio_url ? audioUrls[messageItem.audio_url] : ""
 
                       return (
@@ -643,7 +647,7 @@ export default function Chat({ adminMode = false }) {
       <div style={styles.debugPanel}>
         <div style={styles.debugTitle}>Chat Debug</div>
         <div style={styles.debugLine}>
-          <strong>current user.id:</strong> {user?.id || "null"}
+          <strong>current user.id:</strong> {currentUser?.id || "null"}
         </div>
         <div style={styles.debugLine}>
           <strong>auth user.id:</strong> {debugAuthUser?.id || "null"}
