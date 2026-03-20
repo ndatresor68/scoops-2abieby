@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   FaBell,
+  FaEnvelope,
   FaPaperPlane,
   FaSearch,
   FaUsers,
@@ -50,14 +51,23 @@ export default function AdminNotifications() {
   const [loading, setLoading] = useState(true)
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [sending, setSending] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedNotification, setSelectedNotification] = useState(null)
   const [detailLogs, setDetailLogs] = useState([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [userSearch, setUserSearch] = useState("")
+  const [emailUserSearch, setEmailUserSearch] = useState("")
   const [form, setForm] = useState({
     title: "",
+    message: "",
+    targetType: "all",
+    targetUserId: "",
+  })
+  const [emailForm, setEmailForm] = useState({
+    subject: "",
     message: "",
     targetType: "all",
     targetUserId: "",
@@ -120,6 +130,16 @@ export default function AdminNotifications() {
   }, [userSearch, users])
 
   const selectedTargetUser = form.targetUserId ? usersById[form.targetUserId] : null
+  const selectedEmailTargetUser = emailForm.targetUserId ? usersById[emailForm.targetUserId] : null
+  const filteredEmailUsers = useMemo(() => {
+    const term = emailUserSearch.trim().toLowerCase()
+    if (!term) return users
+    return users.filter((candidate) =>
+      [candidate.nom, candidate.email, candidate.role]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    )
+  }, [emailUserSearch, users])
 
   const tableData = useMemo(
     () =>
@@ -292,6 +312,69 @@ export default function AdminNotifications() {
     }
   }
 
+  async function handleEmailSubmit(event) {
+    event.preventDefault()
+
+    if (!emailForm.subject.trim() || !emailForm.message.trim()) {
+      showToast("Le sujet et le message sont requis", "error")
+      return
+    }
+
+    if (emailForm.targetType === "user" && !emailForm.targetUserId) {
+      showToast("Sélectionnez un utilisateur", "error")
+      return
+    }
+
+    const recipients =
+      emailForm.targetType === "all"
+        ? users.map((entry) => entry.email).filter(Boolean)
+        : [usersById[emailForm.targetUserId]?.email].filter(Boolean)
+
+    if (!recipients.length) {
+      showToast("Aucun email disponible pour cette cible", "error")
+      return
+    }
+
+    try {
+      setSendingEmail(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+
+      const response = await fetch("/api/send-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          to: recipients,
+          subject: emailForm.subject.trim(),
+          message: emailForm.message.trim(),
+        }),
+      })
+
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        showToast(result.error || "Erreur lors de l'envoi de l'email", "error")
+        return
+      }
+
+      showToast(`Email envoyé à ${recipients.length} destinataire(s)`, "success")
+      setEmailComposerOpen(false)
+      setEmailForm({
+        subject: "",
+        message: "",
+        targetType: "all",
+        targetUserId: "",
+      })
+      setEmailUserSearch("")
+    } catch (error) {
+      showToast("Erreur lors de l'envoi de l'email", "error")
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   return (
     <AdminPage
       title="Notifications"
@@ -313,9 +396,14 @@ export default function AdminNotifications() {
         </AdminPanel>
       }
       actions={
-        <Button icon={<FaPaperPlane />} onClick={() => setComposerOpen(true)} fullWidth={isMobile}>
-          Nouvelle notification
-        </Button>
+        <div style={styles.headerActions}>
+          <Button variant="secondary" icon={<FaEnvelope />} onClick={() => setEmailComposerOpen(true)} fullWidth={isMobile}>
+            Nouvel email
+          </Button>
+          <Button icon={<FaPaperPlane />} onClick={() => setComposerOpen(true)} fullWidth={isMobile}>
+            Nouvelle notification
+          </Button>
+        </div>
       }
     >
       <AdminPanel
@@ -363,6 +451,150 @@ export default function AdminNotifications() {
         <FaPaperPlane />
         <span>Envoyer</span>
       </button>
+
+      <Modal
+        isOpen={emailComposerOpen}
+        onClose={() => {
+          if (sendingEmail) return
+          setEmailComposerOpen(false)
+        }}
+        title="Envoyer un email"
+        size="lg"
+        mobileFullscreen
+      >
+        <form onSubmit={handleEmailSubmit} style={styles.form}>
+          <div style={styles.composerIntro}>
+            <div style={{ ...styles.composerIntroIcon, background: "linear-gradient(135deg, #fee2e2 0%, #fff1f2 100%)", color: "#dc2626" }}>
+              <FaEnvelope size={18} />
+            </div>
+            <div>
+              <div style={styles.composerIntroTitle}>Campagne email</div>
+              <div style={styles.composerIntroText}>
+                Envoyez un email professionnel a tous les utilisateurs ou a une cible specifique.
+              </div>
+            </div>
+          </div>
+
+          <Input
+            label="Sujet"
+            required
+            value={emailForm.subject}
+            onChange={(value) => setEmailForm((current) => ({ ...current, subject: value }))}
+            placeholder="Sujet de l'email"
+          />
+
+          <div style={styles.field}>
+            <label style={styles.label}>Message</label>
+            <textarea
+              value={emailForm.message}
+              onChange={(event) => setEmailForm((current) => ({ ...current, message: event.target.value }))}
+              placeholder="Rédigez votre message email"
+              style={styles.textarea}
+              rows={7}
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label style={styles.label}>Destinataires</label>
+            <div style={styles.targetGrid}>
+              <button
+                type="button"
+                onClick={() => setEmailForm((current) => ({ ...current, targetType: "all", targetUserId: "" }))}
+                style={{
+                  ...styles.targetCard,
+                  ...(emailForm.targetType === "all" ? styles.targetCardActive : {}),
+                }}
+              >
+                <FaUsers size={18} />
+                <div>
+                  <div style={styles.targetTitle}>Tous les utilisateurs</div>
+                  <div style={styles.targetText}>Envoie l'email à tous les comptes ayant une adresse email.</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEmailForm((current) => ({ ...current, targetType: "user" }))}
+                style={{
+                  ...styles.targetCard,
+                  ...(emailForm.targetType === "user" ? styles.targetCardActive : {}),
+                }}
+              >
+                <FaUser size={18} />
+                <div>
+                  <div style={styles.targetTitle}>Utilisateur spécifique</div>
+                  <div style={styles.targetText}>Cible un seul utilisateur avec son adresse enregistrée.</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {emailForm.targetType === "user" ? (
+            <div style={styles.userPicker}>
+              <Input
+                label="Rechercher un utilisateur"
+                value={emailUserSearch}
+                onChange={setEmailUserSearch}
+                placeholder="Nom, email ou rôle"
+                icon={<FaSearch />}
+              />
+
+              {selectedEmailTargetUser ? (
+                <div style={styles.selectedUser}>
+                  <div>
+                    <div style={styles.selectedUserName}>{getUserLabel(selectedEmailTargetUser)}</div>
+                    <div style={styles.selectedUserMeta}>{selectedEmailTargetUser.email || "-"}</div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEmailForm((current) => ({ ...current, targetUserId: "" }))}
+                  >
+                    Changer
+                  </Button>
+                </div>
+              ) : (
+                <div style={styles.userList}>
+                  {loadingUsers ? (
+                    <div style={styles.userListEmpty}>Chargement des utilisateurs...</div>
+                  ) : filteredEmailUsers.length === 0 ? (
+                    <div style={styles.userListEmpty}>Aucun utilisateur trouvé</div>
+                  ) : (
+                    filteredEmailUsers.slice(0, 8).map((candidate) => (
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        style={styles.userOption}
+                        onClick={() =>
+                          setEmailForm((current) => ({ ...current, targetUserId: candidate.id }))
+                        }
+                      >
+                        <div style={styles.userOptionName}>{getUserLabel(candidate)}</div>
+                        <div style={styles.userOptionMeta}>
+                          {candidate.email || "-"} {candidate.role ? `• ${candidate.role}` : ""}
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={styles.recipientHint}>
+              {users.filter((entry) => entry.email).length} utilisateur(s) avec email recevront ce message.
+            </div>
+          )}
+
+          <div style={styles.formActions}>
+            <Button variant="secondary" onClick={() => setEmailComposerOpen(false)} disabled={sendingEmail}>
+              Annuler
+            </Button>
+            <Button type="submit" icon={<FaEnvelope />} disabled={sendingEmail}>
+              {sendingEmail ? "Envoi en cours..." : "Envoyer l'email"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         isOpen={composerOpen}
@@ -1047,6 +1279,20 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 12,
+  },
+  headerActions: {
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  recipientHint: {
+    padding: 14,
+    borderRadius: 16,
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 1.5,
   },
   guidanceItem: {
     display: "flex",
