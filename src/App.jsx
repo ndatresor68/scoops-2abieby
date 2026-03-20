@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import Layout from "./components/Layout"
+import AIChatButton from "./components/AIChatButton"
 
 export default function App() {
   const requestedRef = useRef(false)
@@ -10,5 +11,10 @@ export default function App() {
     requestedRef.current = true
   }, [])
 
-  return <Layout />
+  return (
+    <>
+      <Layout />
+      <AIChatButton />
+    </>
+  )
 }
