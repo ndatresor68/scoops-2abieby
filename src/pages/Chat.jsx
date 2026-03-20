@@ -56,6 +56,13 @@ export default function Chat({ adminMode = false }) {
   const [sending, setSending] = useState(false)
   const [recording, setRecording] = useState(false)
   const [search, setSearch] = useState("")
+  const [debugAuthUser, setDebugAuthUser] = useState(null)
+  const [debugUsers, setDebugUsers] = useState([])
+  const [debugErrors, setDebugErrors] = useState([])
+  const [debugRealtimeStatus, setDebugRealtimeStatus] = useState("not connected")
+  const [debugLastInsertResult, setDebugLastInsertResult] = useState(null)
+  const [debugLastFetchResult, setDebugLastFetchResult] = useState(null)
+  const [debugLastRealtimeEvent, setDebugLastRealtimeEvent] = useState(null)
 
   const canSeeAllUsers = adminMode || isAdmin
   const supportsAudioRecording =
@@ -87,15 +94,70 @@ export default function Chat({ adminMode = false }) {
     }
   }
 
+  function pushDebugError(source, error) {
+    const nextError =
+      typeof error === "string"
+        ? error
+        : error?.message || error?.code || JSON.stringify(error)
+
+    setDebugErrors((current) => {
+      const next = [
+        {
+          id: `${Date.now()}-${Math.random()}`,
+          source,
+          message: nextError,
+        },
+        ...current,
+      ]
+      return next.slice(0, 12)
+    })
+  }
+
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser()
+
+        console.log("[Chat] AUTH USER:", authUser)
+
+        if (!cancelled) {
+          setDebugAuthUser(authUser || null)
+        }
+
+        if (!authUser) {
+          pushDebugError("auth.getUser", "BIG ERROR: auth user is null")
+        }
+      } catch (error) {
+        console.error("[Chat] AUTH ERROR:", error)
+        pushDebugError("auth.getUser", error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const loadContacts = useCallback(async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      pushDebugError("loadContacts", "User is null while loading contacts")
+      return
+    }
     setContactsLoading(true)
 
     try {
       const nextContacts = await fetchChatContacts(user.id, canSeeAllUsers)
+      console.log("[Chat] USERS:", nextContacts)
+      setDebugUsers(nextContacts)
       setContacts(nextContacts)
       setSelectedContact((current) => current || nextContacts[0] || null)
     } catch (error) {
+      console.error("[Chat] CONTACTS ERROR:", error)
+      pushDebugError("loadContacts", error)
       showToast("Impossible de charger les conversations.", "error")
     } finally {
       setContactsLoading(false)
@@ -105,20 +167,39 @@ export default function Chat({ adminMode = false }) {
   const loadMessages = useCallback(async () => {
     if (!user?.id) {
       debugWarn("[Chat] loadMessages skipped: user is null")
+      console.log("[Chat] FETCH PARAMS:", user?.id, selectedContact?.id)
+      setDebugLastFetchResult({
+        params: {
+          userId: user?.id || null,
+          selectedUserId: selectedContact?.id || null,
+        },
+        data: [],
+        error: "user is null",
+      })
+      pushDebugError("loadMessages", "User is null")
       setMessages([])
       return
     }
 
     if (!selectedContact?.id) {
       debugWarn("[Chat] loadMessages skipped: selected user is null")
+      console.log("[Chat] FETCH PARAMS:", user?.id, selectedContact?.id)
+      setDebugLastFetchResult({
+        params: {
+          userId: user?.id || null,
+          selectedUserId: selectedContact?.id || null,
+        },
+        data: [],
+        error: "selected user is null",
+      })
+      pushDebugError("loadMessages", "Selected user is null")
       setMessages([])
       return
     }
 
     setMessagesLoading(true)
     try {
-      debugLog("[Chat] current user id:", user.id)
-      debugLog("[Chat] selected user id:", selectedContact.id)
+      console.log("[Chat] FETCH PARAMS:", user.id, selectedContact.id)
 
       const { data, error } = await supabase
         .from("messages")
@@ -128,16 +209,29 @@ export default function Chat({ adminMode = false }) {
         )
         .order("created_at", { ascending: true })
 
+      console.log("[Chat] FETCH RESULT:", data, error)
+
+      setDebugLastFetchResult({
+        params: {
+          userId: user.id,
+          selectedUserId: selectedContact.id,
+        },
+        data: data || [],
+        error: error ? { message: error.message, code: error.code } : null,
+      })
+
       if (error) throw error
 
       debugLog("[Chat] fetched messages:", data)
       setMessages(data || [])
     } catch (error) {
+      console.error("[Chat] MESSAGE FETCH ERROR:", error)
+      pushDebugError("loadMessages", error)
       showToast("Impossible de charger les messages.", "error")
     } finally {
       setMessagesLoading(false)
     }
-  }, [selectedContact?.id, selectedContact, showToast, user?.id])
+  }, [selectedContact, showToast, user?.id])
 
   useEffect(() => {
     selectedContactRef.current = selectedContact
@@ -178,6 +272,34 @@ export default function Chat({ adminMode = false }) {
   }, [user?.id])
 
   useEffect(() => {
+    const channel = supabase
+      .channel("debug-chat")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+        },
+        (payload) => {
+          console.log("[Chat] REALTIME EVENT:", payload)
+          setDebugLastRealtimeEvent(payload)
+        },
+      )
+      .subscribe((status) => {
+        console.log("[Chat] REALTIME STATUS:", status)
+        setDebugRealtimeStatus(status || "not connected")
+        if (status !== "SUBSCRIBED") {
+          pushDebugError("realtime", `Realtime status: ${status}`)
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!messages.length) return
 
     const missingAudio = messages.filter((item) => item.audio_url && !audioUrls[item.audio_url])
@@ -197,7 +319,7 @@ export default function Chat({ adminMode = false }) {
             ...Object.fromEntries(resolved),
           }))
         }
-      } catch (error) {
+      } catch {
         showToast("Impossible de charger un message audio.", "error")
       }
     })()
@@ -223,14 +345,22 @@ export default function Chat({ adminMode = false }) {
   async function handleSendMessage() {
     if (!user?.id) {
       debugWarn("[Chat] send skipped: user is null")
+      pushDebugError("handleSendMessage", "User is null")
       return
     }
     if (!selectedContact?.id) {
       debugWarn("[Chat] send skipped: selected user is null")
+      pushDebugError("handleSendMessage", "Selected user is null")
       return
     }
     const trimmedDraft = draft.trim()
     if (!trimmedDraft || sending) return
+
+    console.log("SENDING:", {
+      sender: user?.id,
+      receiver: selectedContact?.id,
+      text: trimmedDraft,
+    })
 
     setSending(true)
     try {
@@ -246,12 +376,27 @@ export default function Chat({ adminMode = false }) {
         .select("*")
         .single()
 
+      console.log("INSERT RESULT:", data, error)
+      setDebugLastInsertResult({
+        data: data || null,
+        error: error ? { message: error.message, code: error.code } : null,
+      })
+
       if (error) throw error
 
       debugLog("[Chat] insert result:", data)
       setDraft("")
       await loadMessages()
     } catch (error) {
+      console.error("[Chat] INSERT ERROR:", error)
+      pushDebugError("handleSendMessage", error)
+      setDebugLastInsertResult({
+        data: null,
+        error: {
+          message: error?.message || "insert failed",
+          code: error?.code || null,
+        },
+      })
       showToast("Envoi du message impossible.", "error")
     } finally {
       setSending(false)
@@ -293,7 +438,7 @@ export default function Chat({ adminMode = false }) {
 
           debugLog("[Chat] audio insert result:", insertedMessage)
           await loadMessages()
-        } catch (error) {
+        } catch {
           showToast("Envoi du message audio impossible.", "error")
         } finally {
           setSending(false)
@@ -303,7 +448,7 @@ export default function Chat({ adminMode = false }) {
       mediaRecorderRef.current = { recorder, stream }
       recorder.start()
       setRecording(true)
-    } catch (error) {
+    } catch {
       showToast("Accès au micro refusé.", "error")
     }
   }
@@ -448,6 +593,8 @@ export default function Chat({ adminMode = false }) {
                   )}
                 </div>
 
+                <pre style={styles.debugJson}>{JSON.stringify(messages, null, 2)}</pre>
+
                 <div style={styles.composer}>
                   <textarea
                     rows={2}
@@ -492,6 +639,57 @@ export default function Chat({ adminMode = false }) {
           </section>
         )}
       </div>
+
+      <div style={styles.debugPanel}>
+        <div style={styles.debugTitle}>Chat Debug</div>
+        <div style={styles.debugLine}>
+          <strong>current user.id:</strong> {user?.id || "null"}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>auth user.id:</strong> {debugAuthUser?.id || "null"}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>selectedUser.id:</strong> {selectedContact?.id || "null"}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>users loaded:</strong> {debugUsers.length}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>user ids:</strong> {debugUsers.map((item) => item.id).join(", ") || "none"}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>messages loaded:</strong> {messages.length}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>last message:</strong>{" "}
+          {messages.length ? JSON.stringify(messages[messages.length - 1]) : "none"}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>last insert result:</strong> {JSON.stringify(debugLastInsertResult)}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>last fetch result:</strong> {JSON.stringify(debugLastFetchResult)}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>realtime status:</strong> {debugRealtimeStatus}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>last realtime event:</strong> {JSON.stringify(debugLastRealtimeEvent)}
+        </div>
+        <div style={styles.debugLine}>
+          <strong>errors:</strong>
+        </div>
+        {debugAuthUser ? null : <div style={styles.debugError}>BIG ERROR: auth user is null</div>}
+        {debugErrors.length ? (
+          debugErrors.map((item) => (
+            <div key={item.id} style={styles.debugError}>
+              [{item.source}] {item.message}
+            </div>
+          ))
+        ) : (
+          <div style={styles.debugLine}>none</div>
+        )}
+      </div>
     </div>
   )
 }
@@ -527,6 +725,49 @@ const styles = {
     margin: "8px 0 0",
     color: "#475569",
     lineHeight: 1.6,
+  },
+  debugPanel: {
+    position: "fixed",
+    right: 16,
+    bottom: 16,
+    width: "min(360px, calc(100vw - 24px))",
+    maxHeight: "40vh",
+    overflow: "auto",
+    zIndex: 10001,
+    background: "rgba(15, 23, 42, 0.96)",
+    color: "#e2e8f0",
+    border: "1px solid rgba(148, 163, 184, 0.35)",
+    borderRadius: 14,
+    boxShadow: "0 20px 50px rgba(15, 23, 42, 0.4)",
+    padding: 12,
+    fontSize: 12,
+    lineHeight: 1.5,
+    fontFamily: "monospace",
+  },
+  debugTitle: {
+    fontWeight: 800,
+    marginBottom: 8,
+    color: "#f8fafc",
+  },
+  debugLine: {
+    marginBottom: 6,
+    wordBreak: "break-word",
+  },
+  debugError: {
+    marginBottom: 6,
+    color: "#fca5a5",
+    wordBreak: "break-word",
+  },
+  debugJson: {
+    margin: 0,
+    padding: 12,
+    borderTop: "1px solid rgba(226, 232, 240, 0.8)",
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: 11,
+    overflowX: "auto",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
   },
   layout: {
     display: "grid",
