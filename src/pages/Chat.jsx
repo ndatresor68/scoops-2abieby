@@ -9,11 +9,9 @@ import {
   FaUserCircle,
 } from "react-icons/fa"
 import { useToast } from "../components/ui/Toast"
-import { useAuth } from "../context/AuthContext"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { supabase } from "../supabaseClient"
 import {
-  fetchChatContacts,
   getAudioPlaybackUrl,
   mergeMessage,
   sendAudioMessage,
@@ -38,7 +36,6 @@ function formatTimestamp(dateString) {
 }
 
 export default function Chat({ adminMode = false }) {
-  const { isAdmin } = useAuth()
   const { showToast } = useToast()
   const isMobile = useMediaQuery("(max-width: 900px)")
   const scrollRef = useRef(null)
@@ -65,7 +62,6 @@ export default function Chat({ adminMode = false }) {
   const [debugLastFetchResult, setDebugLastFetchResult] = useState(null)
   const [debugLastRealtimeEvent, setDebugLastRealtimeEvent] = useState(null)
 
-  const canSeeAllUsers = adminMode || isAdmin
   const supportsAudioRecording =
     typeof window !== "undefined" &&
     typeof navigator !== "undefined" &&
@@ -145,27 +141,38 @@ export default function Chat({ adminMode = false }) {
     }
   }, [])
 
-  const loadContacts = useCallback(async () => {
+  const loadUsers = useCallback(async () => {
     if (!currentUser?.id) {
       pushDebugError("loadContacts", "User is null while loading contacts")
       return
     }
+
+    console.log("LOAD USERS CALLED")
     setContactsLoading(true)
 
     try {
-      const nextContacts = await fetchChatContacts(currentUser.id, canSeeAllUsers)
-      console.log("[Chat] USERS:", nextContacts)
-      setDebugUsers(nextContacts)
-      setContacts(nextContacts)
-      setSelectedContact((current) => current || nextContacts[0] || null)
+      const { data, error } = await supabase
+        .from("utilisateurs")
+        .select("*")
+
+      console.log("USERS RAW:", data, error)
+
+      if (error) {
+        throw error
+      }
+
+      const nextUsers = data || []
+      setDebugUsers(nextUsers)
+      setContacts(nextUsers)
+      setSelectedContact((current) => current || nextUsers[0] || null)
     } catch (error) {
       console.error("[Chat] CONTACTS ERROR:", error)
-      pushDebugError("loadContacts", error)
+      pushDebugError("loadUsers", error)
       showToast("Impossible de charger les conversations.", "error")
     } finally {
       setContactsLoading(false)
     }
-  }, [canSeeAllUsers, currentUser?.id, showToast])
+  }, [currentUser?.id, showToast])
 
   const loadMessages = useCallback(async () => {
     if (!currentUser?.id) {
@@ -242,8 +249,8 @@ export default function Chat({ adminMode = false }) {
 
   useEffect(() => {
     if (!currentUser) return
-    loadContacts()
-  }, [currentUser, loadContacts])
+    loadUsers()
+  }, [currentUser, loadUsers])
 
   useEffect(() => {
     loadMessages()
