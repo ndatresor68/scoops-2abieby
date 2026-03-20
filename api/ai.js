@@ -1,4 +1,4 @@
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-5.3"
+const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini"
 
 function buildPrompt(user, stats) {
   return `You are a business advisor specialized in agricultural cooperatives.
