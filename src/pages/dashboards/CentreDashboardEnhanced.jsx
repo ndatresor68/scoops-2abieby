@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import {
   FaUsers,
@@ -12,7 +12,6 @@ import {
 import Card from "../../components/ui/Card"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
-import { useMediaQuery } from "../../hooks/useMediaQuery"
 import {
   MonthlyPurchasesChart,
   TopProducteursChart,
@@ -27,7 +26,7 @@ import {
 export default function CentreDashboardEnhanced() {
   const { showToast } = useToast()
   const { user } = useAuth()
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const hasFetched = useRef(false)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     nombreProducteurs: 0,
@@ -46,10 +45,12 @@ export default function CentreDashboardEnhanced() {
   })
 
   useEffect(() => {
-    if (user?.centre_id) {
-      fetchDashboardData()
-    }
-  }, [user])
+    if (hasFetched.current) return
+    hasFetched.current = true
+    console.log("FETCH CALLED")
+    fetchDashboardData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function fetchDashboardData() {
     if (!user?.centre_id) {
@@ -58,8 +59,6 @@ export default function CentreDashboardEnhanced() {
     }
 
     try {
-      setLoading(true)
-
       // Fetch centre info
       const { data: centreData } = await supabase
         .from("centres")
@@ -104,7 +103,7 @@ export default function CentreDashboardEnhanced() {
       })
 
       // Prepare chart data
-      prepareChartData(achatsData, livraisonsData)
+      prepareChartData(achatsData, livraisonsData, centreData)
     } catch (error) {
       console.error("[CentreDashboardEnhanced] Error:", error)
       showToast("Erreur lors du chargement des données", "error")
@@ -113,7 +112,7 @@ export default function CentreDashboardEnhanced() {
     }
   }
 
-  function prepareChartData(achatsData, livraisonsData) {
+  function prepareChartData(achatsData, livraisonsData, currentCentreInfo) {
     // 1. Monthly purchases chart
     const monthlyData = {}
     achatsData.forEach((achat) => {
@@ -162,7 +161,7 @@ export default function CentreDashboardEnhanced() {
       monthlyPurchases,
       topProducteurs,
       livraisonsStatus,
-      stockByCentre: [{ name: centreInfo?.nom || "Centre", stock: Math.max(0, stock) }],
+      stockByCentre: [{ name: currentCentreInfo?.nom || "Centre", stock: Math.max(0, stock) }],
     })
   }
 

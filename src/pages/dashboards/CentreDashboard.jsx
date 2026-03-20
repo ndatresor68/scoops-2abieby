@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaUsers, FaWeightHanging, FaBox, FaDollarSign } from "react-icons/fa"
 import Card from "../../components/ui/Card"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
-import { useMediaQuery } from "../../hooks/useMediaQuery"
 
 /**
  * CENTRE Dashboard
@@ -13,7 +12,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery"
 export default function CentreDashboard() {
   const { showToast } = useToast()
   const { user } = useAuth()
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const hasFetched = useRef(false)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     producersInCentre: 0,
@@ -24,10 +23,12 @@ export default function CentreDashboard() {
   const [centreInfo, setCentreInfo] = useState(null)
 
   useEffect(() => {
-    if (user?.centre_id) {
-      fetchStats()
-    }
-  }, [user])
+    if (hasFetched.current) return
+    hasFetched.current = true
+    console.log("FETCH CALLED")
+    fetchStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function fetchStats() {
     if (!user?.centre_id) {
@@ -36,8 +37,6 @@ export default function CentreDashboard() {
     }
 
     try {
-      setLoading(true)
-
       // Fetch centre info
       const { data: centreData } = await supabase
         .from("centres")
