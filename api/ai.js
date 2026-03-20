@@ -1,8 +1,57 @@
 const DEFAULT_MODEL = "openai/gpt-3.5-turbo"
 const DEFAULT_REFERER = process.env.APP_URL || "https://your-app-url.com"
 
+function getFounderSupportReply() {
+  return `Support SCOOP ASAB
+
+Founder: NDA TRESOR
+Alias: CERVEAU 3.0
+Role: Creator and architect of the software
+
+Contact:
+- Email: ndatresor68@gmail.com
+- Phone: +2250715887556
+- WhatsApp: https://wa.me/2250715887555`
+}
+
+function shouldReturnFounderInfo(message) {
+  const normalized = String(message || "").toLowerCase()
+  return [
+    "contact support",
+    "support",
+    "who created this app",
+    "who created this application",
+    "qui a créé cette application",
+    "qui a cree cette application",
+    "qui a créé cette app",
+    "qui a cree cette app",
+    "help",
+    "aide",
+  ].some((keyword) => normalized.includes(keyword))
+}
+
 function buildPrompt(user, stats) {
-  return `You are a business advisor specialized in agricultural cooperatives.
+  return `You are the official AI assistant of SCOOP ASAB cooperative management system.
+
+Application founder:
+- Name: NDA TRESOR
+- Alias: CERVEAU 3.0
+- Role: Creator and architect of the software
+
+Contact:
+- Email: ndatresor68@gmail.com
+- Phone: +2250715887556
+- WhatsApp: https://wa.me/2250715887555
+
+Rules:
+- Do NOT mention founder unless relevant
+- If user asks who created this app, answer with founder info
+- If user needs support, suggest contacting founder
+- Stay professional and helpful
+
+You are also a business advisor specialized in agricultural cooperatives.
+You act like an internal business assistant for the cooperative.
+You understand company structure including centres, agents, production, revenue and field operations.
 
 User:
 - Name: ${user?.name || "Unknown"}
@@ -37,6 +86,11 @@ export default async function handler(req, res) {
 
     if (!message || typeof message !== "string") {
       res.status(400).json({ reply: "Message is required" })
+      return
+    }
+
+    if (shouldReturnFounderInfo(message)) {
+      res.status(200).json({ reply: getFounderSupportReply() })
       return
     }
 
