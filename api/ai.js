@@ -1,4 +1,5 @@
-const DEFAULT_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini"
+const DEFAULT_MODEL = "openai/gpt-3.5-turbo"
+const DEFAULT_REFERER = process.env.APP_URL || "https://your-app-url.com"
 
 function buildPrompt(user, stats) {
   return `You are a business advisor specialized in agricultural cooperatives.
@@ -26,8 +27,8 @@ export default async function handler(req, res) {
     return
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(500).json({ reply: "OPENAI_API_KEY is not configured" })
+  if (!process.env.OPENROUTER_API_KEY) {
+    res.status(500).json({ reply: "OPENROUTER_API_KEY is not configured" })
     return
   }
 
@@ -41,10 +42,12 @@ export default async function handler(req, res) {
 
     const prompt = buildPrompt(user, stats)
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": DEFAULT_REFERER,
+        "X-Title": "SCOOP ASAB APP",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -62,7 +65,10 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       res.status(response.status).json({
-        reply: data?.error?.message || "Erreur IA",
+        reply:
+          data?.error?.message ||
+          data?.message ||
+          "Erreur IA",
       })
       return
     }
