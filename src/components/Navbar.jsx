@@ -1,5 +1,6 @@
 import {
   FaChartLine,
+  FaComments,
   FaCog,
   FaStore,
   FaUserShield,
@@ -16,6 +17,7 @@ import { useAuth } from "../context/AuthContext"
 // ADMIN Menu
 const ADMIN_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
+  { id: "chat", label: "Chat", icon: FaComments },
   { id: "centres", label: "Centres", icon: FaStore },
   { id: "admin-users", label: "Utilisateurs", icon: FaUsers },
   { id: "producteurs", label: "Producteurs", icon: FaUsers },
@@ -27,6 +29,7 @@ const ADMIN_MODULES = [
 // AGENT Menu
 const AGENT_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
+  { id: "chat", label: "Chat", icon: FaComments },
   { id: "producteurs", label: "Producteurs", icon: FaUsers },
   { id: "parcelles", label: "Parcelles", icon: FaSeedling },
   { id: "activites", label: "Activités terrain", icon: FaClipboardList },
@@ -35,6 +38,7 @@ const AGENT_MODULES = [
 // CENTRE Menu
 const CENTRE_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
+  { id: "chat", label: "Chat", icon: FaComments },
   { id: "producteurs", label: "Producteurs", icon: FaUsers },
   { id: "achats", label: "Achats", icon: FaWeightHanging },
   { id: "parcelles", label: "Gestion Parcelles", icon: FaSeedling },

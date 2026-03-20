@@ -16,6 +16,7 @@ import AdminDashboard from "../pages/AdminDashboard"
 import AdminDashboardRole from "../pages/dashboards/AdminDashboard"
 import CentreDashboardEnhanced from "../pages/dashboards/CentreDashboardEnhanced"
 import AgentDashboard from "../pages/dashboards/AgentDashboard"
+import Chat from "../pages/Chat"
 import Profile from "../pages/Profile"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
@@ -27,6 +28,7 @@ import { listenNotifications, requestNotificationPermission } from "../notificat
 
 const TITLES = {
   dashboard: "Tableau de Bord",
+  chat: "Messagerie",
   centres: "Gestion des Centres",
   producteurs: "Gestion des Producteurs",
   achats: "Gestion des Achats",
@@ -34,6 +36,14 @@ const TITLES = {
   profile: "Mon Profil",
   admin: "Administration",
   "admin-users": "Gestion des Utilisateurs",
+}
+
+const PAGE_PATHS = {
+  chat: "/chat",
+}
+
+function getPageFromPath(pathname) {
+  return pathname === "/chat" ? "chat" : "dashboard"
 }
 
 export default function Layout() {
@@ -48,7 +58,10 @@ export default function Layout() {
     if (typeof Notification === "undefined") return true
     return Notification.permission === "granted" || Notification.permission === "denied"
   })
-  const [activePage, setActivePage] = useState("dashboard")
+  const [activePage, setActivePage] = useState(() => {
+    if (typeof window === "undefined") return "dashboard"
+    return getPageFromPath(window.location.pathname)
+  })
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -74,6 +87,15 @@ export default function Layout() {
     onResize()
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
+  }, [])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setActivePage(getPageFromPath(window.location.pathname))
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
   }, [])
 
   useEffect(() => {
@@ -266,6 +288,17 @@ export default function Layout() {
     return <AdminDashboard />
   }
 
+  function navigateToPage(nextPage) {
+    setActivePage(nextPage)
+    setMobileOpen(false)
+
+    if (typeof window === "undefined") return
+    const nextPath = PAGE_PATHS[nextPage] || "/"
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, "", nextPath)
+    }
+  }
+
   function renderPage() {
     switch (activePage) {
       case "dashboard":
@@ -278,6 +311,8 @@ export default function Layout() {
         return <DashboardCentral />
       case "centres":
         return <DashboardCentral />
+      case "chat":
+        return <Chat />
       case "producteurs":
         return <Producteurs />
       case "achats":
@@ -314,7 +349,7 @@ export default function Layout() {
     <div style={shell}>
       <Navbar
         activePage={activePage}
-        onNavigate={setActivePage}
+        onNavigate={navigateToPage}
         collapsed={collapsed}
         mobileOpen={mobileOpen}
         onCloseMobile={() => setMobileOpen(false)}
@@ -366,8 +401,8 @@ export default function Layout() {
           </div>
 
           <UserMenu
-            onOpenProfile={() => setActivePage("profile")}
-            onOpenSettings={() => setActivePage("parametres")}
+            onOpenProfile={() => navigateToPage("profile")}
+            onOpenSettings={() => navigateToPage("parametres")}
           />
         </header>
 
