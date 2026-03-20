@@ -11,13 +11,12 @@ import {
 import { useToast } from "../components/ui/Toast"
 import { useAuth } from "../context/AuthContext"
 import { useMediaQuery } from "../hooks/useMediaQuery"
+import { supabase } from "../supabaseClient"
 import {
   fetchChatContacts,
-  fetchConversationMessages,
   getAudioPlaybackUrl,
   mergeMessage,
   sendAudioMessage,
-  sendTextMessage,
   subscribeToUserMessages,
 } from "../utils/chat"
 
@@ -76,6 +75,18 @@ export default function Chat({ adminMode = false }) {
 
   const selectedConversationId = selectedContact?.id || null
 
+  function debugLog(...args) {
+    if (import.meta.env.DEV) {
+      console.log(...args)
+    }
+  }
+
+  function debugWarn(...args) {
+    if (import.meta.env.DEV) {
+      console.warn(...args)
+    }
+  }
+
   const loadContacts = useCallback(async () => {
     if (!user?.id) return
     setContactsLoading(true)
@@ -91,22 +102,42 @@ export default function Chat({ adminMode = false }) {
     }
   }, [canSeeAllUsers, showToast, user?.id])
 
-  const loadConversation = useCallback(async () => {
-    if (!user?.id || !selectedConversationId) {
+  const loadMessages = useCallback(async () => {
+    if (!user?.id) {
+      debugWarn("[Chat] loadMessages skipped: user is null")
+      setMessages([])
+      return
+    }
+
+    if (!selectedContact?.id) {
+      debugWarn("[Chat] loadMessages skipped: selected user is null")
       setMessages([])
       return
     }
 
     setMessagesLoading(true)
     try {
-      const nextMessages = await fetchConversationMessages(user.id, selectedConversationId)
-      setMessages(nextMessages)
+      debugLog("[Chat] current user id:", user.id)
+      debugLog("[Chat] selected user id:", selectedContact.id)
+
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .or(
+          `and(sender_id.eq.${user.id},receiver_id.eq.${selectedContact.id}), and(sender_id.eq.${selectedContact.id},receiver_id.eq.${user.id})`,
+        )
+        .order("created_at", { ascending: true })
+
+      if (error) throw error
+
+      debugLog("[Chat] fetched messages:", data)
+      setMessages(data || [])
     } catch (error) {
       showToast("Impossible de charger les messages.", "error")
     } finally {
       setMessagesLoading(false)
     }
-  }, [selectedConversationId, showToast, user?.id])
+  }, [selectedContact?.id, selectedContact, showToast, user?.id])
 
   useEffect(() => {
     selectedContactRef.current = selectedContact
@@ -117,8 +148,8 @@ export default function Chat({ adminMode = false }) {
   }, [loadContacts])
 
   useEffect(() => {
-    loadConversation()
-  }, [loadConversation])
+    loadMessages()
+  }, [loadMessages])
 
   useEffect(() => {
     if (!user?.id) return undefined
@@ -190,20 +221,36 @@ export default function Chat({ adminMode = false }) {
   }, [])
 
   async function handleSendMessage() {
-    if (!user?.id || !selectedConversationId) return
+    if (!user?.id) {
+      debugWarn("[Chat] send skipped: user is null")
+      return
+    }
+    if (!selectedContact?.id) {
+      debugWarn("[Chat] send skipped: selected user is null")
+      return
+    }
     const trimmedDraft = draft.trim()
     if (!trimmedDraft || sending) return
 
     setSending(true)
     try {
-      const insertedMessage = await sendTextMessage({
-        senderId: user.id,
-        receiverId: selectedConversationId,
-        message: trimmedDraft,
-      })
+      const { data, error } = await supabase
+        .from("messages")
+        .insert([
+          {
+            sender_id: user.id,
+            receiver_id: selectedContact.id,
+            message: trimmedDraft,
+          },
+        ])
+        .select("*")
+        .single()
 
-      setMessages((current) => mergeMessage(current, insertedMessage))
+      if (error) throw error
+
+      debugLog("[Chat] insert result:", data)
       setDraft("")
+      await loadMessages()
     } catch (error) {
       showToast("Envoi du message impossible.", "error")
     } finally {
@@ -244,7 +291,8 @@ export default function Chat({ adminMode = false }) {
             audioBlob,
           })
 
-          setMessages((current) => mergeMessage(current, insertedMessage))
+          debugLog("[Chat] audio insert result:", insertedMessage)
+          await loadMessages()
         } catch (error) {
           showToast("Envoi du message audio impossible.", "error")
         } finally {
@@ -382,7 +430,7 @@ export default function Chat({ adminMode = false }) {
                               ...(isOwnMessage ? styles.ownBubble : styles.otherBubble),
                             }}
                           >
-                            {messageItem.message ? <div>{messageItem.message}</div> : null}
+                            <div>{messageItem.message || ""}</div>
                             {messageItem.audio_url ? (
                               audioSrc ? (
                                 <audio controls preload="none" src={audioSrc} style={styles.audioPlayer} />
