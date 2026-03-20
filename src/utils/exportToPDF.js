@@ -205,6 +205,138 @@ export async function exportToPDF({
   }
 }
 
+export async function exportActivityAuditReportPDF({
+  logs = [],
+  analysis = null,
+  filename = "activity-report",
+}) {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  })
+
+  const pageWidth = doc.internal.pageSize.getWidth()
+  let currentY = 18
+
+  doc.setFillColor(122, 31, 31)
+  doc.rect(0, 0, pageWidth, 22, "F")
+  doc.setTextColor(255, 255, 255)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(16)
+  doc.text("SCOOP ASAB-COOP-CA", pageWidth / 2, 14, { align: "center" })
+
+  doc.setTextColor(15, 23, 42)
+  currentY = 32
+  doc.setFontSize(15)
+  doc.text("Activity Monitoring Report", 14, currentY)
+
+  currentY += 8
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  doc.text(
+    `Generated on ${new Date().toLocaleString("fr-FR")} • ${logs.length} logs analysed`,
+    14,
+    currentY,
+  )
+
+  const actionCounts = logs.reduce((acc, log) => {
+    acc[log.action] = (acc[log.action] || 0) + 1
+    return acc
+  }, {})
+
+  currentY += 12
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(12)
+  doc.text("Summary", 14, currentY)
+
+  currentY += 6
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(10)
+  const summaryLines = [
+    `Unique users: ${new Set(logs.map((log) => log.user_id || log.user_name).filter(Boolean)).size}`,
+    `Important actions: ${Object.entries(actionCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([action, count]) => `${action} (${count})`)
+      .join(", ") || "none"}`,
+  ]
+  summaryLines.forEach((line) => {
+    doc.text(line, 14, currentY)
+    currentY += 5
+  })
+
+  if (analysis) {
+    currentY += 4
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(12)
+    doc.text("AI Monitoring", 14, currentY)
+    currentY += 6
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+
+    const analysisText = analysis.summary || "No AI summary available."
+    const splitSummary = doc.splitTextToSize(analysisText, 180)
+    doc.text(splitSummary, 14, currentY)
+    currentY += splitSummary.length * 5 + 4
+
+    if (analysis.highlights?.length) {
+      doc.setFont("helvetica", "bold")
+      doc.text("Highlights", 14, currentY)
+      currentY += 6
+      doc.setFont("helvetica", "normal")
+      analysis.highlights.slice(0, 5).forEach((item) => {
+        const lines = doc.splitTextToSize(`- ${item}`, 180)
+        doc.text(lines, 14, currentY)
+        currentY += lines.length * 5
+      })
+    }
+
+    if (analysis.anomalies?.length) {
+      currentY += 4
+      doc.setFont("helvetica", "bold")
+      doc.text("Anomalies", 14, currentY)
+      currentY += 6
+      doc.setFont("helvetica", "normal")
+      analysis.anomalies.slice(0, 5).forEach((item) => {
+        const text = typeof item === "string" ? item : `${item.title || "Alert"}: ${item.reason || ""}`
+        const lines = doc.splitTextToSize(`- ${text}`, 180)
+        doc.text(lines, 14, currentY)
+        currentY += lines.length * 5
+      })
+    }
+  }
+
+  const tableBody = logs.slice(0, 50).map((log) => [
+    log.created_at ? new Date(log.created_at).toLocaleString("fr-FR") : "-",
+    log.user_name || "-",
+    log.action || "-",
+    log.page || "-",
+    log.details || "-",
+  ])
+
+  autoTable(doc, {
+    startY: Math.min(currentY + 8, 230),
+    head: [["Date", "User", "Action", "Page", "Details"]],
+    body: tableBody,
+    theme: "grid",
+    headStyles: {
+      fillColor: [122, 31, 31],
+      textColor: 255,
+      fontStyle: "bold",
+      fontSize: 9,
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [15, 23, 42],
+    },
+    margin: { left: 10, right: 10 },
+  })
+
+  const dateStr = new Date().toISOString().split("T")[0]
+  doc.save(`${filename}-${dateStr}.pdf`)
+}
+
 /**
  * Helper function to get nested object values
  */

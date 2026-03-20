@@ -20,6 +20,7 @@ export default function AIChatModal({ onClose }) {
   const scrollRef = useRef(null)
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
+  const [executingAction, setExecutingAction] = useState(false)
   const [stats, setStats] = useState({
     production: 0,
     revenue: 0,
@@ -119,6 +120,7 @@ export default function AIChatModal({ onClose }) {
         {
           role: "assistant",
           content: data?.reply || "Aucune réponse disponible.",
+          action: data?.action || null,
         },
       ])
 
@@ -137,6 +139,59 @@ export default function AIChatModal({ onClose }) {
     } finally {
       setSending(false)
     }
+  }
+
+  async function handleConfirmAction(action, index) {
+    if (!action || executingAction) return
+
+    try {
+      setExecutingAction(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+
+      const res = await fetch("/api/admin-action", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(action),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      setMessages((prev) =>
+        prev.map((message, currentIndex) =>
+          currentIndex === index ? { ...message, action: null } : message,
+        ),
+      )
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data?.reply || (res.ok ? "Action exécutée." : "Action impossible."),
+        },
+      ])
+
+      if (!res.ok) {
+        showToast(data?.reply || "Echec de l'action admin", "error")
+      } else {
+        showToast(data?.reply || "Action exécutée", "success")
+      }
+    } catch (error) {
+      showToast("Impossible d'exécuter l'action admin", "error")
+    } finally {
+      setExecutingAction(false)
+    }
+  }
+
+  function handleCancelAction(index) {
+    setMessages((prev) =>
+      prev.map((message, currentIndex) =>
+        currentIndex === index ? { ...message, action: null } : message,
+      ),
+    )
   }
 
   return (
@@ -179,7 +234,31 @@ export default function AIChatModal({ onClose }) {
                   ...(message.role === "user" ? styles.userBubble : styles.assistantBubble),
                 }}
               >
-                {message.content}
+                <div>{message.content}</div>
+                {message.action ? (
+                  <div style={styles.actionBox}>
+                    <div style={styles.actionTitle}>Action detected: {message.action.type}</div>
+                    <div style={styles.actionTarget}>Target: {message.action.target}</div>
+                    <div style={styles.actionButtons}>
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmAction(message.action, index)}
+                        disabled={executingAction}
+                        style={{ ...styles.actionButton, ...styles.confirmButton }}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelAction(index)}
+                        disabled={executingAction}
+                        style={{ ...styles.actionButton, ...styles.cancelButton }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
@@ -314,6 +393,42 @@ const styles = {
     background: "#ffffff",
     color: "#0f172a",
     border: "1px solid rgba(226, 232, 240, 0.95)",
+  },
+  actionBox: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTop: "1px solid rgba(226, 232, 240, 0.95)",
+  },
+  actionTitle: {
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#991b1b",
+  },
+  actionTarget: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#475569",
+  },
+  actionButtons: {
+    display: "flex",
+    gap: 8,
+    marginTop: 10,
+  },
+  actionButton: {
+    border: "none",
+    borderRadius: 10,
+    padding: "8px 10px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  confirmButton: {
+    background: "#991b1b",
+    color: "#ffffff",
+  },
+  cancelButton: {
+    background: "#e2e8f0",
+    color: "#0f172a",
   },
   composer: {
     display: "flex",

@@ -47,6 +47,7 @@ import {
   markNotificationAsRead,
   subscribeToNotifications,
 } from "../utils/notifications"
+import { logAppActivity } from "../utils/activityLogger"
 import logoImage from "../assets/logo-scoops.png"
 
 const SECTIONS = {
@@ -70,7 +71,7 @@ const SECTION_PATHS = {
   producteurs: "/admin/producteurs",
   pesees: "/admin/pesees",
   parcelles: "/admin/parcelles",
-  activites: "/admin/activites",
+  activites: "/admin/activity",
   notifications: "/admin/notifications",
   settings: "/admin/settings",
 }
@@ -94,6 +95,7 @@ const SECTION_GROUPS = [
 ]
 
 function getSectionFromPath(pathname) {
+  if (pathname === "/admin/activites") return "activites"
   const match = Object.entries(SECTION_PATHS).find(([, path]) => path === pathname)
   return match?.[0] || "stats"
 }
@@ -349,12 +351,19 @@ export default function AdminDashboard() {
   }
 
   function navigateToSection(sectionId) {
+    const normalizedSection = sectionId === "activity" ? "activites" : sectionId
     setShowProfile(false)
     setProfileEditMode(false)
-    setActiveSection(sectionId)
+    setActiveSection(normalizedSection)
     setSidebarOpen(false)
     setSearchOpen(false)
     setSearchQuery("")
+
+    if (user) {
+      const sectionLabel = SECTIONS[normalizedSection]?.label || normalizedSection
+      const sectionPath = normalizedSection === "activites" ? "/admin/activity" : SECTION_PATHS[normalizedSection] || "/admin"
+      logAppActivity(user, "navigation", `Opened ${sectionLabel}`, sectionPath)
+    }
   }
 
   function openProfile(editMode = false) {

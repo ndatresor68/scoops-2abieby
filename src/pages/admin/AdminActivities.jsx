@@ -1,824 +1,493 @@
-import { useEffect, useState, useMemo } from "react"
-import { supabase } from "../../supabaseClient"
-import {
-  FaHistory,
-  FaUser,
-  FaBuilding,
-  FaUserTie,
-  FaShoppingCart,
-  FaFilePdf,
-  FaSearch,
-  FaFilter,
-  FaDownload,
-  FaDesktop,
-  FaMobile,
-  FaTablet,
-  FaGlobe,
-} from "react-icons/fa"
-import { useAuth } from "../../context/AuthContext"
-import { useToast } from "../../components/ui/Toast"
-import Input from "../../components/ui/Input"
-import Button from "../../components/ui/Button"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { FaDownload, FaHistory, FaSearch, FaShieldAlt, FaUserSecret } from "react-icons/fa"
 import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
-import { exportActivitiesPDF } from "../../utils/exportToPDF"
+import Button from "../../components/ui/Button"
+import Input from "../../components/ui/Input"
+import { useToast } from "../../components/ui/Toast"
+import { useAuth } from "../../context/AuthContext"
+import { supabase } from "../../supabaseClient"
+import { exportActivityAuditReportPDF } from "../../utils/exportToPDF"
 import { logPDFExported } from "../../utils/activityLogger"
 
-const ACTION_TYPES = {
-  all: { label: "Toutes", icon: FaHistory },
-  user: { label: "Utilisateurs", icon: FaUser },
-  centre: { label: "Centres", icon: FaBuilding },
-  producteur: { label: "Producteurs", icon: FaUserTie },
-  achat: { label: "Achats", icon: FaShoppingCart },
-  system: { label: "Système", icon: FaHistory },
-  pdf: { label: "PDF", icon: FaFilePdf },
-  settings: { label: "Paramètres", icon: FaFilter },
-}
-
-const ACTION_FILTERS = {
-  all: { label: "Toutes les actions" },
-  login: { label: "Connexions" },
-  logout: { label: "Déconnexions" },
-  user_created: { label: "Créations utilisateurs" },
-  user_updated: { label: "Modifications utilisateurs" },
-  user_deleted: { label: "Suppressions utilisateurs" },
-  producer_created: { label: "Créations producteurs" },
-  producer_updated: { label: "Modifications producteurs" },
-  producer_deleted: { label: "Suppressions producteurs" },
-  centre_created: { label: "Créations centres" },
-  centre_updated: { label: "Modifications centres" },
-  centre_deleted: { label: "Suppressions centres" },
-  pdf_exported: { label: "Exports PDF" },
+function formatDate(value) {
+  if (!value) return "-"
+  return new Date(value).toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function AdminActivities() {
   const { isAdmin, user: currentUser } = useAuth()
   const { showToast } = useToast()
+  const hasFetchedRef = useRef(false)
 
-  const [activities, setActivities] = useState([])
+  const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [targetFilter, setTargetFilter] = useState("all")
-  const [actionFilter, setActionFilter] = useState("all")
+  const [analyzing, setAnalyzing] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [exportingPDF, setExportingPDF] = useState(false)
+  const [selectedUser, setSelectedUser] = useState("all")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [analysis, setAnalysis] = useState(null)
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from("activity_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1000)
+
+      if (error) throw error
+      setLogs(data || [])
+    } catch (error) {
+      showToast("Impossible de charger les logs d'activité", "error")
+      setLogs([])
+    } finally {
+      setLoading(false)
+    }
+  }, [showToast])
 
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false)
       return
     }
-    fetchData()
-    
-    // Set up auto-refresh every 30 seconds for real-time updates
-    const refreshInterval = setInterval(() => {
-      fetchData()
-    }, 30000)
-    
-    return () => clearInterval(refreshInterval)
-  }, [isAdmin])
+    if (hasFetchedRef.current) return
+    hasFetchedRef.current = true
+    fetchLogs()
+  }, [fetchLogs, isAdmin])
 
-  async function fetchData() {
-    try {
-      setLoading(true)
-      // Fetch from activites table (includes both new and historical activities)
-      const { data: activitiesData, error: activitiesError } = await supabase
-        .from("activites")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1000) // Increased limit to include historical data
-
-      if (activitiesError) {
-        console.error("[AdminActivities] ❌ Error fetching activities:", activitiesError)
-        console.error("[AdminActivities] Error details:", JSON.stringify(activitiesError, null, 2))
-        
-        // Check if it's an RLS policy issue
-        if (
-          activitiesError.code === "42501" ||
-          activitiesError.message?.includes("permission") ||
-          activitiesError.message?.includes("policy") ||
-          activitiesError.message?.includes("RLS")
-        ) {
-          console.error("[AdminActivities] 🔒 RLS Policy issue detected!")
-          showToast("Erreur de permissions RLS. Vérifiez les politiques de la table activites.", "error")
-        }
-        
-        // Try to fetch historical data as fallback
-        try {
-          const historicalActivities = await generateHistoricalActivities()
-          setActivities(historicalActivities)
-        } catch (fallbackError) {
-          console.error("[AdminActivities] Fallback error:", fallbackError)
-          setActivities([])
-        }
-        return
-      }
-
-      // If we have activities from the table, use them
-      if (activitiesData && activitiesData.length > 0) {
-        setActivities(activitiesData)
-      } else {
-        // If table is empty, generate historical activities as fallback
-        try {
-          const historicalActivities = await generateHistoricalActivities()
-          setActivities(historicalActivities)
-        } catch (fallbackError) {
-          console.error("[AdminActivities] Error generating historical activities:", fallbackError)
-          setActivities([])
-        }
-      }
-    } catch (error) {
-      console.error("[AdminActivities] ❌ Unexpected error:", error)
-      console.error("[AdminActivities] Error stack:", error.stack)
-      showToast("Erreur lors du chargement des activités", "error")
-      setActivities([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function generateHistoricalActivities() {
-    const activitiesList = []
-
-    try {
-      // Fetch historical users
-      const { data: usersData } = await supabase
-        .from("utilisateurs")
-        .select("id, email, nom, role, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200)
-
-      if (usersData) {
-        usersData.forEach((user) => {
-          activitiesList.push({
-            id: `historical-user-${user.id}`,
-            user_id: user.id, // activites.user_id references auth.users.id (same as utilisateurs.id)
-            user_email: user.email || "System",
-            action: "user_created",
-            target: "user",
-            details: `User ${user.nom || user.email || "Unknown"} created with role ${user.role || "UNKNOWN"}`,
-            ip_address: null,
-            device: null,
-            browser: null,
-            os: null,
-            location: null,
-            created_at: user.created_at,
-            is_historical: true, // Flag to identify historical activities
-          })
+  const userOptions = useMemo(() => {
+    const map = new Map()
+    logs.forEach((log) => {
+      if (log.user_id || log.user_name) {
+        map.set(log.user_id || log.user_name, {
+          id: log.user_id || log.user_name,
+          name: log.user_name || "Utilisateur",
         })
       }
-
-      // Fetch historical producers
-      const { data: producersData } = await supabase
-        .from("producteurs")
-        .select("id, nom, code, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200)
-
-      if (producersData) {
-        producersData.forEach((producer) => {
-          activitiesList.push({
-            id: `historical-producer-${producer.id}`,
-            user_id: null,
-            user_email: "System",
-            action: "producer_created",
-            target: "producteur",
-            details: `Producer ${producer.nom || "Unknown"}${producer.code ? ` (${producer.code})` : ""} created`,
-            ip_address: null,
-            device: null,
-            browser: null,
-            os: null,
-            location: null,
-            created_at: producer.created_at,
-            is_historical: true,
-          })
-        })
-      }
-
-      // Fetch historical centres
-      const { data: centresData } = await supabase
-        .from("centres")
-        .select("id, nom, code, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200)
-
-      if (centresData) {
-        centresData.forEach((centre) => {
-          activitiesList.push({
-            id: `historical-centre-${centre.id}`,
-            user_id: null,
-            user_email: "System",
-            action: "centre_created",
-            target: "centre",
-            details: `Centre ${centre.nom || "Unknown"}${centre.code ? ` (${centre.code})` : ""} created`,
-            ip_address: null,
-            device: null,
-            browser: null,
-            os: null,
-            location: null,
-            created_at: centre.created_at,
-            is_historical: true,
-          })
-        })
-      }
-
-      // Fetch historical achats
-      const { data: achatsData } = await supabase
-        .from("achats")
-        .select("id, nom_producteur, poids, montant, utilisateur_id, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200)
-
-      if (achatsData) {
-        // Fetch user emails for achats
-        const userIds = [...new Set(achatsData.map((a) => a.utilisateur_id).filter(Boolean))]
-        const usersMap = {}
-
-        if (userIds.length > 0) {
-          const { data: usersForAchats } = await supabase
-            .from("utilisateurs")
-            .select("id, email")
-            .in("id", userIds)
-
-          if (usersForAchats) {
-            usersForAchats.forEach((u) => {
-              usersMap[u.id] = u.email
-            })
-          }
-        }
-
-        achatsData.forEach((achat) => {
-          const userEmail = achat.utilisateur_id ? usersMap[achat.utilisateur_id] || "System" : "System"
-          activitiesList.push({
-            id: `historical-achat-${achat.id}`,
-            user_id: achat.utilisateur_id || null,
-            user_email: userEmail,
-            action: "achat_created",
-            target: "achat",
-            details: `Purchase of ${achat.poids || 0}kg for ${achat.nom_producteur || "Unknown"}${
-              achat.montant ? ` - ${Number(achat.montant).toLocaleString()} FCFA` : ""
-            }`,
-            ip_address: null,
-            device: null,
-            browser: null,
-            os: null,
-            location: null,
-            created_at: achat.created_at,
-            is_historical: true,
-          })
-        })
-      }
-    } catch (error) {
-      console.error("[AdminActivities] Error generating historical activities:", error)
-    }
-
-    // Sort by created_at descending
-    return activitiesList.sort((a, b) => {
-      const dateA = new Date(a.created_at || 0)
-      const dateB = new Date(b.created_at || 0)
-      return dateB - dateA
     })
+    return [...map.values()]
+  }, [logs])
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      if (selectedUser !== "all" && (log.user_id || log.user_name) !== selectedUser) {
+        return false
+      }
+
+      if (dateFrom && new Date(log.created_at) < new Date(`${dateFrom}T00:00:00`)) {
+        return false
+      }
+
+      if (dateTo && new Date(log.created_at) > new Date(`${dateTo}T23:59:59`)) {
+        return false
+      }
+
+      if (!searchTerm.trim()) return true
+      const term = searchTerm.trim().toLowerCase()
+      return [log.user_name, log.action, log.details, log.page]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term))
+    })
+  }, [dateFrom, dateTo, logs, searchTerm, selectedUser])
+
+  const stats = useMemo(
+    () => [
+      {
+        label: "Total logs",
+        value: logs.length.toLocaleString("fr-FR"),
+        icon: <FaHistory />,
+        accent: "#2563eb",
+        helper: "Audit trail",
+      },
+      {
+        label: "Logs filtrés",
+        value: filteredLogs.length.toLocaleString("fr-FR"),
+        icon: <FaSearch />,
+        accent: "#7c3aed",
+        helper: "Résultats",
+      },
+      {
+        label: "Utilisateurs actifs",
+        value: new Set(logs.map((log) => log.user_id || log.user_name).filter(Boolean)).size.toLocaleString("fr-FR"),
+        icon: <FaShieldAlt />,
+        accent: "#059669",
+        helper: "Présents dans les logs",
+      },
+      {
+        label: "Anomalies IA",
+        value: String(analysis?.anomalies?.length || 0),
+        icon: <FaUserSecret />,
+        accent: "#dc2626",
+        helper: "Détectées",
+      },
+    ],
+    [analysis, filteredLogs.length, logs],
+  )
+
+  async function handleAnalyze() {
+    if (filteredLogs.length === 0) {
+      showToast("Aucun log à analyser", "warning")
+      return
+    }
+
+    try {
+      setAnalyzing(true)
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+      const response = await fetch("/api/analyze-activity", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          logs: filteredLogs.slice(0, 200),
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data?.reply || "Analyse impossible")
+      }
+
+      setAnalysis({
+        summary: data.summary || "Aucun résumé disponible.",
+        highlights: Array.isArray(data.highlights) ? data.highlights : [],
+        anomalies: Array.isArray(data.anomalies) ? data.anomalies : [],
+      })
+      showToast("Analyse IA générée", "success")
+    } catch (error) {
+      showToast(error.message || "Impossible d'analyser les logs", "error")
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
-  const filteredActivities = useMemo(() => {
-    let filtered = activities
-
-    // Filter by target
-    if (targetFilter !== "all") {
-      filtered = filtered.filter((a) => a.target === targetFilter)
+  async function handleDownloadReport() {
+    if (filteredLogs.length === 0) {
+      showToast("Aucun log à exporter", "warning")
+      return
     }
 
-    // Filter by action
-    if (actionFilter !== "all") {
-      filtered = filtered.filter((a) => a.action === actionFilter)
-    }
-
-    // Filter by search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (a) =>
-          a.details?.toLowerCase().includes(term) ||
-          a.user_email?.toLowerCase().includes(term) ||
-          a.action?.toLowerCase().includes(term) ||
-          a.ip_address?.toLowerCase().includes(term) ||
-          a.browser?.toLowerCase().includes(term) ||
-          a.device?.toLowerCase().includes(term),
-      )
-    }
-    return filtered
-  }, [activities, targetFilter, actionFilter, searchTerm])
-
-  async function handleExportPDF() {
     try {
-      setExportingPDF(true)
-      await exportActivitiesPDF(filteredActivities)
-      
-      // Log the PDF export
+      setExporting(true)
+      await exportActivityAuditReportPDF({
+        logs: filteredLogs,
+        analysis,
+        filename: "activity-monitoring-report",
+      })
       await logPDFExported(
-        "Activities Audit Log",
-        `${filteredActivities.length} activities exported`,
+        "Activity Monitoring Report",
+        `${filteredLogs.length} logs exported`,
         currentUser?.id || null,
         currentUser?.email || null,
       )
-      
-      showToast("PDF exporté avec succès", "success")
+      showToast("Rapport téléchargé avec succès", "success")
     } catch (error) {
-      console.error("[AdminActivities] PDF export error:", error)
-      showToast("Erreur lors de l'export PDF", "error")
+      showToast("Erreur lors de la génération du rapport", "error")
     } finally {
-      setExportingPDF(false)
+      setExporting(false)
     }
-  }
-
-  function getDeviceIcon(device) {
-    if (!device) return null
-    const deviceLower = device.toLowerCase()
-    if (deviceLower.includes("mobile")) return <FaMobile />
-    if (deviceLower.includes("tablet")) return <FaTablet />
-    return <FaDesktop />
-  }
-
-  function formatIP(ip) {
-    if (!ip) return "—"
-    // Truncate long IPv6 addresses
-    if (ip.length > 20) return ip.substring(0, 17) + "..."
-    return ip
   }
 
   if (!isAdmin) {
     return (
-      <div style={restrictedCard}>
-        <FaHistory size={48} style={{ color: "#dc2626", marginBottom: 16 }} />
-        <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "#1f2937" }}>
-          Accès réservé aux administrateurs
-        </h3>
-        <p style={{ margin: 0, color: "#6b7280" }}>Votre rôle ne permet pas l'accès à cette page.</p>
+      <div style={styles.restrictedCard}>
+        <FaShieldAlt size={48} style={{ color: "#dc2626", marginBottom: 16 }} />
+        <h3 style={styles.restrictedTitle}>Accès réservé aux administrateurs</h3>
+        <p style={styles.restrictedText}>Cette page d'audit n'est accessible qu'aux administrateurs.</p>
       </div>
     )
   }
 
-  const summaryStats = [
-    {
-      label: "Activités",
-      value: activities.length,
-      icon: <FaHistory />,
-      accent: "#2563eb",
-      helper: "Total",
-    },
-    {
-      label: "Affichées",
-      value: filteredActivities.length,
-      icon: <FaSearch />,
-      accent: "#7c3aed",
-      helper: "Résultats",
-    },
-  ]
-
   return (
     <AdminPage
-      title="Journal d'audit"
-      subtitle="Historique complet des activités du système avec filtres et export."
-      stats={summaryStats}
+      title="Activity Monitoring"
+      subtitle="Surveillez l'activité globale, détectez les actions sensibles et exportez un rapport administrateur complet."
+      stats={stats}
       actions={
-        <Button
-          variant="primary"
-          onClick={handleExportPDF}
-          disabled={exportingPDF || filteredActivities.length === 0}
-          style={{ display: "flex", alignItems: "center", gap: 8 }}
-        >
-          <FaFilePdf />
-          {exportingPDF ? "Export en cours..." : "Exporter PDF"}
-        </Button>
+        <>
+          <Button variant="secondary" onClick={handleAnalyze} disabled={analyzing || filteredLogs.length === 0}>
+            {analyzing ? "Analyse..." : "Analyser avec IA"}
+          </Button>
+          <Button icon={<FaDownload />} onClick={handleDownloadReport} disabled={exporting || filteredLogs.length === 0}>
+            {exporting ? "Téléchargement..." : "Download Report"}
+          </Button>
+        </>
       }
     >
-      <AdminPanel
-        title="Historique des actions"
-        subtitle="Parcourez les événements système, les accès et les opérations métier."
-      >
-      <div style={filtersContainer}>
-        <div style={filterRow}>
-          <div style={filterGroup}>
-            <label style={filterLabel}>Type d'entité</label>
-            <select value={targetFilter} onChange={(e) => setTargetFilter(e.target.value)} style={select}>
-              {Object.entries(ACTION_TYPES).map(([key, { label }]) => (
-                <option key={key} value={key}>
-                  {label}
+      <AdminPanel title="Filtres d'audit" subtitle="Filtrez par utilisateur, date et recherche libre.">
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Utilisateur</label>
+            <select value={selectedUser} onChange={(event) => setSelectedUser(event.target.value)} style={styles.select}>
+              <option value="all">Tous les utilisateurs</option>
+              {userOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
                 </option>
               ))}
             </select>
           </div>
-
-          <div style={filterGroup}>
-            <label style={filterLabel}>Action</label>
-            <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} style={select}>
-              {Object.entries(ACTION_FILTERS).map(([key, { label }]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Date début</label>
+            <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} style={styles.input} />
+          </div>
+          <div style={styles.filterField}>
+            <label style={styles.label}>Date fin</label>
+            <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} style={styles.input} />
           </div>
         </div>
-
-        <div style={searchWrapper}>
-          <FaSearch style={{ color: "#9ca3af", fontSize: 18 }} />
+        <div style={styles.searchBox}>
           <Input
-            placeholder="Rechercher par utilisateur, action, IP, device, browser..."
             value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            style={{ border: "none", background: "transparent", flex: 1 }}
+            onChange={setSearchTerm}
+            placeholder="Rechercher par action, utilisateur, page ou détail..."
           />
         </div>
-      </div>
+      </AdminPanel>
 
-      <div style={tableCard}>
-        {loading ? (
-          <div style={loadingState}>
-            <div style={spinner}></div>
-            <p>Chargement des activités...</p>
-          </div>
-        ) : filteredActivities.length === 0 ? (
-          <div style={emptyState}>
-            <FaHistory size={48} style={{ color: "#9ca3af", marginBottom: 16 }} />
-            <p style={{ margin: 0, color: "#6b7280", marginBottom: 8 }}>
-              {searchTerm || targetFilter !== "all" || actionFilter !== "all"
-                ? "Aucune activité trouvée avec les filtres sélectionnés"
-                : "Aucune activité enregistrée"}
-            </p>
-            {activities.length > 0 && (
-              <p style={{ margin: 0, color: "#9ca3af", fontSize: "12px" }}>
-                {activities.length} activité{activities.length > 1 ? "s" : ""} au total, mais filtrée{filteredActivities.length === 0 ? " (aucun résultat)" : ""}
-              </p>
-            )}
+      <AdminPanel title="AI Monitoring" subtitle="Résumé automatique, anomalies et actions critiques détectées.">
+        {analysis ? (
+          <div style={styles.analysisGrid}>
+            <div style={styles.analysisBlock}>
+              <div style={styles.analysisTitle}>Résumé</div>
+              <div style={styles.analysisText}>{analysis.summary}</div>
+            </div>
+            <div style={styles.analysisBlock}>
+              <div style={styles.analysisTitle}>Highlights</div>
+              {analysis.highlights.length ? (
+                <div style={styles.list}>
+                  {analysis.highlights.map((item) => (
+                    <div key={item} style={styles.listItem}>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={styles.analysisText}>Aucun highlight détecté.</div>
+              )}
+            </div>
+            <div style={styles.analysisBlock}>
+              <div style={styles.analysisTitle}>Anomalies</div>
+              {analysis.anomalies.length ? (
+                <div style={styles.list}>
+                  {analysis.anomalies.map((item, index) => (
+                    <div key={`${item.title || "anomaly"}-${index}`} style={styles.listItem}>
+                      <strong>{item.title || "Alerte"}</strong>: {item.reason || "-"}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={styles.analysisText}>Aucune anomalie majeure détectée.</div>
+              )}
+            </div>
           </div>
         ) : (
-          <div style={tableWrapper}>
-            <table style={table}>
-              <thead>
-                <tr>
-                  <th style={th}>Date</th>
-                  <th style={th}>Utilisateur</th>
-                  <th style={th}>Action</th>
-                  <th style={th}>Cible</th>
-                  <th style={th}>IP</th>
-                  <th style={th}>Device</th>
-                  <th style={th}>Browser</th>
-                  <th style={th}>Détails</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredActivities.map((activity) => {
-                  const deviceIcon = getDeviceIcon(activity.device)
+          <div style={styles.analysisEmpty}>Lancez une analyse IA pour détecter les comportements sensibles.</div>
+        )}
+      </AdminPanel>
 
-                  return (
-                    <tr key={activity.id}>
-                      <td style={td}>
-                        <div style={dateCell}>
-                          {activity.created_at
-                            ? new Date(activity.created_at).toLocaleString("fr-FR", {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "—"}
-                        </div>
+      <AdminPanel title="Audit Timeline" subtitle="Historique complet des actions enregistrées dans la nouvelle table d'audit.">
+        <div style={styles.tableShell}>
+          {loading ? (
+            <div style={styles.loadingState}>Chargement des logs...</div>
+          ) : filteredLogs.length === 0 ? (
+            <div style={styles.emptyState}>Aucun log trouvé avec les filtres actuels.</div>
+          ) : (
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Date</th>
+                    <th style={styles.th}>Utilisateur</th>
+                    <th style={styles.th}>Action</th>
+                    <th style={styles.th}>Page</th>
+                    <th style={styles.th}>Détails</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td style={styles.td}>{formatDate(log.created_at)}</td>
+                      <td style={styles.td}>{log.user_name || "-"}</td>
+                      <td style={styles.td}>
+                        <span style={styles.actionBadge}>{log.action}</span>
                       </td>
-                      <td style={td}>
-                        <div style={userCell}>
-                          <span style={userText}>{activity.user_email || "Système"}</span>
-                          {activity.is_historical && (
-                            <span style={historicalBadge} title="Historical activity reconstructed from existing data">
-                              Historique
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={td}>
-                        <span style={actionBadge}>{getActionLabel(activity.action)}</span>
-                      </td>
-                      <td style={td}>
-                        <span style={targetBadge}>{getTargetLabel(activity.target)}</span>
-                      </td>
-                      <td style={td}>
-                        <span style={ipText}>{formatIP(activity.ip_address)}</span>
-                      </td>
-                      <td style={td}>
-                        <div style={deviceCell}>
-                          {deviceIcon}
-                          <span style={deviceText}>{activity.device || "—"}</span>
-                        </div>
-                      </td>
-                      <td style={td}>
-                        <span style={browserText}>{activity.browser || "—"}</span>
-                      </td>
-                      <td style={td}>
-                        <span style={detailsText} title={activity.details}>
-                          {activity.details || "—"}
-                        </span>
+                      <td style={styles.td}>{log.page || "-"}</td>
+                      <td style={styles.td}>
+                        <span style={styles.details}>{log.details || "-"}</span>
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {!loading && filteredActivities.length > 0 && (
-        <div style={summaryCard}>
-          <div style={summaryItem}>
-            <strong>{filteredActivities.length}</strong> activité{filteredActivities.length > 1 ? "s" : ""} affichée
-            {filteredActivities.length !== activities.length && ` sur ${activities.length}`}
-          </div>
-          {activities.some((a) => a.is_historical) && (
-            <div style={summaryItem}>
-              <span style={{ fontSize: "12px", color: "#6b7280" }}>
-                <span style={historicalBadge}>Historique</span> = Activités reconstruites depuis les données existantes
-              </span>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
-      )}
       </AdminPanel>
     </AdminPage>
   )
 }
 
-function getActionLabel(action) {
-  const labels = {
-    login: "Connexion",
-    logout: "Déconnexion",
-    user_created: "Créé",
-    user_updated: "Modifié",
-    user_deleted: "Supprimé",
-    user_suspended: "Suspendu",
-    user_banned: "Banni",
-    user_reactivated: "Réactivé",
-    producer_created: "Créé",
-    producer_updated: "Modifié",
-    producer_deleted: "Supprimé",
-    centre_created: "Créé",
-    centre_updated: "Modifié",
-    centre_deleted: "Supprimé",
-    achat_created: "Créé",
-    pdf_exported: "Exporté",
-    settings_updated: "Modifié",
-  }
-  return labels[action] || action
-}
-
-function getTargetLabel(target) {
-  const labels = {
-    user: "Utilisateur",
-    centre: "Centre",
-    producteur: "Producteur",
-    achat: "Achat",
-    system: "Système",
-    pdf: "PDF",
-    settings: "Paramètres",
-  }
-  return labels[target] || target
-}
-
-// Styles
-const container = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 32,
-}
-
-const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 20,
-  flexWrap: "wrap",
-  marginBottom: 8,
-}
-
-const title = {
-  margin: 0,
-  fontSize: "28px",
-  fontWeight: 700,
-  color: "#0f172a",
-  letterSpacing: "-0.03em",
-}
-
-const subtitle = {
-  margin: "6px 0 0 0",
-  fontSize: "14px",
-  color: "#64748b",
-  fontWeight: 500,
-}
-
-const filtersContainer = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 16,
-}
-
-const filterRow = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: 16,
-}
-
-const filterGroup = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-}
-
-const filterLabel = {
-  fontSize: "13px",
-  fontWeight: 600,
-  color: "#6b7280",
-}
-
-const select = {
-  padding: "10px 14px",
-  borderRadius: "8px",
-  border: "1px solid #e5e7eb",
-  fontSize: "14px",
-  background: "white",
-  color: "#1f2937",
-  outline: "none",
-  cursor: "pointer",
-}
-
-const searchWrapper = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-  background: "white",
-  borderRadius: "12px",
-  padding: "12px 16px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-}
-
-const tableCard = {
-  background: "white",
-  borderRadius: "12px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  overflow: "hidden",
-}
-
-const tableWrapper = {
-  overflowX: "auto",
-}
-
-const table = {
-  width: "100%",
-  borderCollapse: "collapse",
-  minWidth: "1200px",
-}
-
-const th = {
-  textAlign: "left",
-  padding: "16px",
-  fontSize: "13px",
-  fontWeight: 600,
-  color: "#6b7280",
-  background: "#f9fafb",
-  borderBottom: "1px solid #e5e7eb",
-  position: "sticky",
-  top: 0,
-  zIndex: 10,
-}
-
-const td = {
-  padding: "16px",
-  borderBottom: "1px solid #f3f4f6",
-  fontSize: "14px",
-}
-
-const dateCell = {
-  color: "#6b7280",
-  fontSize: "13px",
-  whiteSpace: "nowrap",
-}
-
-const userCell = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap",
-}
-
-const userText = {
-  color: "#1f2937",
-  fontWeight: 500,
-}
-
-const historicalBadge = {
-  display: "inline-block",
-  padding: "2px 6px",
-  borderRadius: "4px",
-  fontSize: "10px",
-  fontWeight: 600,
-  background: "#fef3c7",
-  color: "#92400e",
-  textTransform: "uppercase",
-}
-
-const actionBadge = {
-  display: "inline-block",
-  padding: "4px 10px",
-  borderRadius: "6px",
-  fontSize: "12px",
-  fontWeight: 600,
-  background: "#eff6ff",
-  color: "#2563eb",
-}
-
-const targetBadge = {
-  display: "inline-block",
-  padding: "4px 10px",
-  borderRadius: "6px",
-  fontSize: "12px",
-  fontWeight: 600,
-  background: "#f0fdf4",
-  color: "#16a34a",
-}
-
-const ipText = {
-  color: "#6b7280",
-  fontFamily: "monospace",
-  fontSize: "12px",
-}
-
-const deviceCell = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-}
-
-const deviceText = {
-  color: "#6b7280",
-  fontSize: "13px",
-}
-
-const browserText = {
-  color: "#6b7280",
-  fontSize: "13px",
-}
-
-const detailsText = {
-  color: "#1f2937",
-  fontSize: "13px",
-  maxWidth: "300px",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-}
-
-const loadingState = {
-  padding: "60px 20px",
-  textAlign: "center",
-  color: "#6b7280",
-}
-
-const spinner = {
-  width: "40px",
-  height: "40px",
-  border: "4px solid #f3f4f6",
-  borderTop: "4px solid #7a1f1f",
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
-  margin: "0 auto 16px",
-}
-
-const emptyState = {
-  padding: "60px 20px",
-  textAlign: "center",
-}
-
-const restrictedCard = {
-  background: "white",
-  borderRadius: "14px",
-  boxShadow: "0 12px 24px rgba(0,0,0,0.08)",
-  padding: "40px",
-  maxWidth: "520px",
-  margin: "0 auto",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  textAlign: "center",
-}
-
-const summaryCard = {
-  background: "white",
-  borderRadius: "12px",
-  padding: "16px 20px",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  fontSize: "14px",
-  color: "#6b7280",
-}
-
-const summaryItem = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
+const styles = {
+  restrictedCard: {
+    background: "#ffffff",
+    borderRadius: 18,
+    padding: 40,
+    maxWidth: 520,
+    margin: "0 auto",
+    textAlign: "center",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
+  },
+  restrictedTitle: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  restrictedText: {
+    margin: "10px 0 0",
+    color: "#64748b",
+  },
+  filtersGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 16,
+  },
+  filterField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#475569",
+  },
+  select: {
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 12,
+    border: "1px solid rgba(203, 213, 225, 0.95)",
+    padding: "0 12px",
+    background: "#ffffff",
+    color: "#0f172a",
+  },
+  input: {
+    width: "100%",
+    minHeight: 44,
+    borderRadius: 12,
+    border: "1px solid rgba(203, 213, 225, 0.95)",
+    padding: "0 12px",
+    background: "#ffffff",
+    color: "#0f172a",
+    boxSizing: "border-box",
+  },
+  searchBox: {
+    marginTop: 16,
+  },
+  analysisGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 16,
+  },
+  analysisBlock: {
+    borderRadius: 16,
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    background: "#fbfdff",
+    padding: 16,
+  },
+  analysisTitle: {
+    fontSize: 13,
+    fontWeight: 800,
+    color: "#0f172a",
+    marginBottom: 10,
+  },
+  analysisText: {
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: "#475569",
+  },
+  analysisEmpty: {
+    padding: 20,
+    borderRadius: 16,
+    border: "1px dashed rgba(203, 213, 225, 0.95)",
+    color: "#64748b",
+    textAlign: "center",
+  },
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  listItem: {
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "#334155",
+  },
+  tableShell: {
+    minHeight: 220,
+  },
+  loadingState: {
+    padding: 24,
+    textAlign: "center",
+    color: "#64748b",
+  },
+  emptyState: {
+    padding: 24,
+    textAlign: "center",
+    color: "#64748b",
+  },
+  tableWrapper: {
+    overflowX: "auto",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: 780,
+  },
+  th: {
+    textAlign: "left",
+    padding: "14px 16px",
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: 800,
+    borderBottom: "1px solid rgba(226, 232, 240, 0.95)",
+    background: "#f8fafc",
+  },
+  td: {
+    padding: "14px 16px",
+    fontSize: 13,
+    color: "#0f172a",
+    borderBottom: "1px solid rgba(241, 245, 249, 0.95)",
+    verticalAlign: "top",
+  },
+  actionBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    minHeight: 28,
+    padding: "0 10px",
+    borderRadius: 999,
+    background: "#eff6ff",
+    color: "#2563eb",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  details: {
+    display: "inline-block",
+    maxWidth: 340,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    color: "#475569",
+  },
 }
