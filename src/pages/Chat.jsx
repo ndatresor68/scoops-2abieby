@@ -141,43 +141,66 @@ export default function Chat({ adminMode = false }) {
     }
   }, [])
 
-  const loadUsers = useCallback(async () => {
-    if (!currentUser?.id) {
-      pushDebugError("loadContacts", "User is null while loading contacts")
-      return
-    }
+  const loadConversations = useCallback(async () => {
+    if (!currentUser) return
 
-    console.log("LOAD USERS CALLED")
     setContactsLoading(true)
 
     try {
       const { data, error } = await supabase
-        .from("utilisateurs")
-        .select("*")
-
-      console.log("RAW USERS FROM DB:", data, error)
+        .from("messages")
+        .select("sender_id, receiver_id")
+        .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
 
       if (error) {
-        throw error
+        console.error("CONVERSATION ERROR:", error)
+        pushDebugError("loadConversations", error)
+        return
       }
 
-      const nextUsers = data || []
-      const otherUser = nextUsers.find((item) => item.id !== currentUser.id) || null
+      const userIds = new Set()
 
-      console.log("CURRENT USER:", currentUser?.id)
-      console.log("SELECTED USER:", otherUser?.id)
+      ;(data || []).forEach((msg) => {
+        if (msg.sender_id !== currentUser.id) userIds.add(msg.sender_id)
+        if (msg.receiver_id !== currentUser.id) userIds.add(msg.receiver_id)
+      })
 
+      const ids = Array.from(userIds)
+
+      console.log("CONVERSATION IDS:", ids)
+
+      if (ids.length === 0) {
+        setContacts([])
+        setSelectedContact(null)
+        setDebugUsers([])
+        return
+      }
+
+      const { data: users, error: usersError } = await supabase
+        .from("utilisateurs")
+        .select("*")
+        .in("id", ids)
+
+      if (usersError) {
+        console.error("CONVERSATION ERROR:", usersError)
+        pushDebugError("loadConversations.users", usersError)
+        return
+      }
+
+      console.log("CONVERSATION USERS:", users)
+
+      const nextUsers = users || []
       setDebugUsers(nextUsers)
       setContacts(nextUsers)
-      setSelectedContact(otherUser)
+      setSelectedContact(nextUsers.length > 0 ? nextUsers[0] : null)
     } catch (error) {
-      console.error("[Chat] CONTACTS ERROR:", error)
-      pushDebugError("loadUsers", error)
+      console.error("CONVERSATION ERROR:", error)
+      pushDebugError("loadConversations", error)
       showToast("Impossible de charger les conversations.", "error")
     } finally {
       setContactsLoading(false)
     }
-  }, [currentUser?.id, showToast])
+  }, [currentUser, showToast])
 
   const loadMessages = useCallback(async () => {
     if (!currentUser || !selectedContact) {
@@ -238,8 +261,8 @@ export default function Chat({ adminMode = false }) {
 
   useEffect(() => {
     if (!currentUser) return
-    loadUsers()
-  }, [currentUser, loadUsers])
+    loadConversations()
+  }, [currentUser, loadConversations])
 
   useEffect(() => {
     if (selectedContact) {
