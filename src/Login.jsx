@@ -96,152 +96,154 @@ export default function Login() {
         }
       `}</style>
       <div style={overlayStyle}>
-        <div
-          className="login-shell"
-          style={{
-            ...shellStyle,
-            ...(isMobile ? shellStyleMobile : null),
-          }}
-        >
-          <section
-            className="marketing-glass-card"
+        <div style={frameStyle}>
+          <div
+            className="login-shell"
             style={{
-              ...marketingCard,
-              ...(isMobile ? marketingCardMobile : null),
+              ...shellStyle,
+              ...(isMobile ? shellStyleMobile : null),
             }}
           >
-            <div style={logoContainer}>
-              <img
-                src={logoImage}
-                alt="SCOOP ASAB Logo"
-                style={logoStyle}
-              />
-            </div>
-            <span style={eyebrowStyle}>Plateforme professionnelle</span>
-            <h1 style={heroTitleStyle}>Accédez aux meilleures opportunités cacao et café</h1>
-            <p style={heroTextStyle}>
-              Découvrez des appels d&apos;offres en temps réel, profitez d&apos;une analyse intelligente et prenez
-              de meilleures décisions pour vos centres, agents et producteurs.
-            </p>
+            <section
+              className="marketing-glass-card"
+              style={{
+                ...marketingCard,
+                ...(isMobile ? marketingCardMobile : null),
+              }}
+            >
+              <div style={logoContainer}>
+                <img
+                  src={logoImage}
+                  alt="SCOOP ASAB Logo"
+                  style={logoStyle}
+                />
+              </div>
+              <span style={eyebrowStyle}>Plateforme professionnelle</span>
+              <h1 style={heroTitleStyle}>Accédez aux meilleures opportunités cacao et café</h1>
+              <p style={heroTextStyle}>
+                Découvrez des appels d&apos;offres en temps réel, profitez d&apos;une analyse intelligente et prenez
+                de meilleures décisions pour vos centres, agents et producteurs.
+              </p>
 
-            <div style={benefitsList}>
-              {[
-                "Découvrez des appels d’offres en temps réel",
-                "Analyse intelligente pour maximiser vos profits",
-                "Plateforme dédiée aux centres, agents et producteurs",
-                "Gagnez du temps et prenez de meilleures décisions",
-              ].map((item) => (
-                <div key={item} style={benefitItem}>
-                  <span style={benefitIcon}>
-                    <FaCheckCircle size={12} />
-                  </span>
-                  <span>{item}</span>
+              <div style={benefitsList}>
+                {[
+                  "Découvrez des appels d’offres en temps réel",
+                  "Analyse intelligente pour maximiser vos profits",
+                  "Plateforme dédiée aux centres, agents et producteurs",
+                  "Gagnez du temps et prenez de meilleures décisions",
+                ].map((item) => (
+                  <div key={item} style={benefitItem}>
+                    <span style={benefitIcon}>
+                      <FaCheckCircle size={12} />
+                    </span>
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={trustBox}>
+                <div style={trustItem}>
+                  <FaShieldAlt size={14} />
+                  <span>Plateforme sécurisée</span>
                 </div>
-              ))}
-            </div>
-
-            <div style={trustBox}>
-              <div style={trustItem}>
-                <FaShieldAlt size={14} />
-                <span>Plateforme sécurisée</span>
-              </div>
-              <div style={trustItem}>
-                <FaLock size={14} />
-                <span>Données protégées</span>
-              </div>
-              <div style={trustItem}>
-                <FaCheckCircle size={14} />
-                <span>Utilisé par des professionnels du secteur agricole</span>
-              </div>
-            </div>
-
-            <p style={adsenseNote}>
-              Cette plateforme peut afficher des annonces publicitaires (Google AdSense).
-            </p>
-          </section>
-
-          <section
-            className="login-glass-card"
-            style={{
-              ...cardStyle,
-              ...(isMobile ? cardStyleMobile : null),
-            }}
-          >
-            <h2 style={titleStyle}>Connexion</h2>
-            <p style={subtitleStyle}>
-              Connectez-vous pour accéder à vos données, à vos messages et aux opportunités du marché.
-            </p>
-
-            <form onSubmit={handleLogin} style={{ width: "100%" }}>
-              <div style={inputContainerStyle}>
-                <span style={iconStyle}>
-                  <FaUser size={14} />
-                </span>
-                <input
-                  type="email"
-                  placeholder="Entrez votre email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={inputStyle}
-                  required
-                />
-              </div>
-
-              <div style={{ ...inputContainerStyle, marginTop: 16 }}>
-                <span style={iconStyle}>
+                <div style={trustItem}>
                   <FaLock size={14} />
-                </span>
-                <input
-                  type="password"
-                  placeholder="Entrez votre mot de passe"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={inputStyle}
-                  required
-                />
+                  <span>Données protégées</span>
+                </div>
+                <div style={trustItem}>
+                  <FaCheckCircle size={14} />
+                  <span>Utilisé par des professionnels du secteur agricole</span>
+                </div>
               </div>
 
-              <button type="submit" className="login-gradient-button" style={buttonStyle} disabled={loading}>
-                <span style={buttonContentStyle}>
-                  {loading ? "Connexion..." : "Se connecter"}
-                  {!loading ? <FaArrowRight size={12} /> : null}
-                </span>
-              </button>
+              <p style={adsenseNote}>
+                Cette plateforme peut afficher des annonces publicitaires (Google AdSense).
+              </p>
+            </section>
 
-              {error && <p style={errorStyle}>{error}</p>}
-            </form>
+            <section
+              className="login-glass-card"
+              style={{
+                ...cardStyle,
+                ...(isMobile ? cardStyleMobile : null),
+              }}
+            >
+              <h2 style={titleStyle}>Connexion</h2>
+              <p style={subtitleStyle}>
+                Connectez-vous pour accéder à vos données, à vos messages et aux opportunités du marché.
+              </p>
 
-            {!allowRegistration && (
-              <div style={registrationDisabledBox}>
-                <p style={registrationDisabledText}>
-                  {t("registrationDisabled")}
-                </p>
+              <form onSubmit={handleLogin} style={{ width: "100%" }}>
+                <div style={inputContainerStyle}>
+                  <span style={iconStyle}>
+                    <FaUser size={14} />
+                  </span>
+                  <input
+                    type="email"
+                    placeholder="Entrez votre email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+
+                <div style={{ ...inputContainerStyle, marginTop: 16 }}>
+                  <span style={iconStyle}>
+                    <FaLock size={14} />
+                  </span>
+                  <input
+                    type="password"
+                    placeholder="Entrez votre mot de passe"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={inputStyle}
+                    required
+                  />
+                </div>
+
+                <button type="submit" className="login-gradient-button" style={buttonStyle} disabled={loading}>
+                  <span style={buttonContentStyle}>
+                    {loading ? "Connexion..." : "Se connecter"}
+                    {!loading ? <FaArrowRight size={12} /> : null}
+                  </span>
+                </button>
+
+                {error && <p style={errorStyle}>{error}</p>}
+              </form>
+
+              {!allowRegistration && (
+                <div style={registrationDisabledBox}>
+                  <p style={registrationDisabledText}>
+                    {t("registrationDisabled")}
+                  </p>
+                </div>
+              )}
+
+              <div style={contactRow}>
+                <a href="mailto:ndatresor68@gmail.com" className="login-contact-link" style={contactLink}>
+                  <FaEnvelope size={12} />
+                  ndatresor68@gmail.com
+                </a>
+                <a href="tel:0715887556" className="login-contact-link" style={contactLink}>
+                  <FaPhoneAlt size={12} />
+                  0715887556
+                </a>
               </div>
-            )}
 
-            <div style={contactRow}>
-              <a href="mailto:ndatresor68@gmail.com" className="login-contact-link" style={contactLink}>
-                <FaEnvelope size={12} />
-                ndatresor68@gmail.com
-              </a>
-              <a href="tel:0715887556" className="login-contact-link" style={contactLink}>
-                <FaPhoneAlt size={12} />
-                0715887556
-              </a>
-            </div>
-
-            <div style={legalFooter}>
-              <a href="/about" className="login-legal-link" style={legalLink}>
-                À propos
-              </a>
-              <a href="/contact" className="login-legal-link" style={legalLink}>
-                Contact
-              </a>
-              <a href="/privacy" className="login-legal-link" style={legalLink}>
-                Confidentialité
-              </a>
-            </div>
-          </section>
+              <div style={legalFooter}>
+                <a href="/about" className="login-legal-link" style={legalLink}>
+                  À propos
+                </a>
+                <a href="/contact" className="login-legal-link" style={legalLink}>
+                  Contact
+                </a>
+                <a href="/privacy" className="login-legal-link" style={legalLink}>
+                  Confidentialité
+                </a>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>
@@ -267,6 +269,16 @@ const overlayStyle = {
   backdropFilter: "blur(10px)",
   background:
     "linear-gradient(180deg, rgba(8, 15, 26, 0.16) 0%, rgba(8, 15, 26, 0.1) 48%, rgba(8, 15, 26, 0.18) 100%)",
+}
+
+const frameStyle = {
+  width: "min(1160px, 100%)",
+  padding: 14,
+  borderRadius: 32,
+  background: "rgba(255,255,255,0.07)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  boxShadow: "0 30px 80px rgba(0,0,0,0.22)",
+  backdropFilter: "blur(8px)",
 }
 
 const shellStyle = {
