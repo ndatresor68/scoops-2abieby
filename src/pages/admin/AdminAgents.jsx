@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaPlus, FaEdit, FaTrash, FaUserFriends, FaBuilding, FaFilePdf } from "react-icons/fa"
 import Button from "../../components/ui/Button"
@@ -22,6 +22,7 @@ const INITIAL_FORM = {
 export default function AdminAgents() {
   const { isAdmin, user } = useAuth()
   const { showToast } = useToast()
+  const hasFetchedRef = useRef(false)
   const [agents, setAgents] = useState([])
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
@@ -34,20 +35,12 @@ export default function AdminAgents() {
   const [errors, setErrors] = useState({})
   const [exportingPDF, setExportingPDF] = useState(false)
 
-  useEffect(() => {
-    if (!isAdmin) {
-      setLoading(false)
-      return
-    }
-    fetchData()
-  }, [isAdmin])
-
   const centresMap = useMemo(
     () => Object.fromEntries(centres.map((c) => [String(c.id), c.nom])),
     [centres],
   )
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true)
       const [{ data: agentsData, error: agentsError }, { data: centresData, error: centresError }] = await Promise.all([
@@ -76,7 +69,18 @@ export default function AdminAgents() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
+
+  useEffect(() => {
+    if (!isAdmin) {
+      hasFetchedRef.current = false
+      setLoading(false)
+      return
+    }
+    if (hasFetchedRef.current) return
+    hasFetchedRef.current = true
+    fetchData()
+  }, [fetchData, isAdmin])
 
   function validateForm() {
     const newErrors = {}

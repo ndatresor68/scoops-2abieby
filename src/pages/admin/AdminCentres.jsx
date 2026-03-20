@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaPlus, FaEdit, FaTrash, FaBuilding, FaFilePdf } from "react-icons/fa"
 import Button from "../../components/ui/Button"
@@ -14,6 +14,7 @@ import { exportCentresPDF } from "../../utils/exportToPDF"
 export default function AdminCentres() {
   const { showToast } = useToast()
   const { user } = useAuth()
+  const hasFetchedRef = useRef(false)
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -28,11 +29,7 @@ export default function AdminCentres() {
   const [errors, setErrors] = useState({})
   const [exportingPDF, setExportingPDF] = useState(false)
 
-  useEffect(() => {
-    fetchCentres()
-  }, [])
-
-  async function fetchCentres() {
+  const fetchCentres = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -48,7 +45,13 @@ export default function AdminCentres() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
+
+  useEffect(() => {
+    if (hasFetchedRef.current) return
+    hasFetchedRef.current = true
+    fetchCentres()
+  }, [fetchCentres])
 
   function openCreateModal() {
     setEditingCentre(null)
@@ -171,15 +174,6 @@ export default function AdminCentres() {
     }
   }
 
-  if (loading) {
-    return (
-      <div style={loadingContainer}>
-        <div style={spinner}></div>
-        <p style={loadingText}>Chargement...</p>
-      </div>
-    )
-  }
-
   async function handleExportPDF() {
     if (centres.length === 0) {
       showToast("Aucun centre à exporter", "warning")
@@ -258,22 +252,25 @@ export default function AdminCentres() {
     },
   ]
 
-  const summaryStats = [
-    {
-      label: "Centres",
-      value: centres.length,
-      icon: <FaBuilding />,
-      accent: "#059669",
-      helper: "Enregistrés",
-    },
-    {
-      label: "Avec code",
-      value: centres.filter((entry) => entry.code).length,
-      icon: <FaFilePdf />,
-      accent: "#2563eb",
-      helper: "Référencés",
-    },
-  ]
+  const summaryStats = useMemo(
+    () => [
+      {
+        label: "Centres",
+        value: centres.length,
+        icon: <FaBuilding />,
+        accent: "#059669",
+        helper: "Enregistrés",
+      },
+      {
+        label: "Avec code",
+        value: centres.filter((entry) => entry.code).length,
+        icon: <FaFilePdf />,
+        accent: "#2563eb",
+        helper: "Référencés",
+      },
+    ],
+    [centres],
+  )
 
   return (
     <AdminPage

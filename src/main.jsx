@@ -1,5 +1,6 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
+import { BrowserRouter } from "react-router-dom"
 import App from "./App.jsx"
 import { AuthProvider } from "./context/AuthContext"
 import { SettingsProvider } from "./context/SettingsContext"
@@ -21,14 +22,16 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ErrorBoundary>
-      <AuthProvider>
-        <SettingsProvider>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </SettingsProvider>
-      </AuthProvider>
-    </ErrorBoundary>
+    <BrowserRouter>
+      <ErrorBoundary>
+        <AuthProvider>
+          <SettingsProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </SettingsProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </BrowserRouter>
   </StrictMode>,
 )
