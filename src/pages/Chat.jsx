@@ -175,7 +175,7 @@ export default function Chat({ adminMode = false }) {
   }, [currentUser?.id, showToast])
 
   const loadMessages = useCallback(async () => {
-    if (!currentUser?.id) {
+    if (!currentUser || !selectedContact) {
       debugWarn("[Chat] loadMessages skipped: user is null")
       console.log("[Chat] FETCH PARAMS:", currentUser?.id, selectedContact?.id)
       setDebugLastFetchResult({
@@ -191,35 +191,19 @@ export default function Chat({ adminMode = false }) {
       return
     }
 
-    if (!selectedContact?.id) {
-      debugWarn("[Chat] loadMessages skipped: selected user is null")
-      console.log("[Chat] FETCH PARAMS:", currentUser?.id, selectedContact?.id)
-      setDebugLastFetchResult({
-        params: {
-          userId: currentUser?.id || null,
-          selectedUserId: selectedContact?.id || null,
-        },
-        data: [],
-        error: "selected user is null",
-      })
-      pushDebugError("loadMessages", "Selected user is null")
-      setMessages([])
-      return
-    }
-
     setMessagesLoading(true)
     try {
-      console.log("[Chat] FETCH PARAMS:", currentUser.id, selectedContact.id)
+      console.log("LOADING MESSAGES BETWEEN:", currentUser.id, selectedContact.id)
 
       const { data, error } = await supabase
         .from("messages")
         .select("*")
         .or(
-          `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedContact.id}), and(sender_id.eq.${selectedContact.id},receiver_id.eq.${currentUser.id})`,
+          `and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedContact.id}),and(sender_id.eq.${selectedContact.id},receiver_id.eq.${currentUser.id})`,
         )
         .order("created_at", { ascending: true })
 
-      console.log("[Chat] FETCH RESULT:", data, error)
+      console.log("MESSAGES RAW:", data, error)
 
       setDebugLastFetchResult({
         params: {
@@ -241,7 +225,7 @@ export default function Chat({ adminMode = false }) {
     } finally {
       setMessagesLoading(false)
     }
-  }, [currentUser?.id, selectedContact, showToast])
+  }, [currentUser, selectedContact, showToast])
 
   useEffect(() => {
     selectedContactRef.current = selectedContact
@@ -253,8 +237,10 @@ export default function Chat({ adminMode = false }) {
   }, [currentUser, loadUsers])
 
   useEffect(() => {
-    loadMessages()
-  }, [loadMessages])
+    if (selectedContact) {
+      loadMessages()
+    }
+  }, [selectedContact, loadMessages])
 
   useEffect(() => {
     if (!currentUser?.id) return undefined
