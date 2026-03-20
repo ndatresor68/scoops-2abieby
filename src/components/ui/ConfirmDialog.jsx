@@ -1,4 +1,4 @@
-import { FaExclamationTriangle, FaCheckCircle, FaInfoCircle } from "react-icons/fa"
+import { FaExclamationTriangle, FaInfoCircle } from "react-icons/fa"
 import Modal from "./Modal"
 import Button from "./Button"
 
@@ -38,7 +38,7 @@ export default function ConfirmDialog({
     <Modal isOpen={isOpen} onClose={onClose} size="sm">
       <div style={container}>
         <div style={{ ...iconContainer, background: color.bg, borderColor: color.border }}>
-          <div style={{ color: color.icon, fontSize: "48px" }}>{Icon}</div>
+          <div style={{ color: color.icon, fontSize: 42 }}>{Icon}</div>
         </div>
         <h3 style={titleStyle}>{title}</h3>
         <p style={messageStyle}>{message}</p>
@@ -63,34 +63,37 @@ const container = {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  padding: "8px 0",
+  padding: "8px 4px",
 }
 
 const iconContainer = {
-  width: "80px",
-  height: "80px",
+  width: 88,
+  height: 88,
   borderRadius: "50%",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  marginBottom: "20px",
+  marginBottom: 20,
   border: "2px solid",
+  boxShadow: "0 20px 40px rgba(15, 23, 42, 0.08)",
 }
 
 const titleStyle = {
   margin: "0 0 12px 0",
-  fontSize: "20px",
-  fontWeight: 700,
-  color: "#111827",
+  fontSize: 22,
+  fontWeight: 800,
+  color: "#0f172a",
   textAlign: "center",
+  letterSpacing: "-0.03em",
 }
 
 const messageStyle = {
   margin: "0 0 24px 0",
-  fontSize: "14px",
-  color: "#6b7280",
+  fontSize: 14,
+  color: "#64748b",
   textAlign: "center",
   lineHeight: 1.6,
+  maxWidth: 360,
 }
 
 const actions = {
@@ -98,4 +101,5 @@ const actions = {
   gap: 12,
   width: "100%",
   justifyContent: "flex-end",
+  flexWrap: "wrap",
 }

@@ -19,8 +19,8 @@ import Button from "../../components/ui/Button"
 import Modal from "../../components/ui/Modal"
 import ConfirmDialog from "../../components/ui/ConfirmDialog"
 import Input from "../../components/ui/Input"
+import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
 import { exportUsersPDF } from "../../utils/exportToPDF"
-import { useMediaQuery } from "../../hooks/useMediaQuery"
 import {
   logUserCreated,
   logUserUpdated,
@@ -54,18 +54,11 @@ export default function AdminUsers() {
   const { settings } = useSettings()
   const exportFormat = useExportFormat()
   const passwordPolicy = usePasswordPolicy()
-  const isMobile = useMediaQuery("(max-width: 640px)")
-  
   // Debug: Log when component mounts
   useEffect(() => {
     console.log("[AdminUsers] Component mounted, isAdmin:", isAdmin)
   }, [isAdmin])
   
-  // Dynamic grid columns based on screen size
-  const statsGridStyle = isMobile 
-    ? { ...statsContainer, gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }
-    : statsContainer
-
   const [users, setUsers] = useState([])
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
@@ -641,233 +634,225 @@ export default function AdminUsers() {
     )
   }
 
-  return (
-    <div style={container}>
-      {/* Statistics Cards */}
-      <div style={statsGridStyle}>
-        <div style={statCard}>
-          <div style={statIcon} style={{ background: "#eff6ff", color: "#2563eb" }}>
-            <FaUserShield />
-          </div>
-          <div>
-            <div style={statValue}>{stats.total}</div>
-            <div style={statLabel}>Total utilisateurs</div>
-          </div>
-        </div>
-        <div style={statCard}>
-          <div style={statIcon} style={{ background: "#ecfdf3", color: "#16a34a" }}>
-            <FaCheckCircle />
-          </div>
-          <div>
-            <div style={statValue}>{stats.active}</div>
-            <div style={statLabel}>Actifs</div>
-          </div>
-        </div>
-        <div style={statCard}>
-          <div style={statIcon} style={{ background: "#fffbeb", color: "#f59e0b" }}>
-            <FaUserSlash />
-          </div>
-          <div>
-            <div style={statValue}>{stats.suspended}</div>
-            <div style={statLabel}>Suspendus</div>
-          </div>
-        </div>
-        <div style={statCard}>
-          <div style={statIcon} style={{ background: "#fef2f2", color: "#dc2626" }}>
-            <FaBan />
-          </div>
-          <div>
-            <div style={statValue}>{stats.banned}</div>
-            <div style={statLabel}>Bannis</div>
-          </div>
-        </div>
-      </div>
+  const summaryStats = [
+    {
+      label: "Utilisateurs",
+      value: stats.total,
+      icon: <FaUserShield />,
+      accent: "#2563eb",
+      helper: "Total",
+    },
+    {
+      label: "Actifs",
+      value: stats.active,
+      icon: <FaCheckCircle />,
+      accent: "#16a34a",
+      helper: "Disponibles",
+    },
+    {
+      label: "Suspendus",
+      value: stats.suspended,
+      icon: <FaUserSlash />,
+      accent: "#f59e0b",
+      helper: "Suivi",
+    },
+    {
+      label: "Bannis",
+      value: stats.banned,
+      icon: <FaBan />,
+      accent: "#dc2626",
+      helper: "Bloqués",
+    },
+  ]
 
-      {/* Header */}
-      <div style={header}>
-        <div>
-          <h2 style={title}>Gestion des Utilisateurs</h2>
-          <p style={subtitle}>Gérez les utilisateurs, leurs rôles et leurs statuts</p>
-        </div>
-        <div style={headerActions}>
+  return (
+    <AdminPage
+      title="Utilisateurs"
+      subtitle="Gérez les comptes, les rôles, les statuts et les accès dans une expérience d'administration unifiée."
+      stats={summaryStats}
+      actions={
+        <>
           <Button variant="secondary" icon={<FaFilePdf />} onClick={handleExportPDF} disabled={exportingPDF}>
             {exportingPDF ? "Export..." : "Exporter PDF"}
           </Button>
           <Button variant="primary" icon={<FaPlus />} onClick={openCreateModal}>
             Créer un utilisateur
           </Button>
-        </div>
-      </div>
-
-      {/* Search */}
-      <div style={searchContainer}>
-        <div style={searchWrapper}>
-          <FaSearch style={{ color: "#9ca3af", fontSize: 18 }} />
-          <Input
-            placeholder="Rechercher par nom, email ou rôle..."
-            value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            style={{ border: "none", background: "transparent", flex: 1 }}
-          />
-        </div>
-      </div>
-
-      {/* Table */}
-      <div style={tableCard}>
-        {loading ? (
-          <div style={loadingState}>
-            <div style={spinner}></div>
-            <p>Chargement...</p>
+        </>
+      }
+    >
+      <AdminPanel
+        title="Répertoire utilisateurs"
+        subtitle="Recherchez, analysez et gérez les comptes administrés."
+      >
+        <div style={searchContainer}>
+          <div style={searchWrapper}>
+            <FaSearch style={{ color: "#9ca3af", fontSize: 18 }} />
+            <Input
+              placeholder="Rechercher par nom, email ou rôle..."
+              value={searchTerm}
+              onChange={(value) => setSearchTerm(value)}
+              style={{ border: "none", background: "transparent", flex: 1 }}
+            />
           </div>
-        ) : filteredUsers.length === 0 ? (
-          <div style={emptyState}>
-            <FaUserShield size={48} style={{ color: "#9ca3af", marginBottom: 16 }} />
-            <p style={{ margin: 0, color: "#6b7280" }}>
-              {searchTerm ? "Aucun utilisateur trouvé" : "Aucun utilisateur enregistré"}
-            </p>
-          </div>
-        ) : (
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Avatar</th>
-                <th style={th}>Nom</th>
-                <th style={th}>Email</th>
-                <th style={th}>Rôle</th>
-                <th style={th}>Statut</th>
-                <th style={th}>Centre</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((u) => (
-                <tr key={u.id}>
-                  <td style={td}>
-                    {u.avatar_url ? (
-                      <img src={u.avatar_url} alt={u.nom} style={avatar} />
-                    ) : (
-                      <div style={avatarFallback}>{(u.nom || "U").slice(0, 1).toUpperCase()}</div>
-                    )}
-                  </td>
-                  <td style={td}>
-                    <strong style={nameText}>{u.nom}</strong>
-                  </td>
-                  <td style={td}>
-                    <span style={emailText}>{u.email}</span>
-                  </td>
-                  <td style={td}>
-                    <span style={roleBadge}>{u.role}</span>
-                  </td>
-                  <td style={td}>{getStatusBadge(u.status || "active")}</td>
-                  <td style={td}>
-                    <span style={centreText}>{centresMap[String(u.centre_id)] || "-"}</span>
-                  </td>
-                  <td style={td}>
-                    <div style={actions}>
-                      <button
-                        type="button"
-                        style={{
-                          ...actionBtn,
-                          opacity: !canModifyUser(u) ? 0.5 : 1,
-                          cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
-                        }}
-                        onClick={() => {
-                          if (canModifyUser(u)) openEditModal(u)
-                        }}
-                        title="Modifier"
-                        disabled={!canModifyUser(u)}
-                      >
-                        <FaEdit />
-                      </button>
-                      {u.status === "active" || !u.status ? (
-                        <button
-                          type="button"
-                          style={{
-                            ...actionBtn,
-                            ...suspendBtn,
-                            opacity: !canModifyUser(u) ? 0.5 : 1,
-                            cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
-                          }}
-                          onClick={() => {
-                            if (canModifyUser(u)) {
-                              setActionUser(u)
-                              setShowSuspendDialog(true)
-                            }
-                          }}
-                          title="Suspendre"
-                          disabled={!canModifyUser(u)}
-                        >
-                          <FaUserSlash />
-                        </button>
-                      ) : u.status === "suspended" ? (
-                        <button
-                          type="button"
-                          style={{
-                            ...actionBtn,
-                            ...reactivateBtn,
-                            opacity: !canModifyUser(u) ? 0.5 : 1,
-                            cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
-                          }}
-                          onClick={() => {
-                            if (canModifyUser(u)) {
-                              setActionUser(u)
-                              setShowReactivateDialog(true)
-                            }
-                          }}
-                          title="Réactiver"
-                          disabled={!canModifyUser(u)}
-                        >
-                          <FaUserCheck />
-                        </button>
-                      ) : null}
-                      {u.status !== "banned" && (
-                        <button
-                          type="button"
-                          style={{
-                            ...actionBtn,
-                            ...banBtn,
-                            opacity: !canModifyUser(u) ? 0.5 : 1,
-                            cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
-                          }}
-                          onClick={() => {
-                            if (canModifyUser(u)) {
-                              setActionUser(u)
-                              setShowBanDialog(true)
-                            }
-                          }}
-                          title="Bannir"
-                          disabled={!canModifyUser(u)}
-                        >
-                          <FaBan />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        style={{
-                          ...actionBtn,
-                          ...deleteBtn,
-                          opacity: !canModifyUser(u) ? 0.5 : 1,
-                          cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
-                        }}
-                        onClick={() => {
-                          if (canModifyUser(u)) {
-                            setDeletingUser(u)
-                            setShowDeleteDialog(true)
-                          }
-                        }}
-                        title="Supprimer"
-                        disabled={!canModifyUser(u)}
-                      >
-                        <FaTrash />
-                      </button>
-                    </div>
-                  </td>
+        </div>
+
+        <div style={tableCard}>
+          {loading ? (
+            <div style={loadingState}>
+              <div style={spinner}></div>
+              <p>Chargement...</p>
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div style={emptyState}>
+              <FaUserShield size={48} style={{ color: "#9ca3af", marginBottom: 16 }} />
+              <p style={{ margin: 0, color: "#6b7280" }}>
+                {searchTerm ? "Aucun utilisateur trouvé" : "Aucun utilisateur enregistré"}
+              </p>
+            </div>
+          ) : (
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Avatar</th>
+                  <th style={th}>Nom</th>
+                  <th style={th}>Email</th>
+                  <th style={th}>Rôle</th>
+                  <th style={th}>Statut</th>
+                  <th style={th}>Centre</th>
+                  <th style={th}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {filteredUsers.map((u) => (
+                  <tr key={u.id}>
+                    <td style={td}>
+                      {u.avatar_url ? (
+                        <img src={u.avatar_url} alt={u.nom} style={avatar} />
+                      ) : (
+                        <div style={avatarFallback}>{(u.nom || "U").slice(0, 1).toUpperCase()}</div>
+                      )}
+                    </td>
+                    <td style={td}>
+                      <strong style={nameText}>{u.nom}</strong>
+                    </td>
+                    <td style={td}>
+                      <span style={emailText}>{u.email}</span>
+                    </td>
+                    <td style={td}>
+                      <span style={roleBadge}>{u.role}</span>
+                    </td>
+                    <td style={td}>{getStatusBadge(u.status || "active")}</td>
+                    <td style={td}>
+                      <span style={centreText}>{centresMap[String(u.centre_id)] || "-"}</span>
+                    </td>
+                    <td style={td}>
+                      <div style={actions}>
+                        <button
+                          type="button"
+                          style={{
+                            ...actionBtn,
+                            opacity: !canModifyUser(u) ? 0.5 : 1,
+                            cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
+                          }}
+                          onClick={() => {
+                            if (canModifyUser(u)) openEditModal(u)
+                          }}
+                          title="Modifier"
+                          disabled={!canModifyUser(u)}
+                        >
+                          <FaEdit />
+                        </button>
+                        {u.status === "active" || !u.status ? (
+                          <button
+                            type="button"
+                            style={{
+                              ...actionBtn,
+                              ...suspendBtn,
+                              opacity: !canModifyUser(u) ? 0.5 : 1,
+                              cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
+                            }}
+                            onClick={() => {
+                              if (canModifyUser(u)) {
+                                setActionUser(u)
+                                setShowSuspendDialog(true)
+                              }
+                            }}
+                            title="Suspendre"
+                            disabled={!canModifyUser(u)}
+                          >
+                            <FaUserSlash />
+                          </button>
+                        ) : u.status === "suspended" ? (
+                          <button
+                            type="button"
+                            style={{
+                              ...actionBtn,
+                              ...reactivateBtn,
+                              opacity: !canModifyUser(u) ? 0.5 : 1,
+                              cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
+                            }}
+                            onClick={() => {
+                              if (canModifyUser(u)) {
+                                setActionUser(u)
+                                setShowReactivateDialog(true)
+                              }
+                            }}
+                            title="Réactiver"
+                            disabled={!canModifyUser(u)}
+                          >
+                            <FaUserCheck />
+                          </button>
+                        ) : null}
+                        {u.status !== "banned" && (
+                          <button
+                            type="button"
+                            style={{
+                              ...actionBtn,
+                              ...banBtn,
+                              opacity: !canModifyUser(u) ? 0.5 : 1,
+                              cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
+                            }}
+                            onClick={() => {
+                              if (canModifyUser(u)) {
+                                setActionUser(u)
+                                setShowBanDialog(true)
+                              }
+                            }}
+                            title="Bannir"
+                            disabled={!canModifyUser(u)}
+                          >
+                            <FaBan />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          style={{
+                            ...actionBtn,
+                            ...deleteBtn,
+                            opacity: !canModifyUser(u) ? 0.5 : 1,
+                            cursor: !canModifyUser(u) ? "not-allowed" : "pointer",
+                          }}
+                          onClick={() => {
+                            if (canModifyUser(u)) {
+                              setDeletingUser(u)
+                              setShowDeleteDialog(true)
+                            }
+                          }}
+                          title="Supprimer"
+                          disabled={!canModifyUser(u)}
+                        >
+                          <FaTrash />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </AdminPanel>
 
       {/* Create/Edit Modal */}
       <Modal isOpen={showModal} onClose={resetModal} title={editingUser ? "Modifier utilisateur" : "Nouvel utilisateur"}>
@@ -1055,7 +1040,7 @@ export default function AdminUsers() {
         confirmText="Réactiver"
         loading={saving}
       />
-    </div>
+    </AdminPage>
   )
 }
 

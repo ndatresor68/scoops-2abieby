@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaPlus, FaEdit, FaTrash, FaUserFriends, FaBuilding, FaFilePdf } from "react-icons/fa"
-import Card from "../../components/ui/Card"
 import Button from "../../components/ui/Button"
 import Table from "../../components/ui/Table"
 import Modal from "../../components/ui/Modal"
 import ConfirmDialog from "../../components/ui/ConfirmDialog"
 import Input from "../../components/ui/Input"
+import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import { exportAgentsPDF } from "../../utils/exportToPDF"
@@ -20,7 +20,7 @@ const INITIAL_FORM = {
 }
 
 export default function AdminAgents() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, user } = useAuth()
   const { showToast } = useToast()
   const [agents, setAgents] = useState([])
   const [centres, setCentres] = useState([])
@@ -318,6 +318,23 @@ export default function AdminAgents() {
     )
   }
 
+  const summaryStats = [
+    {
+      label: "Agents",
+      value: agents.length,
+      icon: <FaUserFriends />,
+      accent: "#7c3aed",
+      helper: "Actifs",
+    },
+    {
+      label: "Centres",
+      value: centres.length,
+      icon: <FaBuilding />,
+      accent: "#059669",
+      helper: "Assignables",
+    },
+  ]
+
   async function handleExportPDF() {
     if (agents.length === 0) {
       showToast("Aucun agent à exporter", "warning")
@@ -346,13 +363,12 @@ export default function AdminAgents() {
   }
 
   return (
-    <div style={container}>
-      <div style={header}>
-        <div>
-          <h2 style={title}>Gestion des Agents</h2>
-          <p style={subtitle}>Gérer les agents assignés aux centres</p>
-        </div>
-        <div style={headerActions}>
+    <AdminPage
+      title="Agents"
+      subtitle="Administrez les agents terrain, leurs rattachements centre et leurs créations de compte."
+      stats={summaryStats}
+      actions={
+        <>
           <Button
             variant="secondary"
             icon={<FaFilePdf />}
@@ -364,10 +380,13 @@ export default function AdminAgents() {
           <Button variant="primary" icon={<FaPlus />} onClick={openCreateModal}>
             Ajouter un agent
           </Button>
-        </div>
-      </div>
-
-      <Card>
+        </>
+      }
+    >
+      <AdminPanel
+        title="Répertoire agents"
+        subtitle="Vue centralisée des agents assignés et de leurs centres de rattachement."
+      >
         <Table
           data={agents}
           columns={columns}
@@ -380,7 +399,7 @@ export default function AdminAgents() {
           loading={loading}
           emptyMessage="Aucun agent enregistré"
         />
-      </Card>
+      </AdminPanel>
 
       {/* Create/Edit Modal */}
       <Modal
@@ -477,7 +496,7 @@ export default function AdminAgents() {
         confirmText="Supprimer"
         cancelText="Annuler"
       />
-    </div>
+    </AdminPage>
   )
 }
 

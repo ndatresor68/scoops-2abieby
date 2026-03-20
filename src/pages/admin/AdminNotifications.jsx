@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react"
-import { FaBell, FaPaperPlane, FaSearch, FaUsers, FaUser } from "react-icons/fa"
+import {
+  FaBell,
+  FaPaperPlane,
+  FaSearch,
+  FaUsers,
+  FaUser,
+  FaCheckCircle,
+  FaExclamationTriangle,
+} from "react-icons/fa"
 import Button from "../../components/ui/Button"
 import Input from "../../components/ui/Input"
 import Modal from "../../components/ui/Modal"
 import Table from "../../components/ui/Table"
+import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import { useMediaQuery } from "../../hooks/useMediaQuery"
@@ -34,6 +43,7 @@ export default function AdminNotifications() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const isMobile = useMediaQuery("(max-width: 768px)")
+
   const [notifications, setNotifications] = useState([])
   const [users, setUsers] = useState([])
   const [usersById, setUsersById] = useState({})
@@ -52,6 +62,11 @@ export default function AdminNotifications() {
     targetType: "all",
     targetUserId: "",
   })
+
+  useEffect(() => {
+    loadUsers()
+    loadNotifications()
+  }, [])
 
   async function loadUsers() {
     try {
@@ -94,11 +109,6 @@ export default function AdminNotifications() {
     }
   }
 
-  useEffect(() => {
-    loadUsers()
-    loadNotifications()
-  }, [])
-
   const filteredUsers = useMemo(() => {
     const term = userSearch.trim().toLowerCase()
     if (!term) return users
@@ -121,7 +131,7 @@ export default function AdminNotifications() {
             ? "Tous les utilisateurs"
             : `Utilisateur spécifique · ${getUserLabel(usersById[notification.target_user_id])}`,
       })),
-    [notifications, usersById],
+    [notifications, usersById]
   )
 
   const detailRecipients = useMemo(() => {
@@ -160,6 +170,44 @@ export default function AdminNotifications() {
 
   const successCount = detailLogs.filter((log) => log.status === "success").length
   const failureCount = detailLogs.filter((log) => log.status === "failed").length
+
+  const summary = useMemo(() => {
+    const broadcasts = notifications.filter((entry) => entry.target_type === "all").length
+    const targeted = notifications.filter((entry) => entry.target_type === "user").length
+    const latestDate = notifications[0]?.created_at
+    return [
+      {
+        label: "Notifications envoyées",
+        value: notifications.length.toLocaleString("fr-FR"),
+        icon: <FaBell />,
+        accent: "#2563eb",
+      },
+      {
+        label: "Diffusions globales",
+        value: broadcasts.toLocaleString("fr-FR"),
+        icon: <FaUsers />,
+        accent: "#16a34a",
+      },
+      {
+        label: "Envois ciblés",
+        value: targeted.toLocaleString("fr-FR"),
+        icon: <FaUser />,
+        accent: "#7c3aed",
+      },
+      {
+        label: "Dernier envoi",
+        value: latestDate ? formatDate(latestDate) : "-",
+        icon: <FaPaperPlane />,
+        accent: "#ea580c",
+      },
+    ]
+  }, [notifications])
+
+  const guidanceItems = [
+    "Utilisez un titre court et lisible.",
+    "Preferez les messages cibles pour les actions sensibles.",
+    "Consultez le detail d'un envoi pour verifier les echecs.",
+  ]
 
   async function openNotificationDetail(notification) {
     setSelectedNotification(notification)
@@ -245,18 +293,35 @@ export default function AdminNotifications() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Notifications</h1>
-          <p style={styles.subtitle}>
-            Gérez les notifications administrateur, suivez les envois et consultez les statuts
-            par destinataire.
-          </p>
-        </div>
-      </div>
-
-      <div style={styles.tableCard}>
+    <AdminPage
+      title="Notifications"
+      subtitle="Suivez les campagnes envoyées, leurs cibles et le détail par destinataire dans une vue dédiée."
+      stats={summary}
+      aside={
+        <AdminPanel
+          title="Bonnes pratiques"
+          subtitle="Quelques repères pour garder des envois clairs et fiables."
+        >
+          <div style={styles.guidanceList}>
+            {guidanceItems.map((item) => (
+              <div key={item} style={styles.guidanceItem}>
+                <span style={styles.guidanceDot} />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+        </AdminPanel>
+      }
+      actions={
+        <Button icon={<FaPaperPlane />} onClick={() => setComposerOpen(true)} fullWidth={isMobile}>
+          Nouvelle notification
+        </Button>
+      }
+    >
+      <AdminPanel
+        title="Historique des notifications"
+        subtitle="Tableau centralisé des communications envoyées et des cibles concernées."
+      >
         <Table
           data={tableData}
           loading={loading}
@@ -292,11 +357,11 @@ export default function AdminNotifications() {
             },
           ]}
         />
-      </div>
+      </AdminPanel>
 
       <button type="button" style={styles.fab} onClick={() => setComposerOpen(true)}>
         <FaPaperPlane />
-        <span>Envoyer une notification</span>
+        <span>Envoyer</span>
       </button>
 
       <Modal
@@ -307,8 +372,21 @@ export default function AdminNotifications() {
         }}
         title="Envoyer une notification"
         size="lg"
+        mobileFullscreen
       >
         <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.composerIntro}>
+            <div style={styles.composerIntroIcon}>
+              <FaPaperPlane size={18} />
+            </div>
+            <div>
+              <div style={styles.composerIntroTitle}>Nouvelle campagne</div>
+              <div style={styles.composerIntroText}>
+                Choisissez votre cible et diffusez une communication instantanée.
+              </div>
+            </div>
+          </div>
+
           <Input
             label="Titre"
             required
@@ -324,7 +402,7 @@ export default function AdminNotifications() {
               onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
               placeholder="Rédigez le message à envoyer"
               style={styles.textarea}
-              rows={5}
+              rows={6}
             />
           </div>
 
@@ -363,7 +441,7 @@ export default function AdminNotifications() {
             </div>
           </div>
 
-          {form.targetType === "user" && (
+          {form.targetType === "user" ? (
             <div style={styles.userPicker}>
               <Input
                 label="Rechercher un utilisateur"
@@ -413,7 +491,7 @@ export default function AdminNotifications() {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           <div style={styles.formActions}>
             <Button variant="secondary" onClick={() => setComposerOpen(false)} disabled={sending}>
@@ -435,17 +513,16 @@ export default function AdminNotifications() {
         }}
         title="Détail de la notification"
         size="lg"
+        mobileFullscreen
       >
         {selectedNotification ? (
           <div style={styles.detailLayout}>
-            <div style={styles.detailBlock}>
-              <div style={styles.detailLabel}>Titre</div>
-              <div style={styles.detailValue}>{selectedNotification.title}</div>
-            </div>
-
-            <div style={styles.detailBlock}>
-              <div style={styles.detailLabel}>Message</div>
-              <div style={styles.detailMessage}>{selectedNotification.message}</div>
+            <div style={styles.detailHero}>
+              <div>
+                <div style={styles.detailHeroLabel}>Message envoyé</div>
+                <div style={styles.detailHeroTitle}>{selectedNotification.title}</div>
+                <div style={styles.detailHeroText}>{selectedNotification.message}</div>
+              </div>
             </div>
 
             <div style={styles.detailStats}>
@@ -464,12 +541,20 @@ export default function AdminNotifications() {
                 </div>
               </div>
               <div style={styles.detailStatCard}>
-                <div style={styles.detailLabel}>Envois réussis</div>
+                <div style={styles.detailLabel}>Succès</div>
                 <div style={styles.detailValue}>{successCount}</div>
+                <div style={styles.detailBadgeSuccess}>
+                  <FaCheckCircle size={12} />
+                  Livraisons confirmées
+                </div>
               </div>
               <div style={styles.detailStatCard}>
-                <div style={styles.detailLabel}>Envois échoués</div>
+                <div style={styles.detailLabel}>Échecs</div>
                 <div style={styles.detailValue}>{failureCount}</div>
+                <div style={styles.detailBadgeFailed}>
+                  <FaExclamationTriangle size={12} />
+                  À surveiller
+                </div>
               </div>
             </div>
 
@@ -516,7 +601,7 @@ export default function AdminNotifications() {
           </div>
         ) : null}
       </Modal>
-    </div>
+    </AdminPage>
   )
 }
 
@@ -529,30 +614,87 @@ const styles = {
     minHeight: "calc(100vh - 140px)",
     paddingBottom: 96,
   },
-  header: {
+  hero: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 16,
+    flexWrap: "wrap",
+    padding: "clamp(22px, 3vw, 28px)",
+    borderRadius: 28,
+    background:
+      "linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(30,41,59,0.96) 52%, rgba(37,99,235,0.92) 100%)",
+    boxShadow: "0 24px 60px rgba(15, 23, 42, 0.16)",
+    color: "#ffffff",
+  },
+  heroContent: {
+    flex: "1 1 480px",
+    minWidth: 0,
+  },
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: 800,
+    letterSpacing: "0.14em",
+    textTransform: "uppercase",
+    color: "rgba(255,255,255,0.72)",
+  },
+  heroTitle: {
+    margin: "10px 0 0",
+    fontSize: "clamp(28px, 5vw, 40px)",
+    fontWeight: 800,
+    letterSpacing: "-0.05em",
+    lineHeight: 1.02,
+  },
+  heroSubtitle: {
+    margin: "14px 0 0",
+    maxWidth: 720,
+    color: "rgba(255,255,255,0.76)",
+    lineHeight: 1.7,
+    fontSize: 14,
+  },
+  summaryGridDesktop: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 18,
+  },
+  summaryGridMobile: {
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: 14,
+  },
+  summaryCard: {
+    minHeight: 156,
+  },
+  summaryCardHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 16,
   },
-  title: {
-    margin: 0,
-    fontSize: "32px",
+  summaryIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 20,
+  },
+  summaryValue: {
+    marginTop: 24,
+    fontSize: "clamp(24px, 4vw, 30px)",
     fontWeight: 800,
+    letterSpacing: "-0.04em",
     color: "#0f172a",
+    lineHeight: 1.15,
   },
-  subtitle: {
-    margin: "8px 0 0",
+  summaryLabel: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: 700,
     color: "#64748b",
-    lineHeight: 1.6,
-    maxWidth: 760,
   },
-  tableCard: {
-    borderRadius: 20,
-    background: "linear-gradient(180deg, rgba(255,255,255,0.96), #ffffff)",
-    boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
-    border: "1px solid rgba(226, 232, 240, 0.95)",
-    padding: 16,
+  tableShell: {
+    padding: 20,
   },
   cellPrimary: {
     fontWeight: 700,
@@ -564,9 +706,9 @@ const styles = {
     bottom: 24,
     border: "none",
     borderRadius: 999,
-    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
+    background: "linear-gradient(135deg, #991b1b 0%, #dc2626 100%)",
     color: "#ffffff",
-    boxShadow: "0 18px 36px rgba(122, 31, 31, 0.32)",
+    boxShadow: "0 18px 36px rgba(153, 27, 27, 0.28)",
     minHeight: 56,
     padding: "0 22px",
     display: "inline-flex",
@@ -581,6 +723,37 @@ const styles = {
     flexDirection: "column",
     gap: 18,
   },
+  composerIntro: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 16,
+    borderRadius: 20,
+    background: "linear-gradient(135deg, #f8fafc 0%, #ffffff 100%)",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+  },
+  composerIntroIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    background: "linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)",
+    color: "#2563eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  composerIntroTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  composerIntroText: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#64748b",
+    lineHeight: 1.6,
+  },
   field: {
     display: "flex",
     flexDirection: "column",
@@ -589,14 +762,15 @@ const styles = {
   label: {
     fontSize: 13,
     fontWeight: 700,
-    color: "#374151",
+    color: "#334155",
   },
   textarea: {
     width: "100%",
-    minHeight: 140,
+    minHeight: 160,
     padding: "14px 16px",
-    borderRadius: 14,
-    border: "1px solid #d1d5db",
+    borderRadius: 18,
+    border: "1px solid rgba(203, 213, 225, 0.95)",
+    background: "rgba(255,255,255,0.96)",
     fontSize: 14,
     resize: "vertical",
     outline: "none",
@@ -611,7 +785,7 @@ const styles = {
   },
   targetCard: {
     border: "1px solid #e2e8f0",
-    borderRadius: 16,
+    borderRadius: 20,
     background: "#ffffff",
     padding: 16,
     display: "flex",
@@ -620,15 +794,17 @@ const styles = {
     textAlign: "left",
     cursor: "pointer",
     color: "#334155",
+    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.04)",
   },
   targetCardActive: {
-    borderColor: "#7a1f1f",
-    boxShadow: "0 0 0 3px rgba(122, 31, 31, 0.08)",
-    background: "#fff8f8",
+    borderColor: "#2563eb",
+    boxShadow: "0 0 0 4px rgba(37, 99, 235, 0.08)",
+    background: "#f8fbff",
   },
   targetTitle: {
-    fontWeight: 700,
+    fontWeight: 800,
     marginBottom: 4,
+    color: "#0f172a",
   },
   targetText: {
     color: "#64748b",
@@ -643,7 +819,7 @@ const styles = {
   selectedUser: {
     border: "1px solid #dbeafe",
     background: "#eff6ff",
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 14,
     display: "flex",
     justifyContent: "space-between",
@@ -651,7 +827,7 @@ const styles = {
     gap: 16,
   },
   selectedUserName: {
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#0f172a",
   },
   selectedUserMeta: {
@@ -661,7 +837,7 @@ const styles = {
   },
   userList: {
     border: "1px solid #e2e8f0",
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     maxHeight: 280,
     overflowY: "auto",
@@ -681,7 +857,7 @@ const styles = {
     cursor: "pointer",
   },
   userOptionName: {
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#0f172a",
   },
   userOptionMeta: {
@@ -701,9 +877,39 @@ const styles = {
     flexDirection: "column",
     gap: 18,
   },
-  detailBlock: {
-    borderRadius: 16,
-    background: "#f8fafc",
+  detailHero: {
+    borderRadius: 22,
+    padding: 18,
+    background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    color: "#ffffff",
+  },
+  detailHeroLabel: {
+    fontSize: 11,
+    fontWeight: 800,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    color: "rgba(255,255,255,0.68)",
+  },
+  detailHeroTitle: {
+    marginTop: 10,
+    fontSize: 24,
+    fontWeight: 800,
+    letterSpacing: "-0.04em",
+  },
+  detailHeroText: {
+    marginTop: 10,
+    lineHeight: 1.7,
+    color: "rgba(255,255,255,0.8)",
+    whiteSpace: "pre-wrap",
+  },
+  detailStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 12,
+  },
+  detailStatCard: {
+    borderRadius: 18,
+    background: "#ffffff",
     border: "1px solid #e2e8f0",
     padding: 16,
   },
@@ -717,24 +923,35 @@ const styles = {
   },
   detailValue: {
     fontSize: 16,
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#0f172a",
+    lineHeight: 1.4,
   },
-  detailMessage: {
-    color: "#334155",
-    lineHeight: 1.7,
-    whiteSpace: "pre-wrap",
+  detailBadgeSuccess: {
+    marginTop: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 28,
+    padding: "0 10px",
+    borderRadius: 999,
+    background: "#dcfce7",
+    color: "#166534",
+    fontSize: 12,
+    fontWeight: 700,
   },
-  detailStats: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: 12,
-  },
-  detailStatCard: {
-    borderRadius: 16,
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    padding: 16,
+  detailBadgeFailed: {
+    marginTop: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 28,
+    padding: "0 10px",
+    borderRadius: 999,
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontSize: 12,
+    fontWeight: 700,
   },
   recipientsHeader: {
     display: "flex",
@@ -760,20 +977,21 @@ const styles = {
   },
   recipientRow: {
     border: "1px solid #e2e8f0",
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 16,
     flexWrap: "wrap",
+    background: "#ffffff",
   },
   recipientIdentity: {
     flex: 1,
     minWidth: 220,
   },
   recipientName: {
-    fontWeight: 700,
+    fontWeight: 800,
     color: "#0f172a",
   },
   recipientToken: {
@@ -781,6 +999,7 @@ const styles = {
     fontSize: 12,
     color: "#64748b",
     wordBreak: "break-all",
+    whiteSpace: "pre-wrap",
   },
   recipientMeta: {
     display: "flex",
@@ -820,10 +1039,31 @@ const styles = {
   },
   recipientEmpty: {
     border: "1px dashed #cbd5e1",
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 24,
     textAlign: "center",
     color: "#64748b",
     background: "#f8fafc",
+  },
+  guidanceList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  guidanceItem: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    fontSize: 13,
+    color: "#475569",
+    lineHeight: 1.6,
+  },
+  guidanceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    background: "#2563eb",
+    marginTop: 6,
+    flexShrink: 0,
   },
 }

@@ -19,7 +19,7 @@ import { useAuth } from "../../context/AuthContext"
 import { useToast } from "../../components/ui/Toast"
 import Input from "../../components/ui/Input"
 import Button from "../../components/ui/Button"
-import { useMediaQuery } from "../../hooks/useMediaQuery"
+import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
 import { exportActivitiesPDF } from "../../utils/exportToPDF"
 import { logPDFExported } from "../../utils/activityLogger"
 
@@ -53,7 +53,6 @@ const ACTION_FILTERS = {
 export default function AdminActivities() {
   const { isAdmin, user: currentUser } = useAuth()
   const { showToast } = useToast()
-  const isMobile = useMediaQuery("(max-width: 640px)")
 
   const [activities, setActivities] = useState([])
   const [loading, setLoading] = useState(true)
@@ -419,14 +418,29 @@ export default function AdminActivities() {
     )
   }
 
+  const summaryStats = [
+    {
+      label: "Activités",
+      value: activities.length,
+      icon: <FaHistory />,
+      accent: "#2563eb",
+      helper: "Total",
+    },
+    {
+      label: "Affichées",
+      value: filteredActivities.length,
+      icon: <FaSearch />,
+      accent: "#7c3aed",
+      helper: "Résultats",
+    },
+  ]
+
   return (
-    <div style={container}>
-      {/* Header */}
-      <div style={header}>
-        <div>
-          <h2 style={title}>Journal d'Audit</h2>
-          <p style={subtitle}>Historique complet de toutes les activités du système</p>
-        </div>
+    <AdminPage
+      title="Journal d'audit"
+      subtitle="Historique complet des activités du système avec filtres et export."
+      stats={summaryStats}
+      actions={
         <Button
           variant="primary"
           onClick={handleExportPDF}
@@ -436,9 +450,12 @@ export default function AdminActivities() {
           <FaFilePdf />
           {exportingPDF ? "Export en cours..." : "Exporter PDF"}
         </Button>
-      </div>
-
-      {/* Filters and Search */}
+      }
+    >
+      <AdminPanel
+        title="Historique des actions"
+        subtitle="Parcourez les événements système, les accès et les opérations métier."
+      >
       <div style={filtersContainer}>
         <div style={filterRow}>
           <div style={filterGroup}>
@@ -475,7 +492,6 @@ export default function AdminActivities() {
         </div>
       </div>
 
-      {/* Activities Table */}
       <div style={tableCard}>
         {loading ? (
           <div style={loadingState}>
@@ -585,7 +601,6 @@ export default function AdminActivities() {
         )}
       </div>
 
-      {/* Summary */}
       {!loading && filteredActivities.length > 0 && (
         <div style={summaryCard}>
           <div style={summaryItem}>
@@ -601,7 +616,8 @@ export default function AdminActivities() {
           )}
         </div>
       )}
-    </div>
+      </AdminPanel>
+    </AdminPage>
   )
 }
 

@@ -1,52 +1,63 @@
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "../context/AuthContext"
 import {
-  FaChartLine,
-  FaUsers,
-  FaBuilding,
-  FaUserTie,
-  FaCog,
-  FaShieldAlt,
-  FaUserFriends,
-  FaHistory,
-  FaMapMarkerAlt,
-  FaSignOutAlt,
-  FaUserCircle,
+  FaBars,
   FaBell,
-  FaKey,
+  FaBuilding,
+  FaChartLine,
   FaCheckCircle,
-  FaExclamationTriangle,
-  FaTimesCircle,
+  FaChevronLeft,
+  FaChevronRight,
+  FaCog,
   FaEdit,
-  FaWeightHanging,
+  FaExclamationTriangle,
+  FaHistory,
+  FaKey,
+  FaMapMarkerAlt,
+  FaMoon,
   FaPaperPlane,
+  FaSearch,
+  FaShieldAlt,
+  FaSignOutAlt,
+  FaSun,
+  FaTimesCircle,
+  FaUserCircle,
+  FaUserFriends,
+  FaUserTie,
+  FaUsers,
+  FaWeightHanging,
 } from "react-icons/fa"
-import AdminStats from "./admin/AdminStats"
-import AdminUsers from "./admin/AdminUsers"
-import AdminCentres from "./admin/AdminCentres"
-import AdminProducteurs from "./admin/AdminProducteurs"
-import AdminSettings from "./admin/AdminSettings"
 import AdminAgents from "./admin/AdminAgents"
 import AdminActivities from "./admin/AdminActivities"
+import AdminCentres from "./admin/AdminCentres"
+import AdminNotifications from "./admin/AdminNotifications"
 import AdminParcelles from "./admin/AdminParcelles"
 import AdminPesees from "./admin/AdminPesees"
-import AdminNotifications from "./admin/AdminNotifications"
+import AdminProducteurs from "./admin/AdminProducteurs"
+import AdminSettings from "./admin/AdminSettings"
+import AdminStats from "./admin/AdminStats"
+import AdminUsers from "./admin/AdminUsers"
 import Profile from "./Profile"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
 import { useSettings } from "../context/SettingsContext"
-import { getUserNotifications, markNotificationAsRead, subscribeToNotifications } from "../utils/notifications"
+import { ADMIN_TOKENS, getAdminThemeVars } from "../components/ui/AdminPage"
+import {
+  getUserNotifications,
+  markNotificationAsRead,
+  subscribeToNotifications,
+} from "../utils/notifications"
 import logoImage from "../assets/logo-scoops.png"
 
 const SECTIONS = {
   stats: { id: "stats", label: "Tableau de bord", icon: FaChartLine },
+  activites: { id: "activites", label: "Activités", icon: FaHistory },
   users: { id: "users", label: "Utilisateurs", icon: FaUsers },
   agents: { id: "agents", label: "Agents", icon: FaUserFriends },
   centres: { id: "centres", label: "Centres", icon: FaBuilding },
   producteurs: { id: "producteurs", label: "Producteurs", icon: FaUserTie },
   pesees: { id: "pesees", label: "Pesées", icon: FaWeightHanging },
   parcelles: { id: "parcelles", label: "Parcelles", icon: FaMapMarkerAlt },
-  activites: { id: "activites", label: "Activités", icon: FaHistory },
   notifications: { id: "notifications", label: "Notifications", icon: FaPaperPlane },
   settings: { id: "settings", label: "Paramètres", icon: FaCog },
 }
@@ -64,53 +75,129 @@ const SECTION_PATHS = {
   settings: "/admin/settings",
 }
 
+const SECTION_DETAILS = {
+  stats: { badge: "Overview", description: "Indicateurs principaux et activite recente." },
+  activites: { badge: "Audit", description: "Journal des actions et de la traçabilité." },
+  users: { badge: "Users", description: "Gestion des comptes et des statuts." },
+  agents: { badge: "Ops", description: "Pilotage des agents terrain." },
+  centres: { badge: "Network", description: "Organisation des centres de collecte." },
+  producteurs: { badge: "Growth", description: "Suivi des producteurs." },
+  pesees: { badge: "Weights", description: "Volumes et operations de pesee." },
+  parcelles: { badge: "Maps", description: "Parcelles et informations associees." },
+  notifications: { badge: "Comms", description: "Centre de notifications." },
+  settings: { badge: "System", description: "Configuration generale." },
+}
+
+const SECTION_GROUPS = [
+  { id: "workspace", label: "Workspace", items: ["stats", "activites", "notifications"] },
+  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "pesees", "parcelles", "settings"] },
+]
+
 function getSectionFromPath(pathname) {
   const match = Object.entries(SECTION_PATHS).find(([, path]) => path === pathname)
   return match?.[0] || "stats"
+}
+
+function formatTimeAgo(dateString) {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now - date
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return "À l'instant"
+  if (diffMins < 60) return `Il y a ${diffMins} min`
+  if (diffHours < 24) return `Il y a ${diffHours}h`
+  if (diffDays < 7) return `Il y a ${diffDays}j`
+  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
 }
 
 export default function AdminDashboard() {
   const { isAdmin, role, loading: authLoading, user, displayName, signOut } = useAuth()
   const { showToast } = useToast()
   const { settings } = useSettings()
+
   const [activeSection, setActiveSection] = useState(() => {
     if (typeof window === "undefined") return "stats"
     return getSectionFromPath(window.location.pathname)
   })
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [profileEditMode, setProfileEditMode] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
-  
+  const [themeMode, setThemeMode] = useState(() => {
+    if (typeof window === "undefined") return "light"
+    return window.localStorage.getItem("admin-theme-mode") || "light"
+  })
+
+  const searchPanelRef = useRef(null)
+  const searchInputRef = useRef(null)
+  const notificationPanelRef = useRef(null)
+  const notificationButtonRef = useRef(null)
+  const userMenuPanelRef = useRef(null)
+  const avatarButtonRef = useRef(null)
+
   const isMobile = useMediaQuery("(max-width: 768px)")
-  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
-  
   const cooperativeName = settings?.cooperative_name || "SCOOP ASAB-COOP-CA"
   const cooperativeLogo = settings?.logo_url || logoImage
-  
   const userAvatar = user?.avatar_url || null
   const userInitials = displayName
     ? displayName
         .split(" ")
-        .map((n) => n[0])
+        .map((part) => part[0])
         .join("")
         .toUpperCase()
         .slice(0, 2)
     : user?.email?.[0]?.toUpperCase() || "A"
 
-  // Sidebar is always visible, no mobile drawer behavior needed
+  const activeSectionConfig = showProfile
+    ? { label: profileEditMode ? "Modifier le profil" : "Mon profil", icon: FaUserCircle }
+    : SECTIONS[activeSection] || SECTIONS.stats
+  const ActiveSectionIcon = activeSectionConfig.icon
 
-  // Load notifications
+  const activeMeta = showProfile
+    ? { badge: "Profile", description: "Informations personnelles et préférences administrateur." }
+    : SECTION_DETAILS[activeSection] || SECTION_DETAILS.stats
+
+  const groupedSections = useMemo(
+    () =>
+      SECTION_GROUPS.map((group) => ({
+        ...group,
+        items: group.items.map((id) => SECTIONS[id]).filter(Boolean),
+      })),
+    []
+  )
+
+  const filteredSections = useMemo(() => {
+    const normalized = searchQuery.trim().toLowerCase()
+    if (!normalized) return Object.values(SECTIONS)
+    return Object.values(SECTIONS).filter((section) =>
+      section.label.toLowerCase().includes(normalized)
+    )
+  }, [searchQuery])
+
+  const desktopSidebarWidth = sidebarCollapsed ? 92 : 272
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem("admin-theme-mode", themeMode)
+  }, [themeMode])
+
   useEffect(() => {
     if (!user?.id) return
 
     async function loadNotifications() {
       try {
-        const notifs = await getUserNotifications(user.id, 20)
-        setNotifications(notifs)
-        setUnreadCount(notifs.filter((n) => !n.read).length)
+        const items = await getUserNotifications(user.id, 20)
+        setNotifications(items)
+        setUnreadCount(items.filter((item) => !item.read).length)
       } catch (error) {
         console.error("[AdminDashboard] Error loading notifications:", error)
       }
@@ -120,12 +207,12 @@ export default function AdminDashboard() {
 
     let unsubscribe
     try {
-      unsubscribe = subscribeToNotifications(user.id, (newNotification) => {
-        if (newNotification) {
-          setNotifications((prev) => [newNotification, ...prev])
-          setUnreadCount((prev) => prev + 1)
-          if (newNotification.title) {
-            showToast(newNotification.title, "info")
+      unsubscribe = subscribeToNotifications(user.id, (nextNotification) => {
+        if (nextNotification) {
+          setNotifications((current) => [nextNotification, ...current])
+          setUnreadCount((current) => current + 1)
+          if (nextNotification.title) {
+            showToast(nextNotification.title, "info")
           }
         }
       })
@@ -134,81 +221,155 @@ export default function AdminDashboard() {
     }
 
     return () => {
-      if (unsubscribe && typeof unsubscribe === "function") {
+      if (typeof unsubscribe === "function") {
         unsubscribe()
       }
     }
   }, [user?.id, showToast])
 
+  useEffect(() => {
+    if (activeSection !== "settings" && showProfile) {
+      setShowProfile(false)
+      setProfileEditMode(false)
+    }
+  }, [activeSection, showProfile])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined
+
+    const handlePopState = () => {
+      setShowProfile(false)
+      setProfileEditMode(false)
+      setActiveSection(getSectionFromPath(window.location.pathname))
+    }
+
+    const handleAdminNavigate = (event) => {
+      const nextSection = event.detail?.section
+      if (!nextSection || !SECTIONS[nextSection]) return
+      navigateToSection(nextSection)
+    }
+
+    const handleHotkey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        setSearchOpen(true)
+        requestAnimationFrame(() => searchInputRef.current?.focus())
+      }
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    window.addEventListener("admin:navigate", handleAdminNavigate)
+    window.addEventListener("keydown", handleHotkey)
+    return () => {
+      window.removeEventListener("popstate", handlePopState)
+      window.removeEventListener("admin:navigate", handleAdminNavigate)
+      window.removeEventListener("keydown", handleHotkey)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || showProfile) return
+    const nextPath = SECTION_PATHS[activeSection] || "/admin"
+    if (window.location.pathname !== nextPath) {
+      window.history.replaceState({}, "", nextPath)
+    }
+  }, [activeSection, showProfile])
+
+  useEffect(() => {
+    if (!isMobile) {
+      setSidebarOpen(false)
+    } else {
+      setSidebarCollapsed(false)
+    }
+  }, [isMobile])
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      const target = event.target
+
+      if (
+        searchOpen &&
+        !searchPanelRef.current?.contains(target) &&
+        !searchInputRef.current?.contains(target)
+      ) {
+        setSearchOpen(false)
+      }
+
+      if (
+        notificationsOpen &&
+        !notificationPanelRef.current?.contains(target) &&
+        !notificationButtonRef.current?.contains(target)
+      ) {
+        setNotificationsOpen(false)
+      }
+
+      if (
+        userMenuOpen &&
+        !userMenuPanelRef.current?.contains(target) &&
+        !avatarButtonRef.current?.contains(target)
+      ) {
+        setUserMenuOpen(false)
+      }
+    }
+
+    if (searchOpen || notificationsOpen || userMenuOpen) {
+      document.addEventListener("mousedown", handlePointerDown)
+      document.addEventListener("touchstart", handlePointerDown)
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown)
+      document.removeEventListener("touchstart", handlePointerDown)
+    }
+  }, [searchOpen, notificationsOpen, userMenuOpen])
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined
+    const previousOverflow = document.body.style.overflow
+
+    if (isMobile && sidebarOpen) {
+      document.body.style.overflow = "hidden"
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isMobile, sidebarOpen])
+
   async function handleMarkAsRead(notificationId) {
     try {
       await markNotificationAsRead(notificationId)
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
+      setNotifications((current) =>
+        current.map((item) => (item.id === notificationId ? { ...item, read: true } : item))
       )
-      setUnreadCount((prev) => Math.max(0, prev - 1))
+      setUnreadCount((current) => Math.max(0, current - 1))
     } catch (error) {
       console.error("[AdminDashboard] Error marking notification as read:", error)
     }
   }
 
-  function getNotificationIcon(type) {
-    switch (type) {
-      case "success":
-        return <FaCheckCircle size={16} style={{ color: "#16a34a" }} />
-      case "warning":
-        return <FaExclamationTriangle size={16} style={{ color: "#f59e0b" }} />
-      case "error":
-        return <FaTimesCircle size={16} style={{ color: "#dc2626" }} />
-      default:
-        return <FaBell size={16} style={{ color: "#3b82f6" }} />
-    }
+  function navigateToSection(sectionId) {
+    setShowProfile(false)
+    setProfileEditMode(false)
+    setActiveSection(sectionId)
+    setSidebarOpen(false)
+    setSearchOpen(false)
+    setSearchQuery("")
   }
 
-  function formatTimeAgo(dateString) {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffMs = now - date
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return "À l'instant"
-    if (diffMins < 60) return `Il y a ${diffMins} min`
-    if (diffHours < 24) return `Il y a ${diffHours}h`
-    if (diffDays < 7) return `Il y a ${diffDays}j`
-    return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-  }
-
-  if (authLoading) {
-    return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.spinner}></div>
-        <p style={styles.loadingText}>Chargement...</p>
-      </div>
-    )
-  }
-
-  if (!isAdmin) {
-    return (
-      <div style={styles.restrictedContainer}>
-        <FaShieldAlt size={48} style={{ color: "#dc2626", marginBottom: 16 }} />
-        <h2 style={styles.restrictedTitle}>Accès Restreint</h2>
-        <p style={styles.restrictedText}>
-          Cette section est réservée aux administrateurs.
-        </p>
-        <p style={styles.restrictedSubtext}>
-          Votre rôle actuel: <strong>{role}</strong>
-        </p>
-      </div>
-    )
+  function openProfile(editMode = false) {
+    setShowProfile(true)
+    setProfileEditMode(editMode)
+    setActiveSection("settings")
+    setUserMenuOpen(false)
+    setSidebarOpen(false)
   }
 
   function renderSection() {
     if (showProfile) {
       return <Profile initialEditMode={profileEditMode} />
     }
-    
+
     switch (activeSection) {
       case "stats":
         return <AdminStats />
@@ -234,806 +395,1209 @@ export default function AdminDashboard() {
         return <AdminStats />
     }
   }
-  
-  // Reset profile view when navigating to other sections
-  useEffect(() => {
-    if (activeSection !== "settings" && showProfile) {
-      setShowProfile(false)
-      setProfileEditMode(false)
-    }
-  }, [activeSection, showProfile])
 
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined
-    const handlePopState = () => {
-      setShowProfile(false)
-      setProfileEditMode(false)
-      setActiveSection(getSectionFromPath(window.location.pathname))
+  function getNotificationIcon(type) {
+    switch (type) {
+      case "success":
+        return <FaCheckCircle size={16} style={{ color: "#16a34a" }} />
+      case "warning":
+        return <FaExclamationTriangle size={16} style={{ color: "#f59e0b" }} />
+      case "error":
+        return <FaTimesCircle size={16} style={{ color: "#dc2626" }} />
+      default:
+        return <FaBell size={16} style={{ color: "#2563eb" }} />
     }
-    window.addEventListener("popstate", handlePopState)
-    return () => window.removeEventListener("popstate", handlePopState)
-  }, [])
+  }
 
-  useEffect(() => {
-    if (typeof window === "undefined" || showProfile) return
-    const nextPath = SECTION_PATHS[activeSection] || "/admin"
-    if (window.location.pathname !== nextPath) {
-      window.history.replaceState({}, "", nextPath)
-    }
-  }, [activeSection, showProfile])
+  if (authLoading) {
+    return (
+      <div style={styles.loadingState}>
+        <div style={styles.spinner}></div>
+        <p style={styles.loadingText}>Chargement...</p>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div style={styles.restrictedState}>
+        <FaShieldAlt size={48} style={{ color: "#dc2626", marginBottom: 16 }} />
+        <h2 style={styles.restrictedTitle}>Accès Restreint</h2>
+        <p style={styles.restrictedText}>Cette section est réservée aux administrateurs.</p>
+        <p style={styles.restrictedSubtext}>
+          Votre rôle actuel: <strong>{role}</strong>
+        </p>
+      </div>
+    )
+  }
 
   return (
-    <div style={styles.appContainer}>
-      {/* Top Navigation Bar */}
-      <header
+    <div style={{ ...styles.layout, ...getAdminThemeVars(themeMode) }}>
+      {isMobile && sidebarOpen ? (
+        <button type="button" aria-label="Fermer le menu" style={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+      ) : null}
+
+      <aside
         style={{
-          ...styles.topNav,
-          padding: isMobile ? "12px 16px" : styles.topNav.padding,
+          ...styles.sidebar,
+          ...(isMobile
+            ? {
+                transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
+                width: "min(272px, calc(100vw - 20px))",
+              }
+            : {
+                width: desktopSidebarWidth,
+              }),
         }}
       >
-        <div style={styles.topNavRight}>
-          {/* Notifications */}
-          <div style={styles.notificationWrapper}>
-            <button
-              style={styles.iconButton}
-              onClick={() => {
-                setNotificationsOpen(!notificationsOpen)
-                setUserMenuOpen(false)
-              }}
-              aria-label="Notifications"
-            >
-              <FaBell size={18} />
-              {unreadCount > 0 && <span style={styles.badge}>{unreadCount}</span>}
-            </button>
-            {notificationsOpen && (
-              <div style={styles.notificationPanel}>
-                <div style={styles.notificationPanelHeader}>
-                  <FaBell size={16} />
-                  <span style={styles.notificationPanelTitle}>Notifications</span>
-                  {unreadCount > 0 && (
-                    <span style={styles.notificationPanelBadge}>{unreadCount} non lues</span>
-                  )}
-                </div>
-                <div style={styles.notificationPanelList}>
-                  {notifications.length === 0 ? (
-                    <div style={styles.notificationEmpty}>
-                      <FaBell size={24} style={{ color: "#cbd5e1", marginBottom: 8 }} />
-                      <p style={styles.notificationEmptyText}>Aucune notification</p>
-                    </div>
-                  ) : (
-                    notifications.slice(0, 10).map((notification) => (
-                      <div
-                        key={notification.id}
-                        style={{
-                          ...styles.notificationItem,
-                          ...(!notification.read ? styles.notificationItemUnread : {}),
-                        }}
-                        onClick={() => handleMarkAsRead(notification.id)}
-                      >
-                        <div style={styles.notificationItemIcon}>
-                          {getNotificationIcon(notification.type)}
-                        </div>
-                        <div style={styles.notificationItemContent}>
-                          <p style={styles.notificationItemTitle}>{notification.title}</p>
-                          <p style={styles.notificationItemMessage}>{notification.message}</p>
-                          <p style={styles.notificationItemTime}>{formatTimeAgo(notification.created_at)}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* User Menu */}
-          <div style={styles.userMenuWrapper}>
-            <button
-              style={styles.avatarButton}
-              onClick={() => {
-                setUserMenuOpen(!userMenuOpen)
-                setNotificationsOpen(false)
-              }}
-              aria-label="User menu"
-            >
-              {userAvatar ? (
-                <img src={userAvatar} alt={displayName} style={styles.avatarImage} />
-              ) : (
-                <div style={styles.avatarInitials}>{userInitials}</div>
-              )}
-            </button>
-            {userMenuOpen && (
-              <div style={styles.userMenuPanel}>
-                <div style={styles.userMenuHeader}>
-                  <div style={styles.userMenuAvatar}>
-                    {userAvatar ? (
-                      <img src={userAvatar} alt={displayName} style={styles.avatarImageSmall} />
-                    ) : (
-                      <div style={styles.avatarInitialsSmall}>{userInitials}</div>
-                    )}
-                  </div>
-                  <div style={styles.userMenuInfo}>
-                    <p style={styles.userMenuName}>{displayName || user?.email || "Admin"}</p>
-                    <p style={styles.userMenuRole}>{role || "ADMIN"}</p>
-                  </div>
-                </div>
-                <div style={styles.userMenuDivider} />
-                <button
-                  style={styles.userMenuItem}
-                  onClick={() => {
-                    setUserMenuOpen(false)
-                    setShowProfile(true)
-                    setProfileEditMode(false)
-                    setActiveSection("settings")
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f8fafc"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                  }}
-                >
-                  <FaUserCircle size={16} />
-                  <span>Voir mon profil</span>
-                </button>
-                <button
-                  style={styles.userMenuItem}
-                  onClick={() => {
-                    setUserMenuOpen(false)
-                    setShowProfile(true)
-                    setProfileEditMode(true)
-                    setActiveSection("settings")
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f8fafc"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                  }}
-                >
-                  <FaEdit size={16} />
-                  <span>Modifier mon profil</span>
-                </button>
-                <button
-                  style={styles.userMenuItem}
-                  onClick={() => {
-                    setUserMenuOpen(false)
-                    // TODO: Open change password modal
-                    showToast("Fonctionnalité à venir", "info")
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#f8fafc"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                  }}
-                >
-                  <FaKey size={16} />
-                  <span>Changer le mot de passe</span>
-                </button>
-                <div style={styles.userMenuDivider} />
-                <button
-                  style={styles.userMenuItem}
-                  onClick={async () => {
-                    setUserMenuOpen(false)
-                    await signOut()
-                    showToast("Déconnexion réussie", "success")
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#fef2f2"
-                    e.currentTarget.style.color = "#dc2626"
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent"
-                    e.currentTarget.style.color = "#334155"
-                  }}
-                >
-                  <FaSignOutAlt size={16} />
-                  <span>Déconnexion</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <div style={styles.layout}>
-        {/* Sidebar - Always visible */}
-        <aside
-          style={{
-            ...styles.sidebar,
-            width: isMobile ? "220px" : styles.sidebar.width,
-          }}
-        >
-          <div style={styles.sidebarHeader}>
+        <div style={styles.sidebarSurface}>
+          <div style={styles.sidebarBrandRow}>
             <div style={styles.sidebarLogo}>
               <img
                 src={cooperativeLogo}
                 alt="Logo"
                 style={styles.sidebarLogoImage}
-                onError={(e) => {
-                  e.target.src = logoImage
+                onError={(event) => {
+                  event.target.src = logoImage
                 }}
               />
             </div>
-            <div style={styles.sidebarBrand}>
-              <h2 style={styles.sidebarTitle}>{cooperativeName}</h2>
-              <p style={styles.sidebarSubtitle}>Gestion Coopérative</p>
+            {!sidebarCollapsed || isMobile ? (
+              <div style={styles.sidebarBrandText}>
+                <div style={styles.sidebarBrandName}>{cooperativeName}</div>
+                <div style={styles.sidebarBrandMeta}>Gestion Coopérative</div>
+              </div>
+            ) : null}
+          </div>
+
+          <div style={styles.sidebarScroll}>
+            {groupedSections.map((group) => (
+              <div key={group.id} style={styles.navGroup}>
+                {!sidebarCollapsed || isMobile ? <div style={styles.navGroupLabel}>{group.label}</div> : null}
+                <div style={styles.navList}>
+                  {group.items.map((section) => {
+                    const Icon = section.icon
+                    const isActive = activeSection === section.id && !showProfile
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        style={{
+                          ...styles.navItem,
+                          ...(isActive ? styles.navItemActive : null),
+                          ...(sidebarCollapsed && !isMobile ? styles.navItemCollapsed : null),
+                        }}
+                        onClick={() => navigateToSection(section.id)}
+                        title={sidebarCollapsed && !isMobile ? section.label : undefined}
+                        onMouseEnter={(event) => {
+                          if (!isActive) {
+                            event.currentTarget.style.background = "var(--admin-surface-muted)"
+                            event.currentTarget.style.color = "var(--admin-text)"
+                          }
+                        }}
+                        onMouseLeave={(event) => {
+                          if (!isActive) {
+                            event.currentTarget.style.background = "transparent"
+                            event.currentTarget.style.color = "var(--admin-text-soft)"
+                          }
+                        }}
+                      >
+                        <span
+                          style={{
+                            ...styles.navIcon,
+                            ...(isActive ? styles.navIconActive : null),
+                          }}
+                        >
+                          <Icon size={16} />
+                        </span>
+                        {!sidebarCollapsed || isMobile ? (
+                          <span style={styles.navTextWrap}>
+                            <span style={styles.navLabel}>{section.label}</span>
+                            <span style={styles.navMeta}>{SECTION_DETAILS[section.id]?.badge}</span>
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </aside>
+
+      <main
+        style={{
+          ...styles.main,
+          marginLeft: isMobile ? 0 : desktopSidebarWidth,
+        }}
+      >
+        <header
+          style={{
+            ...styles.header,
+            ...(isMobile ? styles.headerMobile : null),
+          }}
+        >
+          <div style={styles.headerLeft}>
+            {isMobile ? (
+              <button
+                type="button"
+                style={styles.headerIconButton}
+                onClick={() => {
+                  setSidebarOpen((current) => !current)
+                  setNotificationsOpen(false)
+                  setUserMenuOpen(false)
+                }}
+                aria-label="Menu"
+              >
+                <FaBars size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                style={styles.headerIconButton}
+                onClick={() => setSidebarCollapsed((current) => !current)}
+                aria-label={sidebarCollapsed ? "Déplier la barre latérale" : "Réduire la barre latérale"}
+              >
+                {sidebarCollapsed ? <FaChevronRight size={16} /> : <FaChevronLeft size={16} />}
+              </button>
+            )}
+
+            <div style={styles.headerTitleWrap}>
+              <div style={styles.headerEyebrow}>
+                <span>{cooperativeName}</span>
+                <span style={styles.headerEyebrowDot} />
+                <span>{activeMeta.badge}</span>
+              </div>
+              <div style={styles.headerTitleRow}>
+                <div style={styles.headerSectionIcon}>
+                  <ActiveSectionIcon size={16} />
+                </div>
+                <div style={styles.headerCopy}>
+                  <h1 style={styles.headerTitle}>{activeSectionConfig.label}</h1>
+                  <p style={styles.headerSubtitle}>{activeMeta.description}</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <nav style={styles.sidebarNav}>
-            {Object.values(SECTIONS).map((section) => {
-              const Icon = section.icon
-              const isActive = activeSection === section.id
-              return (
-                <button
-                  key={section.id}
-                  onClick={() => {
-                    setShowProfile(false)
-                    setProfileEditMode(false)
-                    setActiveSection(section.id)
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = "rgba(122, 31, 31, 0.05)"
-                      e.currentTarget.style.color = "#7a1f1f"
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) {
-                      e.currentTarget.style.background = "transparent"
-                      e.currentTarget.style.color = "#64748b"
-                    }
-                  }}
-                  style={{
-                    ...styles.sidebarNavItem,
-                    ...(isActive ? styles.sidebarNavItemActive : {}),
-                  }}
-                >
-                  <Icon size={18} />
-                  <span>{section.label}</span>
-                </button>
-              )
-            })}
-          </nav>
-        </aside>
+          <div
+            style={{
+              ...styles.headerRight,
+              ...(isMobile ? styles.headerRightMobile : null),
+            }}
+          >
+            <div
+              style={{
+                ...styles.headerSearch,
+                ...(isMobile ? styles.headerSearchMobile : null),
+              }}
+            >
+              <FaSearch size={14} style={{ color: "var(--admin-text-muted)", flexShrink: 0 }} />
+              <input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value)
+                  setSearchOpen(true)
+                }}
+                onFocus={() => setSearchOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setSearchOpen(false)
+                    searchInputRef.current?.blur()
+                  }
 
-        {/* Main Content */}
-        <main style={styles.mainContent}>
-          <div style={{
-            ...styles.contentArea,
-            padding: isMobile ? "16px" : isTablet ? "20px" : "24px",
-          }}>
+                  if (event.key === "Enter" && filteredSections.length > 0) {
+                    event.preventDefault()
+                    navigateToSection(filteredSections[0].id)
+                  }
+                }}
+                placeholder="Rechercher une section"
+                style={styles.headerSearchInput}
+              />
+              {!isMobile ? <span style={styles.searchShortcut}>Cmd K</span> : null}
+
+              {searchOpen ? (
+                <div ref={searchPanelRef} style={styles.searchPanel}>
+                  <div style={styles.searchPanelLabel}>Navigation rapide</div>
+                  <div style={styles.searchPanelList}>
+                    {filteredSections.length === 0 ? (
+                      <div style={styles.searchEmpty}>Aucune section correspondante</div>
+                    ) : (
+                      filteredSections.slice(0, 8).map((section) => {
+                        const Icon = section.icon
+                        return (
+                          <button
+                            key={section.id}
+                            type="button"
+                            style={styles.searchResult}
+                            onClick={() => navigateToSection(section.id)}
+                          >
+                            <span style={styles.searchResultIcon}>
+                              <Icon size={14} />
+                            </span>
+                            <span style={styles.searchResultText}>
+                              <span style={styles.searchResultTitle}>{section.label}</span>
+                              <span style={styles.searchResultSubtitle}>
+                                {SECTION_DETAILS[section.id]?.description}
+                              </span>
+                            </span>
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={styles.headerActions}>
+              <button
+                type="button"
+                style={styles.headerActionButton}
+                onClick={() => setThemeMode((current) => (current === "light" ? "dark" : "light"))}
+                aria-label={themeMode === "light" ? "Activer le mode sombre" : "Activer le mode clair"}
+                title={themeMode === "light" ? "Mode sombre" : "Mode clair"}
+              >
+                {themeMode === "light" ? <FaMoon size={16} /> : <FaSun size={16} />}
+              </button>
+
+              <div style={styles.popoverAnchor}>
+                <button
+                  ref={notificationButtonRef}
+                  type="button"
+                  style={styles.headerActionButton}
+                  onClick={() => {
+                    setNotificationsOpen((current) => !current)
+                    setUserMenuOpen(false)
+                    setSearchOpen(false)
+                  }}
+                  aria-label="Notifications"
+                >
+                  <FaBell size={18} />
+                  {unreadCount > 0 ? <span style={styles.notificationBadge}>{unreadCount}</span> : null}
+                </button>
+
+                {notificationsOpen ? (
+                  <div ref={notificationPanelRef} style={styles.notificationPanel}>
+                    <div style={styles.notificationPanelHeader}>
+                      <div style={styles.notificationPanelTitle}>Notifications</div>
+                      <div style={styles.notificationPanelCount}>
+                        {unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? "s" : ""}` : "A jour"}
+                      </div>
+                    </div>
+                    <div style={styles.notificationList}>
+                      {notifications.length === 0 ? (
+                        <div style={styles.notificationEmpty}>Aucune notification</div>
+                      ) : (
+                        notifications.slice(0, 10).map((notification) => (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            style={{
+                              ...styles.notificationItem,
+                              ...(!notification.read ? styles.notificationItemUnread : null),
+                            }}
+                            onClick={() => handleMarkAsRead(notification.id)}
+                          >
+                            <span style={styles.notificationItemIcon}>
+                              {getNotificationIcon(notification.type)}
+                            </span>
+                            <span style={styles.notificationItemText}>
+                              <span style={styles.notificationItemTitle}>{notification.title || "Notification"}</span>
+                              <span style={styles.notificationItemMessage}>{notification.message}</span>
+                              <span style={styles.notificationItemTime}>{formatTimeAgo(notification.created_at)}</span>
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div style={styles.notificationFooter}>
+                      <button
+                        type="button"
+                        style={styles.notificationFooterButton}
+                        onClick={() => {
+                          navigateToSection("notifications")
+                          setNotificationsOpen(false)
+                        }}
+                      >
+                        Voir toutes les notifications
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div style={styles.popoverAnchor}>
+                <button
+                  ref={avatarButtonRef}
+                  type="button"
+                  style={styles.profileButton}
+                  onClick={() => {
+                    setUserMenuOpen((current) => !current)
+                    setNotificationsOpen(false)
+                    setSearchOpen(false)
+                  }}
+                  aria-label="Menu utilisateur"
+                >
+                  <div style={styles.profileAvatar}>
+                    {userAvatar ? (
+                      <img src={userAvatar} alt={displayName} style={styles.profileAvatarImage} />
+                    ) : (
+                      <div style={styles.profileAvatarFallback}>{userInitials}</div>
+                    )}
+                  </div>
+                  {!isMobile ? (
+                    <div style={styles.profileText}>
+                      <span style={styles.profileName}>{displayName || "Admin"}</span>
+                      <span style={styles.profileRole}>{role || "ADMIN"}</span>
+                    </div>
+                  ) : null}
+                </button>
+
+                {userMenuOpen ? (
+                  <div ref={userMenuPanelRef} style={styles.userMenu}>
+                    <div style={styles.userMenuHeader}>
+                      <div style={styles.userMenuAvatar}>
+                        {userAvatar ? (
+                          <img src={userAvatar} alt={displayName} style={styles.profileAvatarImage} />
+                        ) : (
+                          <div style={styles.profileAvatarFallback}>{userInitials}</div>
+                        )}
+                      </div>
+                      <div style={styles.userMenuText}>
+                        <div style={styles.userMenuName}>{displayName || user?.email || "Admin"}</div>
+                        <div style={styles.userMenuRole}>{role || "ADMIN"}</div>
+                      </div>
+                    </div>
+                    <div style={styles.userMenuList}>
+                      <button type="button" style={styles.userMenuItem} onClick={() => openProfile(false)}>
+                        <FaUserCircle size={16} />
+                        <span>Voir mon profil</span>
+                      </button>
+                      <button type="button" style={styles.userMenuItem} onClick={() => openProfile(true)}>
+                        <FaEdit size={16} />
+                        <span>Modifier mon profil</span>
+                      </button>
+                      <button
+                        type="button"
+                        style={styles.userMenuItem}
+                        onClick={() => {
+                          navigateToSection("notifications")
+                          setUserMenuOpen(false)
+                        }}
+                      >
+                        <FaBell size={16} />
+                        <span>Centre de notifications</span>
+                      </button>
+                      <button
+                        type="button"
+                        style={styles.userMenuItem}
+                        onClick={() => {
+                          navigateToSection("settings")
+                          setUserMenuOpen(false)
+                        }}
+                      >
+                        <FaCog size={16} />
+                        <span>Paramètres admin</span>
+                      </button>
+                      <button
+                        type="button"
+                        style={styles.userMenuItem}
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          showToast("Fonctionnalité à venir", "info")
+                        }}
+                      >
+                        <FaKey size={16} />
+                        <span>Changer le mot de passe</span>
+                      </button>
+                    </div>
+                    <div style={styles.userMenuFooter}>
+                      <button
+                        type="button"
+                        style={{ ...styles.userMenuItem, color: "#dc2626" }}
+                        onClick={async () => {
+                          setUserMenuOpen(false)
+                          await signOut()
+                          showToast("Déconnexion réussie", "success")
+                        }}
+                      >
+                        <FaSignOutAlt size={16} />
+                        <span>Déconnexion</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div style={styles.contentScroller}>
+          <div
+            style={{
+              ...styles.contentInner,
+              padding: isMobile ? 16 : 24,
+            }}
+          >
             {renderSection()}
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }
 
-// Modern, clean styles - Mobile-first approach
 const styles = {
-  appContainer: {
-    display: "flex",
-    flexDirection: "column",
-    minHeight: "100vh",
-    width: "100%",
-    maxWidth: "100vw",
-    overflow: "hidden",
-    background: "#f8fafc",
-    position: "relative",
-  },
-
-  // Top Navigation
-  topNav: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    padding: "12px 24px",
-    background: "#ffffff",
-    borderBottom: "1px solid #e5e7eb",
-    position: "sticky",
-    top: 0,
-    zIndex: 100,
-    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.05)",
-    minHeight: "64px",
-    boxSizing: "border-box",
-  },
-
-  topNavRight: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-
-  iconButton: {
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "40px",
-    height: "40px",
-    border: "none",
-    background: "transparent",
-    borderRadius: "8px",
-    cursor: "pointer",
-    color: "#64748b",
-    transition: "all 0.2s ease",
-  },
-
-  badge: {
-    position: "absolute",
-    top: "6px",
-    right: "6px",
-    background: "#dc2626",
-    color: "white",
-    fontSize: "10px",
-    fontWeight: 700,
-    borderRadius: "10px",
-    minWidth: "18px",
-    height: "18px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "0 4px",
-  },
-
-  // Notifications
-  notificationWrapper: {
-    position: "relative",
-  },
-
-  notificationPanel: {
-    position: "absolute",
-    top: "100%",
-    right: 0,
-    marginTop: "8px",
-    background: "white",
-    borderRadius: "12px",
-    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.15)",
-    border: "1px solid #e5e7eb",
-    overflow: "hidden",
-    width: "360px",
-    maxWidth: "calc(100vw - 32px)",
-    maxHeight: "480px",
-    zIndex: 1001,
-    display: "flex",
-    flexDirection: "column",
-  },
-
-  notificationPanelHeader: {
-    padding: "16px",
-    borderBottom: "1px solid #e5e7eb",
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    background: "#f9fafb",
-  },
-
-  notificationPanelTitle: {
-    flex: 1,
-    fontSize: "14px",
-    fontWeight: 600,
-    color: "#0f172a",
-  },
-
-  notificationPanelBadge: {
-    fontSize: "11px",
-    color: "#64748b",
-    fontWeight: 500,
-  },
-
-  notificationPanelList: {
-    maxHeight: "400px",
-    overflowY: "auto",
-    display: "flex",
-    flexDirection: "column",
-  },
-
-  notificationItem: {
-    display: "flex",
-    gap: "12px",
-    padding: "12px 16px",
-    borderBottom: "1px solid #f3f4f6",
-    cursor: "pointer",
-    transition: "background 0.2s ease",
-    background: "white",
-  },
-
-  notificationItemUnread: {
-    background: "#f8fafc",
-    borderLeft: "3px solid #3b82f6",
-  },
-
-  notificationItemIcon: {
-    flexShrink: 0,
-    width: "32px",
-    height: "32px",
-    borderRadius: "8px",
-    background: "#f1f5f9",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  notificationItemContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  notificationItemTitle: {
-    margin: "0 0 4px 0",
-    fontSize: "13px",
-    fontWeight: 600,
-    color: "#0f172a",
-    lineHeight: 1.4,
-  },
-
-  notificationItemMessage: {
-    margin: "0 0 4px 0",
-    fontSize: "12px",
-    color: "#64748b",
-    lineHeight: 1.4,
-  },
-
-  notificationItemTime: {
-    margin: 0,
-    fontSize: "11px",
-    color: "#94a3b8",
-    fontWeight: 500,
-  },
-
-  notificationEmpty: {
-    padding: "40px 20px",
-    textAlign: "center",
-    color: "#94a3b8",
-  },
-
-  notificationEmptyText: {
-    margin: "8px 0 0 0",
-    fontSize: "13px",
-    color: "#94a3b8",
-  },
-
-  // User Menu
-  userMenuWrapper: {
-    position: "relative",
-  },
-
-  avatarButton: {
-    border: "none",
-    background: "transparent",
-    width: "40px",
-    height: "40px",
-    borderRadius: "50%",
-    cursor: "pointer",
-    padding: 0,
-    overflow: "hidden",
-    transition: "all 0.2s ease",
-    flexShrink: 0,
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-    border: "2px solid white",
-  },
-
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  },
-
-  avatarInitials: {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
-    color: "white",
-    fontSize: "14px",
-    fontWeight: 700,
-    letterSpacing: "0.5px",
-  },
-
-  userMenuPanel: {
-    position: "absolute",
-    top: "100%",
-    right: 0,
-    marginTop: "8px",
-    background: "white",
-    borderRadius: "12px",
-    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.15)",
-    border: "1px solid #e5e7eb",
-    overflow: "hidden",
-    minWidth: "240px",
-    maxWidth: "calc(100vw - 32px)",
-    zIndex: 1001,
-  },
-
-  userMenuHeader: {
-    padding: "16px",
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    background: "#f9fafb",
-    borderBottom: "1px solid #e5e7eb",
-  },
-
-  userMenuAvatar: {
-    width: "48px",
-    height: "48px",
-    borderRadius: "50%",
-    overflow: "hidden",
-    flexShrink: 0,
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-  },
-
-  avatarImageSmall: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  },
-
-  avatarInitialsSmall: {
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
-    color: "white",
-    fontSize: "16px",
-    fontWeight: 700,
-    letterSpacing: "0.5px",
-  },
-
-  userMenuInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  userMenuName: {
-    margin: "0 0 2px 0",
-    fontSize: "14px",
-    fontWeight: 600,
-    color: "#0f172a",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-
-  userMenuRole: {
-    margin: 0,
-    fontSize: "12px",
-    color: "#64748b",
-    fontWeight: 500,
-  },
-
-  userMenuDivider: {
-    height: "1px",
-    background: "#e5e7eb",
-    margin: "4px 0",
-  },
-
-  userMenuItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    padding: "12px 16px",
-    border: "none",
-    background: "transparent",
-    color: "#334155",
-    fontSize: "14px",
-    fontWeight: 500,
-    cursor: "pointer",
-    width: "100%",
-    textAlign: "left",
-    transition: "background 0.2s ease",
-  },
-  
-  // Hover effects applied inline in JSX
-
-  // Layout
   layout: {
-    display: "flex",
-    flex: 1,
-    position: "relative",
+    display: "block",
     width: "100%",
-    maxWidth: "100%",
-    overflow: "hidden",
-    minWidth: 0,
+    minHeight: "100vh",
+    background: "var(--admin-bg)",
+    color: "var(--admin-text)",
+    transition: "background 0.25s ease, color 0.25s ease",
   },
-
-  // Sidebar - Always visible and stable
+  sidebarOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "var(--admin-overlay)",
+    zIndex: 80,
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+  },
   sidebar: {
-    width: "280px",
-    background: "#ffffff",
-    borderRight: "1px solid #e5e7eb",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 90,
+    padding: 10,
+    boxSizing: "border-box",
+    transition: "width 0.22s ease, transform 0.22s ease",
+  },
+  sidebarSurface: {
+    height: "100%",
+    borderRadius: ADMIN_TOKENS.radius.xl,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface-elevated)",
+    boxShadow: "var(--admin-shadow-soft)",
     display: "flex",
     flexDirection: "column",
-    position: "sticky",
-    top: "64px", // Below header
-    height: "calc(100vh - 64px)",
-    zIndex: 90,
-    flexShrink: 0,
     overflow: "hidden",
+    backdropFilter: "blur(16px)",
+    transition: "background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease",
   },
-
-  sidebarHeader: {
-    padding: "24px 20px",
-    borderBottom: "1px solid #e5e7eb",
+  sidebarBrandRow: {
     display: "flex",
     alignItems: "center",
-    gap: "14px",
-    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
-    minHeight: "100px",
-    flexShrink: 0,
+    gap: 10,
+    minHeight: 76,
+    padding: "16px 14px",
+    borderBottom: "1px solid var(--admin-border)",
   },
-
   sidebarLogo: {
-    width: "56px",
-    height: "56px",
-    borderRadius: "12px",
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     overflow: "hidden",
-    background: "white",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    background: "var(--admin-surface)",
+    border: "1px solid var(--admin-border)",
     flexShrink: 0,
-    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.2)",
-    border: "2px solid rgba(255, 255, 255, 0.2)",
   },
-
   sidebarLogoImage: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
     display: "block",
   },
-
-  sidebarBrand: {
-    flex: 1,
+  sidebarBrandText: {
     minWidth: 0,
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
   },
-
-  sidebarTitle: {
-    margin: 0,
-    fontSize: "16px",
-    fontWeight: 700,
-    color: "white",
-    letterSpacing: "0.2px",
-    lineHeight: 1.3,
+  sidebarBrandName: {
+    fontSize: 14,
+    lineHeight: 1.25,
+    fontWeight: 800,
+    color: "var(--admin-text)",
+    whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
-
-  sidebarSubtitle: {
-    margin: 0,
-    fontSize: "11px",
-    color: "rgba(255, 255, 255, 0.9)",
-    fontWeight: 500,
-    letterSpacing: "0.5px",
+  sidebarBrandMeta: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 1.2,
+    letterSpacing: "0.08em",
     textTransform: "uppercase",
-    lineHeight: 1.4,
+    color: "var(--admin-text-muted)",
+    fontWeight: 800,
   },
-
-  sidebarNav: {
-    display: "flex",
-    flexDirection: "column",
-    padding: "12px",
-    gap: "4px",
+  sidebarScroll: {
     flex: 1,
     overflowY: "auto",
     overflowX: "hidden",
+    padding: "12px 10px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
   },
-
-  sidebarNavItem: {
+  navGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  navGroupLabel: {
+    padding: "0 8px",
+    fontSize: 10,
+    lineHeight: 1.2,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    color: "var(--admin-text-muted)",
+    fontWeight: 800,
+  },
+  navList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  navItem: {
+    width: "100%",
+    minHeight: 44,
     display: "flex",
     alignItems: "center",
-    gap: "14px",
-    padding: "14px 18px",
+    gap: 10,
+    padding: "8px 10px",
+    borderRadius: 14,
     border: "none",
     background: "transparent",
-    color: "#64748b",
-    fontSize: "14px",
-    fontWeight: 500,
+    color: "var(--admin-text-soft)",
     cursor: "pointer",
-    borderRadius: "10px",
-    transition: "all 0.2s ease",
     textAlign: "left",
-    width: "100%",
   },
-  
-  // Hover effect will be applied inline in JSX
-
-  sidebarNavItemActive: {
-    background: "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)",
-    color: "#7a1f1f",
-    fontWeight: 600,
-    boxShadow: "0 2px 8px rgba(122, 31, 31, 0.12)",
+  navItemActive: {
+    background: "var(--admin-sidebar-active-bg)",
+    color: "var(--admin-sidebar-active-text)",
+    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04), 0 10px 18px rgba(15, 23, 42, 0.08)",
   },
-
-  // Main Content
-  mainContent: {
-    flex: 1,
+  navItemCollapsed: {
+    justifyContent: "center",
+    padding: "8px 0",
+  },
+  navIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    background: "var(--admin-surface-muted)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  navIconActive: {
+    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
+    color: "#ffffff",
+  },
+  navTextWrap: {
+    minWidth: 0,
     display: "flex",
     flexDirection: "column",
+    gap: 2,
+  },
+  navLabel: {
+    fontSize: 13,
+    lineHeight: 1.2,
+    fontWeight: 700,
+    whiteSpace: "nowrap",
     overflow: "hidden",
-    width: "100%",
-    maxWidth: "100%",
+    textOverflow: "ellipsis",
+  },
+  navMeta: {
+    fontSize: 10,
+    lineHeight: 1,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "var(--admin-text-muted)",
+    fontWeight: 800,
+  },
+  main: {
+    minHeight: "100vh",
+    display: "flex",
+    flexDirection: "column",
+    background: "var(--admin-bg)",
+  },
+  header: {
+    height: ADMIN_TOKENS.headerHeight,
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    padding: "0 24px",
+    borderBottom: "1px solid var(--admin-border)",
+    background: "var(--admin-header-bg)",
+    backdropFilter: "blur(18px)",
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    transition: "background 0.25s ease, border-color 0.25s ease",
+  },
+  headerMobile: {
+    height: "auto",
+    minHeight: ADMIN_TOKENS.headerHeight,
+    padding: "12px 16px",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  headerLeft: {
     minWidth: 0,
+    flex: "1 1 360px",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface)",
+    color: "var(--admin-text-soft)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  headerTitleWrap: {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  headerEyebrow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 11,
+    lineHeight: 1.1,
+    fontWeight: 800,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+    color: "var(--admin-text-muted)",
+    whiteSpace: "nowrap",
+  },
+  headerEyebrowDot: {
+    width: 4,
+    height: 4,
+    borderRadius: "50%",
+    background: "var(--admin-text-muted)",
+    flexShrink: 0,
+  },
+  headerTitleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+  },
+  headerSectionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    background: "var(--admin-sidebar-active-bg)",
+    color: "#991b1b",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  headerCopy: {
+    minWidth: 0,
+  },
+  headerTitle: {
+    margin: 0,
+    fontSize: 22,
+    lineHeight: 1.1,
+    fontWeight: 800,
+    letterSpacing: "-0.04em",
+    color: "var(--admin-text)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  headerSubtitle: {
+    margin: "4px 0 0",
+    fontSize: 13,
+    lineHeight: 1.45,
+    color: "var(--admin-text-soft)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  headerRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexShrink: 0,
+  },
+  headerRightMobile: {
+    width: "100%",
+    justifyContent: "space-between",
+  },
+  headerSearch: {
+    position: "relative",
+    minWidth: 0,
+    width: "min(420px, 38vw)",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    height: 44,
+    padding: "0 14px",
+    borderRadius: 16,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface)",
+  },
+  headerSearchMobile: {
+    width: "100%",
+    minWidth: 0,
+    flex: "1 1 auto",
+  },
+  headerSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    border: "none",
+    outline: "none",
+    background: "transparent",
+    color: "var(--admin-text)",
+    fontSize: 14,
+    fontFamily: "inherit",
+  },
+  searchShortcut: {
+    minHeight: 24,
+    padding: "0 8px",
+    borderRadius: 999,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface-muted)",
+    color: "var(--admin-text-soft)",
+    fontSize: 11,
+    lineHeight: 1,
+    fontWeight: 800,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  searchPanel: {
+    position: "absolute",
+    top: "calc(100% + 12px)",
+    left: 0,
+    right: 0,
+    zIndex: 60,
+    borderRadius: 20,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface)",
+    boxShadow: "var(--admin-shadow-soft)",
+    overflow: "hidden",
+  },
+  searchPanelLabel: {
+    padding: "14px 16px 10px",
+    fontSize: 11,
+    lineHeight: 1.1,
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
+    color: "var(--admin-text-muted)",
+    fontWeight: 800,
+  },
+  searchPanelList: {
+    display: "flex",
+    flexDirection: "column",
+    maxHeight: 320,
+    overflowY: "auto",
+    padding: "0 10px 10px",
+    gap: 6,
+  },
+  searchResult: {
+    width: "100%",
+    border: "none",
+    background: "var(--admin-surface)",
+    borderRadius: 16,
+    padding: 12,
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  searchResultIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    background: "var(--admin-surface-muted)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "var(--admin-text-soft)",
+    flexShrink: 0,
+  },
+  searchResultText: {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  searchResultTitle: {
+    fontSize: 14,
+    lineHeight: 1.2,
+    fontWeight: 700,
+    color: "var(--admin-text)",
+  },
+  searchResultSubtitle: {
+    fontSize: 12,
+    lineHeight: 1.45,
+    color: "var(--admin-text-soft)",
+  },
+  searchEmpty: {
+    padding: 16,
+    fontSize: 13,
+    lineHeight: 1.4,
+    color: "var(--admin-text-muted)",
+    textAlign: "center",
+  },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  popoverAnchor: {
     position: "relative",
   },
-
-  contentArea: {
+  headerActionButton: {
+    position: "relative",
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    border: ADMIN_TOKENS.border,
+    background: "var(--admin-surface)",
+    color: "#475569",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    padding: "0 4px",
+    borderRadius: 999,
+    background: "#dc2626",
+    color: "#ffffff",
+    fontSize: 10,
+    lineHeight: 1,
+    fontWeight: 800,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notificationPanel: {
+    position: "absolute",
+    top: "calc(100% + 12px)",
+    right: 0,
+    width: "min(360px, calc(100vw - 24px))",
+    borderRadius: 20,
+    border: ADMIN_TOKENS.border,
+    background: "var(--admin-surface)",
+    boxShadow: "0 24px 48px rgba(15, 23, 42, 0.12)",
+    overflow: "hidden",
+    zIndex: 60,
+  },
+  notificationPanelHeader: {
+    padding: 16,
+    borderBottom: "1px solid var(--admin-border)",
+  },
+  notificationPanelTitle: {
+    fontSize: 14,
+    lineHeight: 1.2,
+    fontWeight: 800,
+    color: "var(--admin-text)",
+  },
+  notificationPanelCount: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 1.4,
+    color: "var(--admin-text-soft)",
+  },
+  notificationList: {
+    maxHeight: 360,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+  },
+  notificationItem: {
+    width: "100%",
+    border: "none",
+    background: "var(--admin-surface)",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: "14px 16px",
+    textAlign: "left",
+    cursor: "pointer",
+    borderBottom: "1px solid var(--admin-border-soft)",
+  },
+  notificationItemUnread: {
+    background: "var(--admin-surface-muted)",
+  },
+  notificationItemIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    background: "var(--admin-surface-muted)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  notificationItemText: {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  notificationItemTitle: {
+    fontSize: 13,
+    lineHeight: 1.35,
+    fontWeight: 700,
+    color: "var(--admin-text)",
+  },
+  notificationItemMessage: {
+    fontSize: 12,
+    lineHeight: 1.45,
+    color: "var(--admin-text-soft)",
+  },
+  notificationItemTime: {
+    fontSize: 11,
+    lineHeight: 1.2,
+    color: "var(--admin-text-muted)",
+    fontWeight: 700,
+  },
+  notificationEmpty: {
+    padding: 20,
+    textAlign: "center",
+    color: "var(--admin-text-muted)",
+    fontSize: 13,
+  },
+  notificationFooter: {
+    padding: 12,
+    borderTop: "1px solid var(--admin-border)",
+    background: "var(--admin-card-muted-bg)",
+  },
+  notificationFooterButton: {
+    width: "100%",
+    minHeight: 40,
+    borderRadius: 14,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface)",
+    color: "var(--admin-text)",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  profileButton: {
+    minHeight: 44,
+    borderRadius: 18,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface)",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "0 10px 0 0",
+    cursor: "pointer",
+    overflow: "hidden",
+  },
+  profileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: "50%",
+    overflow: "hidden",
+    flexShrink: 0,
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+  profileAvatarFallback: {
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: 800,
+  },
+  profileText: {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+  },
+  profileName: {
+    fontSize: 13,
+    lineHeight: 1.2,
+    fontWeight: 700,
+    color: "var(--admin-text)",
+    maxWidth: 120,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  profileRole: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 1.1,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "var(--admin-text-muted)",
+    fontWeight: 800,
+  },
+  userMenu: {
+    position: "absolute",
+    top: "calc(100% + 12px)",
+    right: 0,
+    width: "min(260px, calc(100vw - 24px))",
+    borderRadius: 20,
+    border: "1px solid var(--admin-border)",
+    background: "var(--admin-surface)",
+    boxShadow: "var(--admin-shadow-soft)",
+    overflow: "hidden",
+    zIndex: 60,
+  },
+  userMenuHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+    borderBottom: "1px solid var(--admin-border)",
+    background: "var(--admin-card-muted-bg)",
+  },
+  userMenuAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: "50%",
+    overflow: "hidden",
+    flexShrink: 0,
+  },
+  userMenuText: {
+    minWidth: 0,
+  },
+  userMenuName: {
+    fontSize: 14,
+    lineHeight: 1.2,
+    fontWeight: 700,
+    color: "var(--admin-text)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  userMenuRole: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 1.1,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    color: "var(--admin-text-muted)",
+    fontWeight: 800,
+  },
+  userMenuList: {
+    padding: 8,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  userMenuFooter: {
+    padding: 8,
+    borderTop: "1px solid var(--admin-border)",
+  },
+  userMenuItem: {
+    width: "100%",
+    minHeight: 42,
+    borderRadius: 14,
+    border: "none",
+    background: "var(--admin-surface)",
+    color: "var(--admin-text-soft)",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "0 12px",
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  contentScroller: {
     flex: 1,
+    minHeight: 0,
     overflowY: "auto",
     overflowX: "hidden",
-    background: "transparent",
-    width: "100%",
-    maxWidth: "100%",
-    minWidth: 0,
-    boxSizing: "border-box",
   },
-
-
-  // Loading & Restricted
-  loadingContainer: {
+  contentInner: {
+    boxSizing: "border-box",
+    minWidth: 0,
+    maxWidth: 1500,
+    margin: "0 auto",
+    width: "100%",
+  },
+  loadingState: {
+    minHeight: "100vh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "400px",
     gap: 16,
   },
-
   spinner: {
-    width: "40px",
-    height: "40px",
+    width: 40,
+    height: 40,
     border: "4px solid #e5e7eb",
     borderTopColor: "#7a1f1f",
     borderRadius: "50%",
     animation: "spin 0.8s linear infinite",
   },
-
   loadingText: {
-    color: "#6b7280",
-    fontSize: "14px",
+    fontSize: 14,
+    color: "var(--admin-text-soft)",
   },
-
-  restrictedContainer: {
+  restrictedState: {
+    minHeight: "100vh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: "400px",
-    padding: "40px",
+    padding: 40,
     textAlign: "center",
   },
-
   restrictedTitle: {
-    margin: "16px 0 8px 0",
-    fontSize: "24px",
-    fontWeight: 700,
+    margin: "16px 0 8px",
+    fontSize: 24,
+    fontWeight: 800,
     color: "#111827",
   },
-
   restrictedText: {
-    margin: "0 0 8px 0",
-    fontSize: "16px",
+    margin: 0,
+    fontSize: 16,
     color: "#6b7280",
   },
-
   restrictedSubtext: {
-    margin: "4px 0",
-    fontSize: "14px",
+    margin: "8px 0 0",
+    fontSize: 14,
     color: "#9ca3af",
   },
 }

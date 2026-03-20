@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaPlus, FaEdit, FaTrash, FaBuilding, FaFilePdf } from "react-icons/fa"
-import Card from "../../components/ui/Card"
 import Button from "../../components/ui/Button"
 import Input from "../../components/ui/Input"
 import Modal from "../../components/ui/Modal"
 import Table from "../../components/ui/Table"
 import ConfirmDialog from "../../components/ui/ConfirmDialog"
+import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import { exportCentresPDF } from "../../utils/exportToPDF"
@@ -258,14 +258,30 @@ export default function AdminCentres() {
     },
   ]
 
+  const summaryStats = [
+    {
+      label: "Centres",
+      value: centres.length,
+      icon: <FaBuilding />,
+      accent: "#059669",
+      helper: "Enregistrés",
+    },
+    {
+      label: "Avec code",
+      value: centres.filter((entry) => entry.code).length,
+      icon: <FaFilePdf />,
+      accent: "#2563eb",
+      helper: "Référencés",
+    },
+  ]
+
   return (
-    <div style={container}>
-      <div style={header}>
-        <div>
-          <h2 style={headerTitle}>Gestion des Centres</h2>
-          <p style={subtitle}>Gérer les centres de collecte</p>
-        </div>
-        <div style={headerActions}>
+    <AdminPage
+      title="Centres"
+      subtitle="Structurez le réseau de collecte et gérez les informations de chaque centre."
+      stats={summaryStats}
+      actions={
+        <>
           <Button
             variant="secondary"
             icon={<FaFilePdf />}
@@ -277,10 +293,13 @@ export default function AdminCentres() {
           <Button onClick={openCreateModal} icon={<FaPlus />}>
             Ajouter un centre
           </Button>
-        </div>
-      </div>
-
-      <Card>
+        </>
+      }
+    >
+      <AdminPanel
+        title="Liste des centres"
+        subtitle="Consultez, recherchez et mettez à jour les centres de collecte."
+      >
         <Table
           data={centres}
           columns={columns}
@@ -293,7 +312,7 @@ export default function AdminCentres() {
           loading={loading}
           emptyMessage="Aucun centre enregistré"
         />
-      </Card>
+      </AdminPanel>
 
       <Modal
         isOpen={showModal}
@@ -358,7 +377,7 @@ export default function AdminCentres() {
         confirmText="Supprimer"
         cancelText="Annuler"
       />
-    </div>
+    </AdminPage>
   )
 }
 

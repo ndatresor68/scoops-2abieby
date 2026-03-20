@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { FaSearch, FaSort, FaSortUp, FaSortDown } from "react-icons/fa"
 import Input from "./Input"
 import Button from "./Button"
@@ -65,7 +65,17 @@ export default function Table({
     return sortedData.slice(start, start + pageSize)
   }, [sortedData, currentPage, pageSize, pagination])
 
-  const totalPages = Math.ceil(sortedData.length / pageSize)
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize))
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, sortColumn, sortDirection, pageSize, data.length])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
 
   function handleSort(columnKey) {
     if (!sortable || !columnKey) return
@@ -100,33 +110,30 @@ export default function Table({
 
   return (
     <div style={{ ...container, ...style }}>
-      {/* Search Bar */}
-      {searchable && (
-        <div style={searchContainer}>
-          <Input
-            icon={<FaSearch />}
-            placeholder={searchPlaceholder}
-            value={searchTerm}
-            onChange={setSearchTerm}
-            style={{ maxWidth: isMobile ? "100%" : "400px" }}
-          />
-          {searchTerm && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSearchTerm("")}
-              style={{ marginLeft: 8 }}
-            >
-              Effacer
-            </Button>
+      {(searchable || actions) && (
+        <div style={toolbar}>
+          {searchable ? (
+            <div style={searchContainer}>
+              <Input
+                icon={<FaSearch />}
+                placeholder={searchPlaceholder}
+                value={searchTerm}
+                onChange={setSearchTerm}
+                style={{ flex: 1, minWidth: isMobile ? "100%" : "280px", maxWidth: isMobile ? "100%" : "420px" }}
+              />
+              {searchTerm ? (
+                <Button variant="ghost" size="sm" onClick={() => setSearchTerm("")}>
+                  Effacer
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div />
           )}
+          {actions ? <div style={actionsContainer}>{actions}</div> : null}
         </div>
       )}
 
-      {/* Actions Bar */}
-      {actions && <div style={actionsContainer}>{actions}</div>}
-
-      {/* Table */}
       <div style={tableWrapper}>
         {isMobile ? (
           <div style={mobileContainer}>
@@ -143,12 +150,26 @@ export default function Table({
                     ...(onRowClick ? { cursor: "pointer" } : {}),
                   }}
                   onClick={() => onRowClick?.(row)}
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.transform = "translateY(-1px)"
+                    event.currentTarget.style.boxShadow = "0 16px 32px rgba(15, 23, 42, 0.08)"
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.transform = "translateY(0)"
+                    event.currentTarget.style.boxShadow = "none"
+                  }}
                 >
                   {columns.map((col) => {
                     if (col.hideOnMobile) return null
                     const value = getNestedValue(row, col.key)
                     return (
-                      <div key={col.key} style={mobileRow}>
+                      <div
+                        key={col.key}
+                        style={{
+                          ...mobileRow,
+                          borderBottom: col.key === columns[columns.length - 1]?.key ? "none" : mobileRow.borderBottom,
+                        }}
+                      >
                         <span style={mobileLabel}>{col.label}:</span>
                         <span style={mobileValue}>
                           {col.render ? col.render(value, row) : value || "-"}
@@ -198,6 +219,12 @@ export default function Table({
                       ...(onRowClick ? { cursor: "pointer" } : {}),
                     }}
                     onClick={() => onRowClick?.(row)}
+                    onMouseEnter={(event) => {
+                      event.currentTarget.style.background = "#f8fafc"
+                    }}
+                    onMouseLeave={(event) => {
+                      event.currentTarget.style.background = "#ffffff"
+                    }}
                   >
                     {columns.map((col) => {
                       const value = getNestedValue(row, col.key)
@@ -253,27 +280,39 @@ const container = {
   display: "flex",
   flexDirection: "column",
   gap: 16,
+  minWidth: 0,
+}
+
+const toolbar = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
 }
 
 const searchContainer = {
   display: "flex",
   alignItems: "center",
-  gap: 8,
-  marginBottom: 8,
+  gap: 10,
+  flexWrap: "wrap",
+  minWidth: 0,
 }
 
 const actionsContainer = {
   display: "flex",
   alignItems: "center",
-  gap: 8,
-  marginBottom: 8,
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
 }
 
 const tableWrapper = {
-  background: "white",
-  borderRadius: "12px",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.98), #ffffff)",
+  borderRadius: 24,
+  boxShadow: "0 20px 40px rgba(15, 23, 42, 0.08)",
   overflow: "hidden",
+  border: "1px solid rgba(226, 232, 240, 0.9)",
 }
 
 const table = {
@@ -282,15 +321,15 @@ const table = {
 }
 
 const th = {
-  padding: "16px",
+  padding: "18px 20px",
   textAlign: "left",
-  background: "#f9fafb",
-  borderBottom: "2px solid #e5e7eb",
-  fontSize: "13px",
-  fontWeight: 600,
-  color: "#374151",
+  background: "linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%)",
+  borderBottom: "1px solid rgba(226, 232, 240, 0.95)",
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#64748b",
   textTransform: "uppercase",
-  letterSpacing: "0.05em",
+  letterSpacing: "0.08em",
 }
 
 const thContent = {
@@ -300,71 +339,74 @@ const thContent = {
 }
 
 const tr = {
-  borderBottom: "1px solid #f3f4f6",
+  borderBottom: "1px solid #f1f5f9",
   transition: "background 0.2s ease",
-}
-
-const trHover = {
-  background: "#f9fafb",
+  background: "#ffffff",
 }
 
 const td = {
-  padding: "16px",
-  fontSize: "14px",
-  color: "#111827",
+  padding: "18px 20px",
+  fontSize: 14,
+  color: "#0f172a",
+  verticalAlign: "top",
 }
 
 const emptyCell = {
-  padding: "40px 16px",
+  padding: "56px 20px",
   textAlign: "center",
   color: "#6b7280",
-  fontSize: "14px",
+  fontSize: 14,
 }
 
 const mobileContainer = {
   display: "flex",
   flexDirection: "column",
-  gap: 12,
-  padding: "16px",
+  gap: 14,
+  padding: 16,
 }
 
 const mobileCard = {
-  background: "#f9fafb",
-  borderRadius: "8px",
-  padding: "16px",
-  border: "1px solid #e5e7eb",
+  background: "linear-gradient(180deg, rgba(248,250,252,0.9), #ffffff)",
+  borderRadius: 20,
+  padding: 16,
+  border: "1px solid rgba(226, 232, 240, 0.95)",
+  transition: "transform 0.22s ease, box-shadow 0.22s ease",
 }
 
 const mobileRow = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  padding: "8px 0",
-  borderBottom: "1px solid #e5e7eb",
+  gap: 12,
+  padding: "10px 0",
+  borderBottom: "1px solid #e2e8f0",
 }
 
 const mobileLabel = {
-  fontSize: "13px",
-  fontWeight: 600,
+  fontSize: 12,
+  fontWeight: 700,
   color: "#6b7280",
-  minWidth: "100px",
+  minWidth: 92,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 }
 
 const mobileValue = {
-  fontSize: "14px",
-  color: "#111827",
+  fontSize: 14,
+  color: "#0f172a",
   textAlign: "right",
   flex: 1,
+  wordBreak: "break-word",
 }
 
 const emptyState = {
-  padding: "60px 20px",
+  padding: "56px 20px",
   textAlign: "center",
 }
 
 const emptyText = {
   color: "#6b7280",
-  fontSize: "14px",
+  fontSize: 14,
   margin: 0,
 }
 
@@ -372,13 +414,13 @@ const paginationContainer = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  padding: "16px 0",
+  padding: "4px 4px 0",
   flexWrap: "wrap",
   gap: 12,
 }
 
 const paginationInfo = {
-  fontSize: "13px",
+  fontSize: 13,
   color: "#6b7280",
 }
 
@@ -389,9 +431,9 @@ const paginationControls = {
 }
 
 const pageInfo = {
-  fontSize: "13px",
-  color: "#374151",
-  fontWeight: 500,
+  fontSize: 13,
+  color: "#334155",
+  fontWeight: 700,
 }
 
 const loadingContainer = {
@@ -399,7 +441,7 @@ const loadingContainer = {
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
-  padding: "60px 20px",
+  padding: "72px 20px",
   gap: 16,
 }
 

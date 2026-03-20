@@ -35,6 +35,8 @@ export function ToastProvider({ children }) {
           display: "flex",
           flexDirection: "column",
           gap: 12,
+          width: "min(420px, calc(100vw - 24px))",
+          maxWidth: "calc(100vw - 24px)",
         }}
       >
         {toasts.map((toast) => (
@@ -65,22 +67,23 @@ function ToastItem({ toast, onClose }) {
   return (
     <div
       style={{
-        background: color.bg,
+        background: `linear-gradient(180deg, ${color.bg}, #ffffff)`,
         border: `1px solid ${color.border}`,
         color: color.text,
-        padding: "14px 18px",
-        borderRadius: "12px",
-        boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-        minWidth: "300px",
-        maxWidth: "400px",
+        padding: "14px 16px",
+        borderRadius: 18,
+        boxShadow: "0 22px 44px rgba(15, 23, 42, 0.16)",
+        width: "100%",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         gap: 12,
         animation: "slideIn 0.3s ease",
+        boxSizing: "border-box",
+        backdropFilter: "blur(12px)",
       }}
     >
-      <span style={{ fontSize: "20px", color: color.icon }}>{icons[toast.type]}</span>
-      <span style={{ flex: 1, fontSize: "14px", fontWeight: 500 }}>{toast.message}</span>
+      <span style={{ fontSize: 18, color: color.icon, marginTop: 1 }}>{icons[toast.type]}</span>
+      <span style={{ flex: 1, fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}>{toast.message}</span>
       <button
         onClick={onClose}
         style={{
@@ -88,13 +91,17 @@ function ToastItem({ toast, onClose }) {
           background: "transparent",
           cursor: "pointer",
           color: color.text,
-          padding: 4,
+          padding: 0,
+          width: 20,
+          height: 20,
           display: "flex",
           alignItems: "center",
+          justifyContent: "center",
           opacity: 0.7,
+          marginTop: 1,
         }}
-        onMouseEnter={(e) => (e.target.style.opacity = 1)}
-        onMouseLeave={(e) => (e.target.style.opacity = 0.7)}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = 1)}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.7)}
       >
         <FaTimes size={14} />
       </button>

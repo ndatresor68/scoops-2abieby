@@ -1,916 +1,728 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../supabaseClient"
-import { FaUsers, FaBuilding, FaUserTie, FaBox, FaCheckCircle, FaUserSlash, FaBan, FaWeightHanging, FaUserFriends, FaDollarSign, FaPaperPlane } from "react-icons/fa"
+import {
+  FaBuilding,
+  FaChartLine,
+  FaMoneyBillWave,
+  FaPlus,
+  FaUserFriends,
+  FaUserTie,
+  FaUsers,
+  FaWeightHanging,
+} from "react-icons/fa"
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+} from "recharts"
 import Card from "../../components/ui/Card"
-import Button from "../../components/ui/Button"
-import Modal from "../../components/ui/Modal"
-import Input from "../../components/ui/Input"
-import { useMediaQuery } from "../../hooks/useMediaQuery"
-import { useToast } from "../../components/ui/Toast"
-import { useAuth } from "../../context/AuthContext"
-import { broadcastNotification } from "../../utils/notifications"
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { AdminPage, AdminPanel, AdminQuickActions } from "../../components/ui/AdminPage"
 
-export default function AdminStats() {
-  const { user } = useAuth()
-  const { showToast } = useToast()
-  const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState({
-    users: 0,
-    activeUsers: 0,
-    suspendedUsers: 0,
-    bannedUsers: 0,
-    centres: 0,
-    producteurs: 0,
-    agents: 0,
-    totalPoids: 0,
-    totalTransactions: 0,
-    totalMontant: 0,
-  })
-  const [recentActivity, setRecentActivity] = useState([])
-  const [poidsParCentre, setPoidsParCentre] = useState([])
-  const [evolutionPoids, setEvolutionPoids] = useState([])
-  const [showNotificationModal, setShowNotificationModal] = useState(false)
-  const [sendingNotification, setSendingNotification] = useState(false)
-  const [notificationForm, setNotificationForm] = useState({
-    title: "",
-    message: "",
-  })
-  const isMobile = useMediaQuery("(max-width: 768px)")
-  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
-
-  // Responsive grid: 2 columns (mobile), 3 (tablet), 4 (desktop)
-  const gridStyle = isMobile
-    ? {
-        display: "grid",
-        gridTemplateColumns: "repeat(2, 1fr)",
-        gap: 12,
-        width: "100%",
-      }
-    : isTablet
-    ? {
-        display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: 16,
-        width: "100%",
-      }
-    : {
-        display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: 20,
-        width: "100%",
-      }
-
-  useEffect(() => {
-    fetchStats()
-    
-    // Set up auto-refresh every 30 seconds for real-time updates
-    const refreshInterval = setInterval(() => {
-      fetchStats()
-    }, 30000)
-    
-    return () => clearInterval(refreshInterval)
-  }, [])
-
-  async function fetchStats() {
-    try {
-      setLoading(true)
-      console.log("[AdminStats] ===== FETCHING STATISTICS =====")
-
-      // Fetch counts with timeout protection
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Stats timeout")), 15000)
-      )
-
-      const statsPromise = Promise.all([
-        // Fetch ALL users without any filters
-        supabase.from("utilisateurs").select("*"),
-        supabase.from("centres").select("id, nom"),
-        supabase.from("producteurs").select("*", { count: "exact", head: true }),
-        supabase.from("achats").select("poids, montant, centre_id, date_pesee, created_at"),
-        supabase.from("utilisateurs").select("id").eq("role", "AGENT"),
-      ])
-      
-      console.log("[AdminStats] 🔍 Executing query: supabase.from('utilisateurs').select('*')")
-
-      const [usersRes, centresRes, producteursRes, achatsRes, agentsRes] = await Promise.race([
-        statsPromise,
-        timeoutPromise,
-      ]).catch((err) => {
-        console.error("[AdminStats] ❌ Error fetching stats:", err)
-        return [
-          { data: [], error: err },
-          { data: [] },
-          { count: 0 },
-          { data: [] },
-          { data: [] },
-        ]
-      })
-
-      // Log users query result
-      console.log("[AdminStats] Users query result:", {
-        dataLength: usersRes?.data?.length || 0,
-        error: usersRes?.error,
-        hasData: !!usersRes?.data,
-        errorCode: usersRes?.error?.code,
-        errorMessage: usersRes?.error?.message,
-      })
-
-      if (usersRes?.error) {
-        console.error("[AdminStats] ❌ Users query error:", usersRes.error)
-        console.error("[AdminStats] Error details:", JSON.stringify(usersRes.error, null, 2))
-        
-        // Check if it's an RLS policy issue
-        if (
-          usersRes.error.code === "42501" ||
-          usersRes.error.message?.includes("permission") ||
-          usersRes.error.message?.includes("policy") ||
-          usersRes.error.message?.includes("RLS")
-        ) {
-          console.error("[AdminStats] 🔒 RLS Policy issue detected!")
-        }
-      }
-
-      // Calculate user statistics
-      const usersData = usersRes?.data || []
-      
-      // Log ALL users fetched - CRITICAL for debugging
-      console.log("[AdminStats] 🔍 Users fetched:", usersData)
-      console.log(`[AdminStats] ✅ Loaded ${usersData.length} users from database`)
-      
-      // Log each user individually
-      if (usersData.length > 0) {
-        console.log("[AdminStats] 📋 All users details:")
-        usersData.forEach((user, index) => {
-          console.log(`[AdminStats]   User ${index + 1}:`, {
-            id: user.id,
-            // Note: user.id is the primary key matching auth.users.id
-            nom: user.nom,
-            email: user.email,
-            role: user.role,
-            status: user.status,
-            hasStatus: user.hasOwnProperty("status"),
-            created_at: user.created_at,
-          })
-        })
-      } else {
-        console.warn("[AdminStats] ⚠️ No users returned from database!")
-      }
-
-      // Normalize users data - handle cases where status column might not exist
-      const normalizedUsers = usersData.map((user) => ({
-        ...user,
-        status: user.status || "active", // Default to active if status column doesn't exist
-      }))
-
-      // Total Users: Count ALL records (no filtering)
-      const totalUsers = normalizedUsers.length
-      
-      // Active Users: Filter by status = "active" or no status
-      const activeUsers = normalizedUsers.filter((u) => {
-        const status = u.status || "active"
-        return status === "active"
-      }).length
-      
-      // Suspended Users: Filter by status = "suspended"
-      const suspendedUsers = normalizedUsers.filter((u) => {
-        const status = u.status || "active"
-        return status === "suspended"
-      }).length
-      
-      // Banned Users: Filter by status = "banned"
-      const bannedUsers = normalizedUsers.filter((u) => {
-        const status = u.status || "active"
-        return status === "banned"
-      }).length
-
-      console.log("[AdminStats] 📊 Calculated statistics:", {
-        totalUsers,
-        activeUsers,
-        suspendedUsers,
-        bannedUsers,
-        breakdown: {
-          total: normalizedUsers.length,
-          active: normalizedUsers.filter((u) => (u.status || "active") === "active").length,
-          suspended: normalizedUsers.filter((u) => (u.status || "active") === "suspended").length,
-          banned: normalizedUsers.filter((u) => (u.status || "active") === "banned").length,
-        },
-      })
-      
-      // Verify: Total Users must equal the length of the array
-      if (totalUsers !== usersData.length) {
-        console.error("[AdminStats] ❌ ERROR: totalUsers !== usersData.length", {
-          totalUsers,
-          usersDataLength: usersData.length,
-        })
-      } else {
-        console.log("[AdminStats] ✅ Verification: totalUsers === usersData.length", {
-          totalUsers,
-          usersDataLength: usersData.length,
-        })
-      }
-
-      // Calculate statistics from achats
-      const achatsData = achatsRes?.data || []
-      const totalPoids = achatsData.reduce((sum, item) => sum + (Number(item.poids) || 0), 0)
-      const totalMontant = achatsData.reduce((sum, item) => sum + (Number(item.montant) || 0), 0)
-      const totalTransactions = achatsData.length
-
-      // Calculate poids par centre
-      const centresData = centresRes?.data || []
-      const poidsParCentreData = centresData.map((centre) => {
-        const centreAchats = achatsData.filter((a) => String(a.centre_id) === String(centre.id))
-        const poidsTotal = centreAchats.reduce((sum, a) => sum + (Number(a.poids) || 0), 0)
-        return {
-          centre: centre.nom,
-          poids: Math.round(poidsTotal * 100) / 100,
-        }
-      }).filter((c) => c.poids > 0).sort((a, b) => b.poids - a.poids)
-
-      // Calculate evolution du poids dans le temps (last 12 months)
-      const evolutionData = []
-      const now = new Date()
-      for (let i = 11; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-        const monthName = date.toLocaleDateString("fr-FR", { month: "short", year: "numeric" })
-        
-        const monthAchats = achatsData.filter((a) => {
-          const achatDate = a.date_pesee || a.created_at
-          if (!achatDate) return false
-          const achatDateObj = new Date(achatDate)
-          return (
-            achatDateObj.getFullYear() === date.getFullYear() &&
-            achatDateObj.getMonth() === date.getMonth()
-          )
-        })
-        
-        const poidsMois = monthAchats.reduce((sum, a) => sum + (Number(a.poids) || 0), 0)
-        evolutionData.push({
-          mois: monthName,
-          poids: Math.round(poidsMois * 100) / 100,
-        })
-      }
-
-      setStats({
-        users: totalUsers,
-        activeUsers,
-        suspendedUsers,
-        bannedUsers,
-        centres: centresData.length,
-        producteurs: producteursRes?.count || 0,
-        agents: agentsRes?.data?.length || 0,
-        totalPoids: Math.round(totalPoids * 100) / 100,
-        totalTransactions,
-        totalMontant: Math.round(totalMontant * 100) / 100,
-      })
-
-      setPoidsParCentre(poidsParCentreData)
-      setEvolutionPoids(evolutionData)
-
-      console.log("[AdminStats] ✅ Statistics updated:", {
-        users: totalUsers,
-        activeUsers,
-        suspendedUsers,
-        bannedUsers,
-        centres: centresRes?.count || 0,
-        producteurs: producteursRes?.count || 0,
-        totalCacao: Math.round(totalCacao * 100) / 100,
-      })
-
-      // Fetch recent users
-      const { data: recentUsers, error: recentUsersError } = await supabase
-        .from("utilisateurs")
-        .select("nom, email, role, created_at")
-        .order("created_at", { ascending: false })
-        .limit(5)
-
-      if (recentUsersError) {
-        console.error("[AdminStats] Error fetching recent users:", recentUsersError)
-      } else {
-        console.log(`[AdminStats] ✅ Loaded ${recentUsers?.length || 0} recent users`)
-      }
-
-      setRecentActivity(recentUsers || [])
-    } catch (error) {
-      console.error("[AdminStats] ❌ Unexpected error:", error)
-      console.error("[AdminStats] Error stack:", error.stack)
-    } finally {
-      setLoading(false)
-      console.log("[AdminStats] ===== FETCH COMPLETE =====")
-    }
+function navigateAdmin(section) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("admin:navigate", { detail: { section } }))
   }
-
-  if (loading) {
-    return (
-      <div style={container}>
-        <div style={headerActions}>
-          <Button
-            variant="primary"
-            icon={<FaPaperPlane />}
-            disabled
-          >
-            Envoyer notification
-          </Button>
-        </div>
-        <div style={loadingContainer}>
-          <div style={spinner}></div>
-          <p style={loadingText}>Chargement des statistiques...</p>
-        </div>
-      </div>
-    )
-  }
-
-  /**
-   * Send push notification via secure backend endpoint (/api/send-notification).
-   * Does not replace the existing Supabase notification broadcast; it augments it.
-   */
-  async function sendNotification(title, body) {
-    try {
-      const resp = await fetch("/api/send-notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, body }),
-      })
-
-      const data = await resp.json().catch(() => ({}))
-
-      if (!resp.ok) {
-        console.warn("[AdminStats] FCM endpoint error:", { status: resp.status, data })
-        return { success: false, status: resp.status, details: data }
-      }
-
-      return data
-    } catch (error) {
-      console.warn("[AdminStats] FCM endpoint fetch failed:", error)
-      return { success: false, error: "fetch_failed" }
-    }
-  }
-
-  async function handleSendNotification() {
-    if (!notificationForm.title || !notificationForm.message) {
-      showToast("Veuillez remplir le titre et le message", "error")
-      return
-    }
-
-    try {
-      setSendingNotification(true)
-      const result = await broadcastNotification({
-        title: notificationForm.title,
-        message: notificationForm.message,
-        type: "info",
-        createdBy: user?.id || null,
-      })
-
-      if (result.success) {
-        showToast(`Notification envoyée à ${result.count} utilisateur(s)`, "success")
-
-        // Push notifications (best-effort). Never fail the existing Supabase path.
-        try {
-          const fcmRes = await sendNotification(notificationForm.title, notificationForm.message)
-          if (fcmRes?.success) {
-            const sentCount =
-              typeof fcmRes.sentTotal === "number"
-                ? fcmRes.sentTotal
-                : typeof fcmRes.count === "number"
-                  ? fcmRes.count
-                  : undefined
-            showToast(
-              sentCount !== undefined ? `Push FCM envoyée à ${sentCount} appareil(s)` : "Push FCM envoyée",
-              "success",
-              3000
-            )
-          } else {
-            showToast("Push FCM indisponible (optionnel)", "warning", 3000)
-          }
-        } catch (fcmErr) {
-          console.warn("[AdminStats] FCM send failed (non-blocking):", fcmErr)
-          showToast("Push FCM indisponible (optionnel)", "warning", 3000)
-        }
-
-        setShowNotificationModal(false)
-        setNotificationForm({ title: "", message: "" })
-      } else {
-        showToast(result.message || "Erreur lors de l'envoi", "error")
-      }
-    } catch (error) {
-      console.error("[AdminStats] Error sending notification:", error)
-      showToast("Erreur lors de l'envoi de la notification", "error")
-    } finally {
-      setSendingNotification(false)
-    }
-  }
-
-  return (
-    <div style={container}>
-      {/* Header with Send Notification Button */}
-      <div style={headerActions}>
-        <Button
-          variant="primary"
-          icon={<FaPaperPlane />}
-          onClick={() => setShowNotificationModal(true)}
-        >
-          Envoyer notification
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div style={gridStyle}>
-        <StatCard
-          icon={<FaUsers />}
-          label="Total Utilisateurs"
-          value={stats.users}
-          color="#3b82f6"
-        />
-        <StatCard
-          icon={<FaCheckCircle />}
-          label="Utilisateurs Actifs"
-          value={stats.activeUsers}
-          color="#16a34a"
-        />
-        <StatCard
-          icon={<FaUserSlash />}
-          label="Suspendus"
-          value={stats.suspendedUsers}
-          color="#f59e0b"
-        />
-        <StatCard
-          icon={<FaBan />}
-          label="Bannis"
-          value={stats.bannedUsers}
-          color="#dc2626"
-        />
-        <StatCard
-          icon={<FaBuilding />}
-          label="Centres"
-          value={stats.centres}
-          color="#10b981"
-        />
-        <StatCard
-          icon={<FaUserTie />}
-          label="Producteurs"
-          value={stats.producteurs}
-          color="#f59e0b"
-        />
-        <StatCard
-          icon={<FaWeightHanging />}
-          label="Poids Total (kg)"
-          value={stats.totalPoids.toLocaleString("fr-FR")}
-          color="#7a1f1f"
-        />
-        <StatCard
-          icon={<FaUserFriends />}
-          label="Agents"
-          value={stats.agents}
-          color="#8b5cf6"
-        />
-        <StatCard
-          icon={<FaDollarSign />}
-          label="Transactions"
-          value={stats.totalTransactions}
-          color="#06b6d4"
-        />
-      </div>
-
-      {/* Charts */}
-      <div style={chartsContainer}>
-        {/* Bar Chart: Poids par centre */}
-        {poidsParCentre.length > 0 && (
-          <Card
-            title="Poids par Centre"
-            style={{
-              background: "white",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-              borderRadius: "16px",
-              border: "1px solid rgba(0,0,0,0.04)",
-            }}
-          >
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={poidsParCentre}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis
-                  dataKey="centre"
-                  stroke="#64748b"
-                  fontSize={12}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                />
-                <YAxis stroke="#64748b" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    background: "white",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                  }}
-                  formatter={(value) => [`${Number(value).toLocaleString("fr-FR")} kg`, "Poids"]}
-                />
-                <Legend />
-                <Bar dataKey="poids" fill="#7a1f1f" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
-        )}
-
-        {/* Line Chart: Evolution du poids */}
-        {evolutionPoids.length > 0 && (
-          <Card
-            title="Évolution du Poids"
-            style={{
-              background: "white",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-              borderRadius: "16px",
-              border: "1px solid rgba(0,0,0,0.04)",
-            }}
-          >
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={evolutionPoids}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="mois" stroke="#64748b" fontSize={12} />
-                <YAxis stroke="#64748b" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    background: "white",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                  }}
-                  formatter={(value) => [`${Number(value).toLocaleString("fr-FR")} kg`, "Poids"]}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="poids"
-                  stroke="#7a1f1f"
-                  strokeWidth={3}
-                  dot={{ fill: "#7a1f1f", r: 4 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Card>
-        )}
-      </div>
-
-      {/* Recent Activity */}
-      <Card
-        title="Activité Récente"
-        style={{
-          background: "white",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-          borderRadius: "16px",
-          border: "1px solid rgba(0,0,0,0.04)",
-        }}
-      >
-        <div style={activityList}>
-          {recentActivity.length === 0 ? (
-            <div style={emptyState}>
-              <FaUsers size={32} style={{ color: "#cbd5e1", marginBottom: 12 }} />
-              <p style={emptyText}>Aucune activité récente</p>
-            </div>
-          ) : (
-            recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                style={activityItem}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "#f8fafc"
-                  e.currentTarget.style.transform = "translateX(4px)"
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "#f9fafb"
-                  e.currentTarget.style.transform = "translateX(0)"
-                }}
-              >
-                <div style={activityIcon}>
-                  <FaUsers size={18} />
-                </div>
-                <div style={activityContent}>
-                  <p style={activityTitle}>
-                    {activity.nom || activity.email} ({activity.role})
-                  </p>
-                  <p style={activityDate}>
-                    Créé le {new Date(activity.created_at).toLocaleDateString("fr-FR", {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {/* Send Notification Modal */}
-      <Modal
-        isOpen={showNotificationModal}
-        onClose={() => {
-          setShowNotificationModal(false)
-          setNotificationForm({ title: "", message: "" })
-        }}
-        title="Envoyer une notification"
-        size="md"
-      >
-        <div style={notificationFormStyle}>
-          <Input
-            label="Titre *"
-            value={notificationForm.title}
-            onChange={(v) => setNotificationForm({ ...notificationForm, title: v })}
-            placeholder="Ex: Nouvelle campagne de collecte"
-            required
-          />
-          <div>
-            <label style={label}>Message *</label>
-            <textarea
-              value={notificationForm.message}
-              onChange={(e) => setNotificationForm({ ...notificationForm, message: e.target.value })}
-              placeholder="Ex: La nouvelle campagne de collecte commence le 1er janvier..."
-              style={textareaInput}
-              rows={5}
-              required
-            />
-          </div>
-          <div style={formActions}>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setShowNotificationModal(false)
-                setNotificationForm({ title: "", message: "" })
-              }}
-              disabled={sendingNotification}
-            >
-              Annuler
-            </Button>
-            <Button
-              variant="primary"
-              icon={<FaPaperPlane />}
-              onClick={handleSendNotification}
-              disabled={sendingNotification}
-            >
-              {sendingNotification ? "Envoi..." : "Envoyer"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  )
 }
 
-function StatCard({ icon, label, value, color }) {
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("fr-FR")
+}
+
+function formatCurrency(value) {
+  return `${Number(value || 0).toLocaleString("fr-FR")} FCFA`
+}
+
+function formatWeight(value) {
+  return `${Number(value || 0).toLocaleString("fr-FR")} kg`
+}
+
+function formatDate(dateString) {
+  if (!dateString) return "-"
+  return new Date(dateString).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+function getEntryDate(entry) {
+  const value = entry?.date_pesee || entry?.created_at
+  return value ? new Date(value) : null
+}
+
+function sumBy(items, accessor) {
+  return items.reduce((total, item) => total + (Number(accessor(item)) || 0), 0)
+}
+
+function MetricCard({ item }) {
   return (
-    <Card
-      style={{
-        ...statCard,
-        background: "white",
-        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)",
-        borderRadius: "12px",
-        border: "1px solid #e5e7eb",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)"
-        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)"
-        const iconEl = e.currentTarget.querySelector('[data-stat-icon]')
-        if (iconEl) iconEl.style.transform = "scale(1.05)"
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)"
-        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)"
-        const iconEl = e.currentTarget.querySelector('[data-stat-icon]')
-        if (iconEl) iconEl.style.transform = "scale(1)"
-      }}
-    >
-      <div style={statContent}>
+    <Card padding="18px" style={styles.metricCard}>
+      <div style={styles.metricInner}>
         <div
-          data-stat-icon
           style={{
-            ...statIcon,
-            background: `linear-gradient(135deg, ${color}15 0%, ${color}08 100%)`,
-            color,
+            ...styles.metricIcon,
+            background: `${item.accent || "#0f172a"}14`,
+            color: item.accent || "#0f172a",
           }}
         >
-          {icon}
+          {item.icon}
         </div>
-        <div style={statInfo}>
-          <p style={statValue}>{value}</p>
-          <p style={statLabel}>{label}</p>
+        <div style={styles.metricCopy}>
+          <div style={styles.metricValue} title={item.value}>
+            {item.value}
+          </div>
+          <div style={styles.metricLabel}>{item.label}</div>
+          {item.helper ? (
+            <div style={styles.metricHelper} title={item.helper}>
+              {item.helper}
+            </div>
+          ) : null}
         </div>
       </div>
     </Card>
   )
 }
 
-const container = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 32,
-  width: "100%",
-  maxWidth: "100%",
-  minWidth: 0,
-  boxSizing: "border-box",
+function StatSection({ title, subtitle, items, columns = 3 }) {
+  return (
+    <AdminPanel title={title} subtitle={subtitle}>
+      <div
+        style={{
+          ...styles.metricGrid,
+          gridTemplateColumns:
+            columns === 4
+              ? "repeat(auto-fit, minmax(210px, 1fr))"
+              : "repeat(auto-fit, minmax(220px, 1fr))",
+        }}
+      >
+        {items.map((item) => (
+          <MetricCard key={item.label} item={item} />
+        ))}
+      </div>
+    </AdminPanel>
+  )
 }
 
-const chartsContainer = {
-  display: "grid",
-  // Important for mobile: don't force 400px min widths which clips the UI inside the admin layout.
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: 24,
-  width: "100%",
+export default function AdminStats() {
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    activeUsers: 0,
+    bannedUsers: 0,
+    totalAgents: 0,
+    activeAgents: 0,
+    bestAgentName: "-",
+    bestAgentVolume: 0,
+    totalCentres: 0,
+    mostActiveCentreName: "-",
+    mostActiveCentreCount: 0,
+    totalProduction: 0,
+    averageProduction: 0,
+    bestProducerName: "-",
+    bestProducerVolume: 0,
+    totalRevenue: 0,
+    monthlyRevenue: 0,
+    bestEarningName: "-",
+    bestEarningValue: 0,
+  })
+  const [monthlySeries, setMonthlySeries] = useState([])
+  const [poidsParCentre, setPoidsParCentre] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
+
+  useEffect(() => {
+    fetchStats()
+    const refreshInterval = setInterval(fetchStats, 30000)
+    return () => clearInterval(refreshInterval)
+  }, [])
+
+  async function fetchStats() {
+    try {
+      setLoading(true)
+
+      const [usersRes, centresRes, achatsRes, notificationsRes] = await Promise.all([
+        supabase.from("utilisateurs").select("*"),
+        supabase.from("centres").select("id, nom"),
+        supabase.from("achats").select("poids, montant, centre_id, utilisateur_id, nom_agent, date_pesee, created_at"),
+        supabase
+          .from("notifications")
+          .select("id, title, message, created_at")
+          .not("admin_id", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(6),
+      ])
+
+      const usersData = (usersRes?.data || []).map((entry) => ({
+        ...entry,
+        status: entry.status || "active",
+      }))
+      const agentsData = usersData.filter((entry) => entry.role === "AGENT")
+      const centresData = centresRes?.data || []
+      const achatsData = achatsRes?.data || []
+      const notificationsData = notificationsRes?.data || []
+
+      const now = new Date()
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
+      const centreNameById = Object.fromEntries(
+        centresData.map((centre) => [String(centre.id), centre.nom || `Centre ${centre.id}`])
+      )
+
+      const agentNameById = Object.fromEntries(
+        agentsData.map((agent) => [String(agent.id), agent.nom || agent.email || "Agent"])
+      )
+
+      const centrePerformanceMap = achatsData.reduce((accumulator, entry) => {
+        const key = String(entry.centre_id || "unknown")
+        const current = accumulator[key] || {
+          name: centreNameById[key] || "Centre non attribué",
+          volume: 0,
+          transactions: 0,
+        }
+
+        current.volume += Number(entry.poids) || 0
+        current.transactions += 1
+        accumulator[key] = current
+        return accumulator
+      }, {})
+
+      const agentPerformanceMap = achatsData.reduce((accumulator, entry) => {
+        const key = String(entry.utilisateur_id || entry.nom_agent || "unknown")
+        const current = accumulator[key] || {
+          name: agentNameById[String(entry.utilisateur_id)] || entry.nom_agent || "Agent non attribué",
+          volume: 0,
+          revenue: 0,
+        }
+
+        current.volume += Number(entry.poids) || 0
+        current.revenue += Number(entry.montant) || 0
+        accumulator[key] = current
+        return accumulator
+      }, {})
+
+      const centreByVolume = Object.values(centrePerformanceMap).sort((a, b) => b.volume - a.volume)
+      const centreByActivity = [...centreByVolume].sort((a, b) => b.transactions - a.transactions)
+      const agentByVolume = Object.values(agentPerformanceMap).sort((a, b) => b.volume - a.volume)
+      const agentByRevenue = [...agentByVolume].sort((a, b) => b.revenue - a.revenue)
+
+      const totalProduction = sumBy(achatsData, (entry) => entry.poids)
+      const totalRevenue = sumBy(achatsData, (entry) => entry.montant)
+      const monthlyRevenue = sumBy(
+        achatsData.filter((entry) => {
+          const date = getEntryDate(entry)
+          return date && date >= startOfMonth
+        }),
+        (entry) => entry.montant
+      )
+
+      const averageProduction = agentsData.length ? totalProduction / agentsData.length : 0
+
+      const nextMonthlySeries = []
+      for (let index = 5; index >= 0; index -= 1) {
+        const date = new Date(now.getFullYear(), now.getMonth() - index, 1)
+        const monthItems = achatsData.filter((entry) => {
+          const currentDate = getEntryDate(entry)
+          return (
+            currentDate &&
+            currentDate.getFullYear() === date.getFullYear() &&
+            currentDate.getMonth() === date.getMonth()
+          )
+        })
+
+        nextMonthlySeries.push({
+          mois: date.toLocaleDateString("fr-FR", { month: "short" }),
+          poids: Math.round(sumBy(monthItems, (entry) => entry.poids) * 100) / 100,
+        })
+      }
+
+      const nextPoidsParCentre = centreByVolume.slice(0, 6).map((entry) => ({
+        centre: entry.name,
+        poids: Math.round(entry.volume * 100) / 100,
+      }))
+
+      const recentUsers = usersData
+        .filter((entry) => entry.created_at)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 4)
+
+      const mergedActivity = [
+        ...recentUsers.map((entry) => ({
+          id: `user-${entry.id}`,
+          kind: "user",
+          title: entry.nom || entry.email,
+          description: `Nouveau compte ${entry.role || "utilisateur"}`,
+          created_at: entry.created_at,
+        })),
+        ...notificationsData.map((entry) => ({
+          id: `notification-${entry.id}`,
+          kind: "notification",
+          title: entry.title || "Notification",
+          description: entry.message || "Notification administrateur",
+          created_at: entry.created_at,
+        })),
+      ]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 8)
+
+      setStats({
+        totalUsers: usersData.length,
+        activeUsers: usersData.filter((entry) => entry.status === "active").length,
+        bannedUsers: usersData.filter((entry) => entry.status === "banned").length,
+        totalAgents: agentsData.length,
+        activeAgents: agentsData.filter((entry) => (entry.status || "active") === "active").length,
+        bestAgentName: agentByVolume[0]?.name || "-",
+        bestAgentVolume: Math.round((agentByVolume[0]?.volume || 0) * 100) / 100,
+        totalCentres: centresData.length,
+        mostActiveCentreName: centreByActivity[0]?.name || "-",
+        mostActiveCentreCount: centreByActivity[0]?.transactions || 0,
+        totalProduction: Math.round(totalProduction * 100) / 100,
+        averageProduction: Math.round(averageProduction * 100) / 100,
+        bestProducerName: agentByVolume[0]?.name || "-",
+        bestProducerVolume: Math.round((agentByVolume[0]?.volume || 0) * 100) / 100,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        monthlyRevenue: Math.round(monthlyRevenue * 100) / 100,
+        bestEarningName: agentByRevenue[0]?.name || "-",
+        bestEarningValue: Math.round((agentByRevenue[0]?.revenue || 0) * 100) / 100,
+      })
+
+      setMonthlySeries(nextMonthlySeries)
+      setPoidsParCentre(nextPoidsParCentre)
+      setRecentActivity(mergedActivity)
+    } catch (error) {
+      console.error("[AdminStats] Unexpected error:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const userStats = useMemo(
+    () => [
+      {
+        label: "Total users",
+        value: formatNumber(stats.totalUsers),
+        helper: "Comptes",
+        icon: <FaUsers />,
+        accent: "#2563eb",
+      },
+      {
+        label: "Active users",
+        value: formatNumber(stats.activeUsers),
+        helper: "En ligne",
+        icon: <FaUsers />,
+        accent: "#0f766e",
+      },
+      {
+        label: "Banned users",
+        value: formatNumber(stats.bannedUsers),
+        helper: "Restreints",
+        icon: <FaUsers />,
+        accent: "#dc2626",
+      },
+    ],
+    [stats]
+  )
+
+  const agentStats = useMemo(
+    () => [
+      {
+        label: "Total agents",
+        value: formatNumber(stats.totalAgents),
+        helper: "Terrain",
+        icon: <FaUserFriends />,
+        accent: "#7c3aed",
+      },
+      {
+        label: "Active agents",
+        value: formatNumber(stats.activeAgents),
+        helper: "Disponibles",
+        icon: <FaUserFriends />,
+        accent: "#9333ea",
+      },
+      {
+        label: "Best agent",
+        value: stats.bestAgentName,
+        helper: formatWeight(stats.bestAgentVolume),
+        icon: <FaUserFriends />,
+        accent: "#8b5cf6",
+      },
+    ],
+    [stats]
+  )
+
+  const centreStats = useMemo(
+    () => [
+      {
+        label: "Total centres",
+        value: formatNumber(stats.totalCentres),
+        helper: "Réseau",
+        icon: <FaBuilding />,
+        accent: "#059669",
+      },
+      {
+        label: "Most active centre",
+        value: stats.mostActiveCentreName,
+        helper: `${formatNumber(stats.mostActiveCentreCount)} transactions`,
+        icon: <FaBuilding />,
+        accent: "#0284c7",
+      },
+    ],
+    [stats]
+  )
+
+  const productionStats = useMemo(
+    () => [
+      {
+        label: "Total production",
+        value: formatWeight(stats.totalProduction),
+        helper: "Volume global",
+        icon: <FaWeightHanging />,
+        accent: "#2563eb",
+      },
+      {
+        label: "Average production",
+        value: formatWeight(stats.averageProduction),
+        helper: "Par agent",
+        icon: <FaChartLine />,
+        accent: "#7c3aed",
+      },
+      {
+        label: "Best producer",
+        value: stats.bestProducerName,
+        helper: formatWeight(stats.bestProducerVolume),
+        icon: <FaUserTie />,
+        accent: "#ea580c",
+      },
+    ],
+    [stats]
+  )
+
+  const financialStats = useMemo(
+    () => [
+      {
+        label: "Total revenue",
+        value: formatCurrency(stats.totalRevenue),
+        helper: "Cumul",
+        icon: <FaMoneyBillWave />,
+        accent: "#059669",
+      },
+      {
+        label: "Monthly revenue",
+        value: formatCurrency(stats.monthlyRevenue),
+        helper: "Mois en cours",
+        icon: <FaChartLine />,
+        accent: "#dc2626",
+      },
+      {
+        label: "Best earning",
+        value: stats.bestEarningName,
+        helper: formatCurrency(stats.bestEarningValue),
+        icon: <FaMoneyBillWave />,
+        accent: "#16a34a",
+      },
+    ],
+    [stats]
+  )
+
+  const quickActions = [
+    {
+      label: "Ajouter un utilisateur",
+      description: "Créer un nouveau compte administré.",
+      icon: <FaPlus />,
+      accent: "#2563eb",
+      onClick: () => navigateAdmin("users"),
+    },
+    {
+      label: "Ajouter un agent",
+      description: "Créer ou gérer un agent terrain.",
+      icon: <FaUserFriends />,
+      accent: "#7c3aed",
+      onClick: () => navigateAdmin("agents"),
+    },
+    {
+      label: "Gérer les centres",
+      description: "Accéder à l'organisation des centres.",
+      icon: <FaBuilding />,
+      accent: "#059669",
+      onClick: () => navigateAdmin("centres"),
+    },
+  ]
+
+  return (
+    <AdminPage
+      title="Dashboard"
+      subtitle="Vue dense et structurée des indicateurs métiers essentiels sans surcharge visuelle."
+      aside={<AdminQuickActions title="Quick actions" items={quickActions} />}
+    >
+      <div style={styles.dashboardStack}>
+        <StatSection title="Users" subtitle="Population et statuts des comptes." items={userStats} />
+        <StatSection title="Agents" subtitle="Effectif actif et meilleur agent." items={agentStats} />
+        <StatSection title="Centres" subtitle="Couverture et activité des centres." items={centreStats} />
+        <StatSection title="Production" subtitle="Volumes globaux et meilleure performance." items={productionStats} />
+        <StatSection title="Financial" subtitle="Revenus globaux, mensuels et top performer." items={financialStats} />
+
+        <AdminPanel title="Analytics" subtitle="Évolution des volumes et activité des centres.">
+          {loading ? (
+            <div style={styles.loading}>Chargement des analytics...</div>
+          ) : (
+            <div style={styles.analyticsGrid}>
+              <div style={styles.chartBlock}>
+                <div style={styles.chartTitleRow}>
+                  <span style={styles.chartIcon}>
+                    <FaChartLine size={14} />
+                  </span>
+                  <div>
+                    <div style={styles.chartTitle}>Production mensuelle</div>
+                    <div style={styles.chartSubtitle}>Volume collecté sur les six derniers mois</div>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={236}>
+                  <LineChart data={monthlySeries}>
+                    <CartesianGrid stroke="var(--admin-border-soft)" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="mois" stroke="var(--admin-text-muted)" tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--admin-text-muted)" tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={styles.tooltip} />
+                    <Line type="monotone" dataKey="poids" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, fill: "#2563eb" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div style={styles.chartBlock}>
+                <div style={styles.chartTitleRow}>
+                  <span style={{ ...styles.chartIcon, background: "rgba(153, 27, 27, 0.14)", color: "#991b1b" }}>
+                    <FaWeightHanging size={14} />
+                  </span>
+                  <div>
+                    <div style={styles.chartTitle}>Top centres</div>
+                    <div style={styles.chartSubtitle}>Comparaison des centres par volume</div>
+                  </div>
+                </div>
+                <ResponsiveContainer width="100%" height={236}>
+                  <BarChart data={poidsParCentre}>
+                    <CartesianGrid stroke="var(--admin-border-soft)" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="centre" stroke="var(--admin-text-muted)" tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--admin-text-muted)" tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={styles.tooltip} />
+                    <Bar dataKey="poids" fill="#991b1b" radius={[10, 10, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </AdminPanel>
+
+        <AdminPanel title="Activité récente" subtitle="Dernières créations de comptes et communications administrateur.">
+          <div style={styles.activityList}>
+            {loading ? (
+              <div style={styles.loading}>Chargement des activités...</div>
+            ) : recentActivity.length === 0 ? (
+              <div style={styles.empty}>Aucune activité récente</div>
+            ) : (
+              recentActivity.map((item) => (
+                <div key={item.id} style={styles.activityItem}>
+                  <div style={styles.activityBadge}>{item.kind === "notification" ? <FaChartLine size={12} /> : <FaUsers size={12} />}</div>
+                  <div style={styles.activityContent}>
+                    <div style={styles.activityTitle}>{item.title}</div>
+                    <div style={styles.activityDescription}>{item.description}</div>
+                  </div>
+                  <div style={styles.activityDate}>{formatDate(item.created_at)}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </AdminPanel>
+      </div>
+    </AdminPage>
+  )
 }
 
-const statsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: 20,
-  "@media (max-width: 640px)": {
-    gridTemplateColumns: "repeat(2, 1fr)",
+const styles = {
+  dashboardStack: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
   },
-}
-
-const statCard = {
-  padding: "24px",
-  transition: "all 0.2s ease",
-  cursor: "default",
-  height: "100%",
-  display: "flex",
-  flexDirection: "column",
-  minHeight: "140px",
-}
-
-const statContent = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "16px",
-  flex: 1,
-  width: "100%",
-  textAlign: "center",
-}
-
-const statIcon = {
-  width: "56px",
-  height: "56px",
-  borderRadius: "12px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "24px",
-  flexShrink: 0,
-  transition: "transform 0.2s ease",
-}
-
-const statInfo = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: "4px",
-  width: "100%",
-}
-
-const statValue = {
-  margin: 0,
-  fontSize: "32px",
-  fontWeight: 700,
-  color: "#0f172a",
-  lineHeight: 1.2,
-  letterSpacing: "-0.02em",
-}
-
-const statLabel = {
-  margin: 0,
-  fontSize: "13px",
-  color: "#64748b",
-  fontWeight: 500,
-  textAlign: "center",
-}
-
-const activityList = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-}
-
-const activityItem = {
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  padding: "16px",
-  borderRadius: "12px",
-  background: "#f9fafb",
-  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-  border: "1px solid rgba(0,0,0,0.04)",
-}
-
-const activityIcon = {
-  width: "44px",
-  height: "44px",
-  borderRadius: "12px",
-  background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
-  color: "#3b82f6",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexShrink: 0,
-  boxShadow: "0 2px 8px rgba(59, 130, 246, 0.15)",
-}
-
-const activityContent = {
-  flex: 1,
-  minWidth: 0,
-}
-
-const activityTitle = {
-  margin: "0 0 6px 0",
-  fontSize: "15px",
-  fontWeight: 600,
-  color: "#0f172a",
-  letterSpacing: "-0.01em",
-}
-
-const activityDate = {
-  margin: 0,
-  fontSize: "13px",
-  color: "#64748b",
-  fontWeight: 500,
-}
-
-const emptyState = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "60px 20px",
-  textAlign: "center",
-}
-
-const emptyText = {
-  color: "#94a3b8",
-  fontSize: "15px",
-  fontWeight: 500,
-  margin: 0,
-}
-
-const loadingContainer = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: "400px",
-  gap: 16,
-}
-
-const spinner = {
-  width: "40px",
-  height: "40px",
-  border: "4px solid #e5e7eb",
-  borderTopColor: "#7a1f1f",
-  borderRadius: "50%",
-  animation: "spin 0.8s linear infinite",
-}
-
-const loadingText = {
-  color: "#6b7280",
-  fontSize: "14px",
-}
-
-const headerActions = {
-  display: "flex",
-  justifyContent: "flex-end",
-  marginBottom: 24,
-}
-
-const notificationFormStyle = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 20,
-}
-
-const label = {
-  display: "block",
-  fontSize: "13px",
-  color: "#374151",
-  fontWeight: 600,
-  marginBottom: "8px",
-}
-
-const textareaInput = {
-  width: "100%",
-  padding: "12px 14px",
-  borderRadius: "10px",
-  border: "1px solid #d1d5db",
-  fontSize: "14px",
-  background: "white",
-  color: "#111827",
-  outline: "none",
-  transition: "all 0.2s ease",
-  fontFamily: "inherit",
-  resize: "vertical",
-}
-
-const formActions = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: 12,
-  marginTop: 8,
+  metricGrid: {
+    display: "grid",
+    gap: 16,
+    alignItems: "stretch",
+  },
+  metricCard: {
+    minHeight: 168,
+    borderRadius: 20,
+    boxShadow: "var(--admin-shadow-card)",
+  },
+  metricInner: {
+    minHeight: 132,
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    gap: 10,
+  },
+  metricIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  metricCopy: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 5,
+    minWidth: 0,
+  },
+  metricValue: {
+    maxWidth: "100%",
+    fontSize: "clamp(20px, 2.4vw, 25px)",
+    lineHeight: 1.12,
+    fontWeight: 800,
+    color: "var(--admin-text)",
+    letterSpacing: "-0.04em",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  metricLabel: {
+    maxWidth: "100%",
+    fontSize: 13,
+    lineHeight: 1.3,
+    fontWeight: 700,
+    color: "var(--admin-text-soft)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  metricHelper: {
+    maxWidth: "100%",
+    fontSize: 12,
+    lineHeight: 1.35,
+    color: "var(--admin-text-muted)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  analyticsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: 16,
+  },
+  chartBlock: {
+    border: "1px solid var(--admin-border)",
+    borderRadius: 20,
+    padding: 14,
+    background: "var(--admin-card-muted-bg)",
+  },
+  chartTitleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
+    minWidth: 0,
+  },
+  chartIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    background: "rgba(37, 99, 235, 0.14)",
+    color: "#2563eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "var(--admin-text)",
+  },
+  chartSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: "var(--admin-text-soft)",
+  },
+  tooltip: {
+    background: "var(--admin-surface)",
+    border: "1px solid var(--admin-border)",
+    borderRadius: 14,
+    boxShadow: "var(--admin-shadow-soft)",
+  },
+  activityList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  activityItem: {
+    display: "grid",
+    gridTemplateColumns: "34px minmax(0, 1fr) auto",
+    gap: 12,
+    alignItems: "center",
+    border: "1px solid var(--admin-border)",
+    borderRadius: 18,
+    padding: 12,
+    background: "var(--admin-surface)",
+  },
+  activityBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    background: "rgba(37, 99, 235, 0.14)",
+    color: "#2563eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activityContent: {
+    minWidth: 0,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "var(--admin-text)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  activityDescription: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "var(--admin-text-soft)",
+    lineHeight: 1.5,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  activityDate: {
+    fontSize: 12,
+    color: "var(--admin-text-muted)",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  },
+  loading: {
+    minHeight: 120,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "var(--admin-text-soft)",
+    fontSize: 14,
+  },
+  empty: {
+    minHeight: 120,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "var(--admin-text-muted)",
+    fontSize: 14,
+  },
 }
