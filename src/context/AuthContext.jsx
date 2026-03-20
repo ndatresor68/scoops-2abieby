@@ -29,7 +29,6 @@ function normalizeRole(rawRole) {
   if (ALLOWED_ROLES.has(normalizedRole)) {
     return normalizedRole
   }
-  console.warn("[AuthContext] normalizeRole: Invalid role:", rawRole)
   return null
 }
 
@@ -72,19 +71,12 @@ export function AuthProvider({ children }) {
   const syncInProgressRef = useRef(false)
   const mountedRef = useRef(true)
 
-  console.log("[AuthContext] Provider initialized")
-
   const loadProfileForUser = useCallback(async (authUser) => {
     if (!authUser || !authUser.id) {
-      console.warn("[AuthContext] No authUser or id provided")
       return null
     }
 
     try {
-      console.log("[AuthContext] ===== LOADING PROFILE FROM DB =====")
-      console.log("[AuthContext] User ID:", authUser.id)
-      console.log("[AuthContext] User email:", authUser.email)
-      
       let profile = null
       let error = null
       
@@ -97,11 +89,9 @@ export function AuthProvider({ children }) {
       
       if (!error1 && profileById) {
         profile = profileById
-        console.log("[AuthContext] Profile found by id")
       } else {
         // Fallback: try email if id lookup fails
         if (authUser.email) {
-          console.log("[AuthContext] Trying fallback with email...")
           const { data: profileByEmail, error: emailError } = await supabase
             .from("utilisateurs")
             .select("*")
@@ -110,7 +100,6 @@ export function AuthProvider({ children }) {
           
           if (!emailError && profileByEmail) {
             profile = profileByEmail
-            console.log("[AuthContext] Profile found by email fallback")
           } else {
             error = emailError || error1
           }
@@ -125,12 +114,8 @@ export function AuthProvider({ children }) {
       }
 
       if (!profile) {
-        console.warn("[AuthContext] WARNING: No profile found in utilisateurs table for id:", authUser.id)
         return null
       }
-
-      console.log("[AuthContext] ===== PROFILE LOADED FROM DB =====")
-      console.log("[AuthContext] DB ROLE:", profile.role)
       
       // Verify role is NOT "authenticated" (PostgreSQL role)
       if (profile.role === "authenticated" || profile.role === "AUTHENTICATED") {
@@ -148,9 +133,6 @@ export function AuthProvider({ children }) {
       }
       
       setUser(mergedUser)
-      
-      console.log("[AuthContext] User state updated with profile data from DB")
-      console.log("[AuthContext] ===== PROFILE LOAD COMPLETE =====")
       return profile
     } catch (error) {
       console.error("[AuthContext] EXCEPTION loading profile:", error)
@@ -165,15 +147,12 @@ export function AuthProvider({ children }) {
   const syncAuthState = useCallback(async (skipRetry = false) => {
     // Prevent multiple simultaneous syncs
     if (syncInProgressRef.current) {
-      console.log("[AuthContext] Sync already in progress, skipping...")
       return null
     }
 
     syncInProgressRef.current = true
 
     try {
-      console.log("[AuthContext] Starting auth state sync...")
-      
       // FIX #1: Increased timeout and added retry logic
       const authOperation = async () => {
         const authPromise = supabase.auth.getUser()
@@ -196,13 +175,11 @@ export function AuthProvider({ children }) {
         // FIX #2: Check if session exists before clearing user
         const sessionExists = await checkSessionExists()
         if (sessionExists) {
-          console.warn("[AuthContext] Session exists but getUser() failed - keeping user state")
           syncInProgressRef.current = false
           return user // Return current user instead of clearing
         }
         
         // Only clear user if session actually doesn't exist
-        console.log("[AuthContext] No session found, clearing user state")
         if (mountedRef.current) {
           setUser(null)
         }
@@ -225,7 +202,6 @@ export function AuthProvider({ children }) {
           // Temporary error - check if session exists
           const sessionExists = await checkSessionExists()
           if (sessionExists) {
-            console.warn("[AuthContext] Temporary error but session exists - keeping user state")
             syncInProgressRef.current = false
             return user
           }
@@ -242,8 +218,6 @@ export function AuthProvider({ children }) {
       const nextUser = data?.user || null
       
       if (nextUser) {
-        console.log("[AuthContext] User authenticated, loading profile from DB...")
-        
         // FIX #1: Increased timeout for profile loading
         const profileOperation = async () => {
           const profilePromise = loadProfileForUser(nextUser)
@@ -262,12 +236,10 @@ export function AuthProvider({ children }) {
           }
           
           if (profileResult) {
-            console.log("[AuthContext] Profile loaded successfully")
             // User state is already set by loadProfileForUser
           } else {
             // FIX #6: Better handling when profile load fails
             // Keep user with basic auth data but log warning
-            console.warn("[AuthContext] Profile not loaded - user set with basic auth data")
             if (mountedRef.current) {
               setUser({
                 ...nextUser,
@@ -288,13 +260,10 @@ export function AuthProvider({ children }) {
           }
         }
       } else {
-        console.log("[AuthContext] No user, clearing state")
         if (mountedRef.current) {
           setUser(null)
         }
       }
-      
-      console.log("[AuthContext] Auth state sync completed")
       syncInProgressRef.current = false
       return nextUser
     } catch (error) {
@@ -303,7 +272,6 @@ export function AuthProvider({ children }) {
       // FIX #2: Check session before clearing user on error
       const sessionExists = await checkSessionExists()
       if (sessionExists) {
-        console.warn("[AuthContext] Error occurred but session exists - keeping user state")
         syncInProgressRef.current = false
         return user
       }
@@ -330,14 +298,11 @@ export function AuthProvider({ children }) {
     let timeoutId = null
     let authListener = null
 
-    console.log("[AuthContext] Initializing session...")
-
     async function initializeSession() {
       try {
         // FIX #1: Increased safety timeout
         timeoutId = setTimeout(() => {
           if (mountedRef.current && !initialized) {
-            console.warn("[AuthContext] Safety timeout reached, setting loading to false")
             setLoading(false)
             setInitialized(true)
           }
@@ -346,7 +311,6 @@ export function AuthProvider({ children }) {
         await syncAuthState()
         
         if (mountedRef.current) {
-          console.log("[AuthContext] Session initialized")
           setLoading(false)
           setInitialized(true)
           if (timeoutId) clearTimeout(timeoutId)
@@ -374,14 +338,11 @@ export function AuthProvider({ children }) {
     try {
       const listenerData = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!mountedRef.current) return
-        
-        console.log("[AuthContext] Auth state changed:", event, session ? "session exists" : "no session")
-        
+
         try {
           // Handle different auth events properly
           switch (event) {
             case "SIGNED_IN":
-              console.log("[AuthContext] User signed in")
               // Sync state to load profile
               await syncAuthState()
               if (mountedRef.current) {
@@ -390,7 +351,6 @@ export function AuthProvider({ children }) {
               break
               
             case "SIGNED_OUT":
-              console.log("[AuthContext] User signed out")
               // Clear user state on explicit sign out
               if (mountedRef.current) {
                 setUser(null)
@@ -399,7 +359,6 @@ export function AuthProvider({ children }) {
               break
               
             case "TOKEN_REFRESHED":
-              console.log("[AuthContext] Token refreshed")
               // FIX #6: Don't clear user on token refresh - session is still valid
               // Only sync if user state is missing
               if (!user && session?.user) {
@@ -411,7 +370,6 @@ export function AuthProvider({ children }) {
               break
               
             case "USER_UPDATED":
-              console.log("[AuthContext] User updated")
               // Sync to get latest user data
               await syncAuthState()
               if (mountedRef.current) {
@@ -420,7 +378,6 @@ export function AuthProvider({ children }) {
               break
               
             default:
-              console.log("[AuthContext] Other auth event:", event)
               // For other events, sync state
               await syncAuthState()
               if (mountedRef.current) {
@@ -459,16 +416,13 @@ export function AuthProvider({ children }) {
         try {
           authListener.data.subscription.unsubscribe()
         } catch (err) {
-          console.warn("[AuthContext] Error unsubscribing auth listener:", err)
+          console.error("[AuthContext] Error unsubscribing auth listener:", err)
         }
       }
     }
   }, [syncAuthState, user, initialized])
 
   const signInWithPassword = useCallback(async (email, password) => {
-    console.log("[AuthContext] ===== SIGN IN ATTEMPT =====")
-    console.log("[AuthContext] Email:", email)
-    
     const response = await supabase.auth.signInWithPassword({ email, password })
     
     if (response.error) {
@@ -481,17 +435,10 @@ export function AuthProvider({ children }) {
       return response
     }
     
-    console.log("[AuthContext] ===== SIGN IN SUCCESSFUL =====")
-    console.log("[AuthContext] User ID:", response.data.user.id)
-    
     // Load profile immediately after login
-    console.log("[AuthContext] Loading profile immediately after login...")
     const profileResult = await loadProfileForUser(response.data.user)
     
     if (profileResult) {
-      console.log("[AuthContext] Profile loaded after login")
-      console.log("[AuthContext] DB ROLE after login:", profileResult.role)
-      
       // Log successful login
       await logUserLogin(response.data.user.id, response.data.user.email)
     } else {
@@ -499,17 +446,12 @@ export function AuthProvider({ children }) {
     }
     
     // Sync auth state to ensure consistency
-    console.log("[AuthContext] Syncing auth state after login...")
     await syncAuthState(true) // Skip retry for immediate sync after login
-    
-    console.log("[AuthContext] ===== SIGN IN COMPLETE =====")
-    
+
     return response
   }, [loadProfileForUser, syncAuthState])
 
   const signOut = useCallback(async () => {
-    console.log("[AuthContext] Signing out...")
-    
     // Log logout before signing out
     if (user?.id) {
       await logUserLogout(user.id, user.email)
@@ -540,17 +482,6 @@ export function AuthProvider({ children }) {
   const effectiveIsAdmin = effectiveRole === "ADMIN"
   const effectiveIsAgent = effectiveRole === "AGENT"
   const effectiveIsCentre = effectiveRole === "CENTRE"
-
-  // Debug log whenever user/role changes
-  useEffect(() => {
-    console.log("[AuthContext] ===== USER STATE UPDATE =====")
-    console.log("[AuthContext] User exists:", !!user)
-    console.log("[AuthContext] User role:", user?.role)
-    console.log("[AuthContext] Effective role:", effectiveRole)
-    console.log("[AuthContext] Loading:", loading)
-    console.log("[AuthContext] Initialized:", initialized)
-    console.log("[AuthContext] ==============================")
-  }, [user, effectiveRole, loading, initialized])
 
   const value = useMemo(
     () => ({

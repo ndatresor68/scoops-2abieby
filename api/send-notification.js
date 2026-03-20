@@ -257,8 +257,6 @@ export default async function handler(req, res) {
 
       if (deactivateError) {
         console.error("[api/send-notification] Failed to deactivate invalid tokens:", deactivateError)
-      } else {
-        console.warn("[api/send-notification] Deactivated invalid tokens:", uniqueInvalidTokens.length)
       }
     }
 
@@ -266,16 +264,6 @@ export default async function handler(req, res) {
     const uniqueRecipientUserCount = new Set(
       tokenRows.map((row) => row.user_id).filter(Boolean),
     ).size
-
-    console.log("[api/send-notification] Send summary:", {
-      attempted: tokenRows.length,
-      successCount,
-      failureCount,
-      invalidTokenCount: [...new Set(invalidTokens)].length,
-      notificationId: notificationRow.id,
-      recipientUserCount: uniqueRecipientUserCount,
-      target: normalizedTarget,
-    })
 
     res.status(200).json({
       success,

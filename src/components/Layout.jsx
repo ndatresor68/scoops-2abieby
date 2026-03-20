@@ -48,17 +48,6 @@ export default function Layout() {
     if (typeof Notification === "undefined") return true
     return Notification.permission === "granted" || Notification.permission === "denied"
   })
-  const [fcmDebug, setFcmDebug] = useState(() => {
-    if (typeof window === "undefined") return null
-    return window.__FCM_DEBUG__ || null
-  })
-  
-  // Debug log to verify role source
-  useEffect(() => {
-    console.log("[Layout] User role:", user?.role)
-    console.log("[Layout] Role from AuthContext:", role)
-    console.log("[Layout] Is Admin:", isAdmin)
-  }, [user, role, isAdmin])
   const [activePage, setActivePage] = useState("dashboard")
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -72,10 +61,7 @@ export default function Layout() {
   useEffect(() => {
     if (!user || !sessionTimeoutMinutes) return
 
-    console.log(`[Layout] Initializing session timeout: ${sessionTimeoutMinutes} minutes`)
-
     const cleanup = initializeSessionTimeout(sessionTimeoutMinutes, async () => {
-      console.log("[Layout] Session timeout reached, logging out...")
       showToast(t("sessionExpired"), "warning")
       await signOut()
     })
@@ -88,16 +74,6 @@ export default function Layout() {
     onResize()
     window.addEventListener("resize", onResize)
     return () => window.removeEventListener("resize", onResize)
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined
-    const handleFcmDebugUpdate = (event) => {
-      setFcmDebug(event.detail || window.__FCM_DEBUG__ || null)
-    }
-    window.addEventListener("fcm-debug-update", handleFcmDebugUpdate)
-    setFcmDebug(window.__FCM_DEBUG__ || null)
-    return () => window.removeEventListener("fcm-debug-update", handleFcmDebugUpdate)
   }, [])
 
   useEffect(() => {
@@ -132,8 +108,6 @@ export default function Layout() {
     ;(async () => {
       try {
         await requestNotificationPermission({ userId: user.id })
-      } catch (error) {
-        console.warn("[FCM] Notification permission gate request failed:", error)
       } finally {
         const updatedPermission =
           typeof Notification === "undefined" ? "unsupported" : Notification.permission
@@ -171,12 +145,6 @@ export default function Layout() {
 
     ;(async () => {
       try {
-        console.log("[FCM] Starting authenticated token registration", {
-          userId: user.id,
-          role: user.role,
-          isAdmin,
-        })
-
         // Avoid prompting permission if a token already exists.
         const { data: existing, error: existingError } = await supabase
           .from("device_tokens")
@@ -185,22 +153,16 @@ export default function Layout() {
           .eq("status", "active")
           .maybeSingle()
 
-        if (existingError && existingError.code !== "PGRST116") {
-          console.warn("[FCM] Existing token lookup failed:", existingError)
-        } else if (existing?.token) {
-          console.log("[FCM] Active token already registered for user:", user.id)
+        if (!existingError && existing?.token) {
           return
         }
 
         const token = await requestNotificationPermission({ userId: user.id })
         if (!token) {
-          console.warn("[FCM] Token registration returned no token for user:", user.id)
           return
         }
-
-        console.log("[FCM] Token registration flow completed for user:", user.id)
       } catch (error) {
-        console.warn("[FCM] Token registration error:", error)
+        console.error("[Layout] Token registration error:", error)
       } finally {
         fcmTokenSetupRef.current = false
       }
@@ -219,7 +181,6 @@ export default function Layout() {
         const { data: { session } } = await supabase.auth.getSession()
         setSessionChecked(true)
       } catch (error) {
-        console.error("[Layout] Error checking session:", error)
         setSessionChecked(true)
       }
     }
@@ -415,18 +376,6 @@ export default function Layout() {
           padding: isMobile ? "16px" : "32px",
         }}>{renderPage()}</main>
       </div>
-      {fcmDebug ? (
-        <div style={fcmDebugPanel}>
-          <div style={fcmDebugTitle}>FCM Debug</div>
-          <div style={fcmDebugMeta}>permission: {String(fcmDebug.permission ?? "n/a")}</div>
-          <div style={fcmDebugMeta}>token: {fcmDebug.token || "null"}</div>
-          <div style={fcmDebugMeta}>user_id: {fcmDebug.authUserId || fcmDebug.requestedUserId || "null"}</div>
-          <div style={fcmDebugMeta}>
-            insert: {fcmDebug.saveResult ? JSON.stringify(fcmDebug.saveResult) : JSON.stringify(fcmDebug.insertResult)}
-          </div>
-          <pre style={fcmDebugPre}>{JSON.stringify(fcmDebug, null, 2)}</pre>
-        </div>
-      ) : null}
     </div>
   )
 }
@@ -583,38 +532,3 @@ const permissionButton = {
   boxShadow: "0 16px 32px rgba(122, 31, 31, 0.22)",
 }
 
-const fcmDebugPanel = {
-  position: "fixed",
-  right: 12,
-  bottom: 12,
-  width: "min(420px, calc(100vw - 24px))",
-  maxHeight: "50vh",
-  overflow: "auto",
-  padding: 12,
-  borderRadius: 12,
-  background: "rgba(15, 23, 42, 0.96)",
-  color: "#f8fafc",
-  boxShadow: "0 18px 50px rgba(15, 23, 42, 0.35)",
-  zIndex: 2000,
-  fontSize: 12,
-  lineHeight: 1.45,
-}
-
-const fcmDebugTitle = {
-  fontSize: 13,
-  fontWeight: 700,
-  marginBottom: 8,
-}
-
-const fcmDebugMeta = {
-  marginBottom: 6,
-  wordBreak: "break-word",
-}
-
-const fcmDebugPre = {
-  margin: 0,
-  marginTop: 8,
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  fontSize: 11,
-}

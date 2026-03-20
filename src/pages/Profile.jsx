@@ -16,12 +16,6 @@ function getInitialForm(user) {
 
 export default function Profile({ initialEditMode = false }) {
   const { user, role, refreshUser } = useAuth()
-  
-  // Debug log to verify role source
-  useEffect(() => {
-    console.log("[Profile] User role:", user?.role)
-    console.log("[Profile] Role from AuthContext:", role)
-  }, [user, role])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

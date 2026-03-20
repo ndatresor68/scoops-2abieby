@@ -7,6 +7,12 @@ import { ToastProvider } from "./components/ui/Toast"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./index.css"
 
+if (typeof console !== "undefined") {
+  console.log = () => {}
+  console.debug = () => {}
+  console.warn = () => {}
+}
+
 const rootElement = document.getElementById("root")
 
 if (!rootElement) {

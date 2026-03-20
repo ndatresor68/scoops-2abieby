@@ -23,12 +23,6 @@ export class ErrorBoundary extends Component {
             <p style={errorMessage}>
               L'application a rencontré une erreur. Veuillez rafraîchir la page.
             </p>
-            {this.state.error && (
-              <details style={errorDetails}>
-                <summary>Détails techniques</summary>
-                <pre style={errorPre}>{this.state.error.toString()}</pre>
-              </details>
-            )}
             <button
               onClick={() => {
                 this.setState({ hasError: false, error: null })
@@ -76,21 +70,6 @@ const errorMessage = {
   margin: "0 0 24px 0",
   fontSize: "16px",
   color: "#6b7280",
-}
-
-const errorDetails = {
-  margin: "20px 0",
-  textAlign: "left",
-  fontSize: "14px",
-}
-
-const errorPre = {
-  background: "#f3f4f6",
-  padding: "12px",
-  borderRadius: "8px",
-  overflow: "auto",
-  fontSize: "12px",
-  color: "#1f2937",
 }
 
 const errorButton = {

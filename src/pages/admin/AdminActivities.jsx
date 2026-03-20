@@ -61,36 +61,6 @@ export default function AdminActivities() {
   const [searchTerm, setSearchTerm] = useState("")
   const [exportingPDF, setExportingPDF] = useState(false)
 
-  // Debug: Log activities state changes
-  useEffect(() => {
-    console.log("[AdminActivities] 📊 Activities state updated:", {
-      count: activities.length,
-      sample: activities[0] || null,
-      firstActivity: activities[0] ? {
-        id: activities[0].id,
-        action: activities[0].action,
-        target: activities[0].target,
-        user_email: activities[0].user_email,
-        created_at: activities[0].created_at,
-      } : null,
-    })
-  }, [activities])
-
-  // Debug: Log activities state changes
-  useEffect(() => {
-    console.log("[AdminActivities] 📊 Activities state updated:", {
-      count: activities.length,
-      sample: activities[0] || null,
-      firstActivity: activities[0] ? {
-        id: activities[0].id,
-        action: activities[0].action,
-        target: activities[0].target,
-        user_email: activities[0].user_email,
-        created_at: activities[0].created_at,
-      } : null,
-    })
-  }, [activities])
-
   useEffect(() => {
     if (!isAdmin) {
       setLoading(false)
@@ -109,22 +79,12 @@ export default function AdminActivities() {
   async function fetchData() {
     try {
       setLoading(true)
-      console.log("[AdminActivities] ===== FETCHING ACTIVITIES =====")
-
       // Fetch from activites table (includes both new and historical activities)
       const { data: activitiesData, error: activitiesError } = await supabase
         .from("activites")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1000) // Increased limit to include historical data
-
-      console.log("[AdminActivities] Query result:", {
-        dataLength: activitiesData?.length || 0,
-        error: activitiesError,
-        hasData: !!activitiesData,
-        errorCode: activitiesError?.code,
-        errorMessage: activitiesError?.message,
-      })
 
       if (activitiesError) {
         console.error("[AdminActivities] ❌ Error fetching activities:", activitiesError)
@@ -142,10 +102,8 @@ export default function AdminActivities() {
         }
         
         // Try to fetch historical data as fallback
-        console.warn("[AdminActivities] Falling back to historical data generation")
         try {
           const historicalActivities = await generateHistoricalActivities()
-          console.log(`[AdminActivities] Generated ${historicalActivities.length} historical activities`)
           setActivities(historicalActivities)
         } catch (fallbackError) {
           console.error("[AdminActivities] Fallback error:", fallbackError)
@@ -156,15 +114,11 @@ export default function AdminActivities() {
 
       // If we have activities from the table, use them
       if (activitiesData && activitiesData.length > 0) {
-        console.log(`[AdminActivities] ✅ Loaded ${activitiesData.length} activities from database`)
-        console.log("[AdminActivities] Sample activity:", activitiesData[0])
         setActivities(activitiesData)
       } else {
         // If table is empty, generate historical activities as fallback
-        console.log("[AdminActivities] ⚠️ No activities in table, generating historical data")
         try {
           const historicalActivities = await generateHistoricalActivities()
-          console.log(`[AdminActivities] Generated ${historicalActivities.length} historical activities`)
           setActivities(historicalActivities)
         } catch (fallbackError) {
           console.error("[AdminActivities] Error generating historical activities:", fallbackError)
@@ -178,7 +132,6 @@ export default function AdminActivities() {
       setActivities([])
     } finally {
       setLoading(false)
-      console.log("[AdminActivities] ===== FETCH COMPLETE =====")
     }
   }
 
@@ -326,32 +279,20 @@ export default function AdminActivities() {
   }
 
   const filteredActivities = useMemo(() => {
-    console.log("[AdminActivities] Filtering activities:", {
-      totalActivities: activities.length,
-      targetFilter,
-      actionFilter,
-      searchTerm,
-    })
-
     let filtered = activities
 
     // Filter by target
     if (targetFilter !== "all") {
-      const beforeCount = filtered.length
       filtered = filtered.filter((a) => a.target === targetFilter)
-      console.log(`[AdminActivities] After target filter (${targetFilter}): ${beforeCount} → ${filtered.length}`)
     }
 
     // Filter by action
     if (actionFilter !== "all") {
-      const beforeCount = filtered.length
       filtered = filtered.filter((a) => a.action === actionFilter)
-      console.log(`[AdminActivities] After action filter (${actionFilter}): ${beforeCount} → ${filtered.length}`)
     }
 
     // Filter by search term
     if (searchTerm) {
-      const beforeCount = filtered.length
       const term = searchTerm.toLowerCase()
       filtered = filtered.filter(
         (a) =>
@@ -362,10 +303,7 @@ export default function AdminActivities() {
           a.browser?.toLowerCase().includes(term) ||
           a.device?.toLowerCase().includes(term),
       )
-      console.log(`[AdminActivities] After search filter (${searchTerm}): ${beforeCount} → ${filtered.length}`)
     }
-
-    console.log(`[AdminActivities] ✅ Final filtered count: ${filtered.length}`)
     return filtered
   }, [activities, targetFilter, actionFilter, searchTerm])
 
@@ -510,19 +448,6 @@ export default function AdminActivities() {
               <p style={{ margin: 0, color: "#9ca3af", fontSize: "12px" }}>
                 {activities.length} activité{activities.length > 1 ? "s" : ""} au total, mais filtrée{filteredActivities.length === 0 ? " (aucun résultat)" : ""}
               </p>
-            )}
-            {activities.length === 0 && (
-              <div style={{ marginTop: 16, padding: 16, background: "#f9fafb", borderRadius: 8, maxWidth: "600px", margin: "16px auto 0" }}>
-                <p style={{ margin: 0, fontSize: "12px", color: "#6b7280", fontWeight: 600, marginBottom: 8 }}>
-                  🔍 Debug Info:
-                </p>
-                <ul style={{ margin: 0, paddingLeft: 20, fontSize: "11px", color: "#9ca3af", fontFamily: "monospace", textAlign: "left" }}>
-                  <li>Vérifiez la console pour les logs de débogage</li>
-                  <li>Vérifiez que la table "activites" existe dans Supabase</li>
-                  <li>Vérifiez les politiques RLS pour la table "activites"</li>
-                  <li>Exécutez: database/fix_activites_rls.sql si nécessaire</li>
-                </ul>
-              </div>
             )}
           </div>
         ) : (

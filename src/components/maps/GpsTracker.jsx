@@ -82,7 +82,6 @@ export default function useGpsTracker({ onPositionUpdate, isTracking, accuracyTh
       if (posAccuracy > accuracyThreshold) {
         // Afficher un avertissement mais continuer à tracker
         setLowAccuracyWarning(true)
-        console.warn(`[GpsTracker] Précision faible: ${posAccuracy}m (seuil: ${accuracyThreshold}m)`)
         // Ne pas bloquer complètement, mais avertir l'utilisateur
       } else {
         setLowAccuracyWarning(false)

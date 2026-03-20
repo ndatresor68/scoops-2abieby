@@ -18,7 +18,7 @@ let messaging = null
 try {
   messaging = getMessaging(app)
 } catch (e) {
-  console.warn("[firebase] Messaging initialization failed:", e?.message || e)
+  messaging = null
 }
 
 export { messaging }

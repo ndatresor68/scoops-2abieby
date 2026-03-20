@@ -35,8 +35,8 @@ function truncate(text, maxLength = 80) {
 }
 
 function getUserLabel(user) {
-  if (!user) return "Utilisateur inconnu"
-  return user.nom || user.email || user.id
+  if (!user) return "Utilisateur"
+  return user.nom || user.email || "Utilisateur"
 }
 
 export default function AdminNotifications() {
@@ -145,7 +145,7 @@ export default function AdminNotifications() {
         recipientName: getUserLabel(usersById[log.user_id]),
         successCount: 0,
         failureCount: 0,
-        tokens: [],
+        deviceCount: 0,
         lastCreatedAt: log.created_at,
         errors: [],
       }
@@ -156,7 +156,7 @@ export default function AdminNotifications() {
         current.failureCount += 1
       }
 
-      current.tokens.push(log.token)
+      current.deviceCount += 1
       if (log.error_message) current.errors.push(log.error_message)
       if (!current.lastCreatedAt || new Date(log.created_at) > new Date(current.lastCreatedAt)) {
         current.lastCreatedAt = log.created_at
@@ -574,9 +574,7 @@ export default function AdminNotifications() {
                     <div style={styles.recipientIdentity}>
                       <div style={styles.recipientName}>{recipient.recipientName}</div>
                       <div style={styles.recipientToken}>
-                        {recipient.tokens.length} appareil(s)
-                        <br />
-                        {recipient.tokens.join("\n")}
+                        {recipient.deviceCount} appareil(s)
                       </div>
                     </div>
                     <div style={styles.recipientMeta}>

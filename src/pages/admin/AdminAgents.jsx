@@ -65,7 +65,6 @@ export default function AdminAgents() {
       }
 
       if (centresError) {
-        console.warn("[AdminAgents] Error fetching centres:", centresError)
         // Centres error is not critical, continue with empty array
       }
 
@@ -189,7 +188,6 @@ export default function AdminAgents() {
 
         if (errorWithStatus && errorWithStatus.message?.includes("status")) {
           // If status column doesn't exist, try again without it
-          console.warn("[AdminAgents] Status column doesn't exist, retrying without status")
           const { data: dataWithoutStatus, error: errorWithoutStatus } = await supabase
             .from("utilisateurs")
             .insert([insertPayload])
@@ -208,7 +206,6 @@ export default function AdminAgents() {
           insertedData = dataWithStatus
         }
 
-        console.log("[AdminAgents] Agent created successfully:", insertedData?.[0])
         showToast("Agent créé avec succès", "success")
       }
 
@@ -236,9 +233,6 @@ export default function AdminAgents() {
         console.error("[AdminAgents] Delete error:", deleteError)
         throw deleteError
       }
-
-      console.log("[AdminAgents] Agent deleted from utilisateurs table")
-      console.warn("[AdminAgents] Note: Auth user still exists. To fully delete, use server-side function with service_role key.")
 
       showToast("Agent supprimé avec succès", "success")
       setShowDeleteDialog(false)

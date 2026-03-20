@@ -54,11 +54,6 @@ export default function AdminUsers() {
   const { settings } = useSettings()
   const exportFormat = useExportFormat()
   const passwordPolicy = usePasswordPolicy()
-  // Debug: Log when component mounts
-  useEffect(() => {
-    console.log("[AdminUsers] Component mounted, isAdmin:", isAdmin)
-  }, [isAdmin])
-  
   const [users, setUsers] = useState([])
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
@@ -81,13 +76,10 @@ export default function AdminUsers() {
   const [preview, setPreview] = useState("")
 
   useEffect(() => {
-    console.log("[AdminUsers] useEffect triggered, isAdmin:", isAdmin)
     if (!isAdmin) {
-      console.log("[AdminUsers] Not admin, skipping fetch")
       setLoading(false)
       return
     }
-    console.log("[AdminUsers] Fetching data...")
     fetchData()
   }, [isAdmin])
 
@@ -140,7 +132,6 @@ export default function AdminUsers() {
       }
 
       if (centresError) {
-        console.warn("[AdminUsers] Error fetching centres:", centresError)
         // Centres error is not critical, continue with empty array
       }
 
@@ -326,7 +317,6 @@ export default function AdminUsers() {
 
         if (errorWithStatus && errorWithStatus.message?.includes("status")) {
           // If status column doesn't exist, try again without it
-          console.warn("[AdminUsers] Status column doesn't exist, retrying without status")
           const { data: dataWithoutStatus, error: errorWithoutStatus } = await supabase
             .from("utilisateurs")
             .insert([insertPayload])
@@ -345,8 +335,6 @@ export default function AdminUsers() {
           insertedData = dataWithStatus
         }
 
-        console.log("[AdminUsers] User created successfully:", insertedData?.[0])
-        
         // Log activity
         await logUserCreated(
           newAuthUser.id,
@@ -384,7 +372,6 @@ export default function AdminUsers() {
       if (error) {
         // If status column doesn't exist, log warning but continue
         if (error.message?.includes("column") && error.message?.includes("status")) {
-          console.warn("[AdminUsers] Status column doesn't exist, skipping status update")
           showToast(`Utilisateur ${actionUser.nom} - Note: colonne status non disponible`, "warning")
         } else {
           throw error
@@ -428,7 +415,6 @@ export default function AdminUsers() {
       if (error) {
         // If status column doesn't exist, log warning but continue
         if (error.message?.includes("column") && error.message?.includes("status")) {
-          console.warn("[AdminUsers] Status column doesn't exist, skipping status update")
           showToast(`Utilisateur ${actionUser.nom} - Note: colonne status non disponible`, "warning")
         } else {
           throw error
@@ -472,7 +458,6 @@ export default function AdminUsers() {
       if (error) {
         // If status column doesn't exist, log warning but continue
         if (error.message?.includes("column") && error.message?.includes("status")) {
-          console.warn("[AdminUsers] Status column doesn't exist, skipping status update")
           showToast(`Utilisateur ${actionUser.nom} - Note: colonne status non disponible`, "warning")
         } else {
           throw error
@@ -519,9 +504,6 @@ export default function AdminUsers() {
         console.error("[AdminUsers] Delete error:", deleteTableError)
         throw deleteTableError
       }
-
-      console.log("[AdminUsers] User deleted from utilisateurs table")
-      console.warn("[AdminUsers] Note: Auth user still exists. To fully delete, use server-side function with service_role key.")
 
       // Log activity
       await logUserDeleted(

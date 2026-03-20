@@ -15,12 +15,6 @@ function initialsFromName(name, email) {
 export default function UserMenu({ onOpenProfile, onOpenSettings }) {
   const [open, setOpen] = useState(false)
   const { user, role, displayName, signOut } = useAuth()
-  
-  // Debug log to verify role source
-  useEffect(() => {
-    console.log("[UserMenu] User role:", user?.role)
-    console.log("[UserMenu] Role from AuthContext:", role)
-  }, [user, role])
   const isMobile = useMediaQuery("(max-width: 640px)")
   const menuRef = useRef(null)
   
