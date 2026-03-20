@@ -3,8 +3,11 @@ import { FaBars, FaChevronLeft, FaChevronRight } from "react-icons/fa"
 import Achats from "../achats"
 import Centres from "../Centres"
 import DashboardCentral from "../DashboardCentral"
+import About from "../pages/About"
+import Contact from "../pages/Contact"
 import Login from "../Login"
 import Parametres from "../Parametres"
+import Privacy from "../pages/Privacy"
 import Producteurs from "../Producteurs"
 import Parcelles from "../Parcelles"
 import GestionParcelles from "../pages/GestionParcelles"
@@ -31,23 +34,34 @@ const TITLES = {
   dashboard: "Tableau de Bord",
   chat: "Messagerie",
   opportunites: "Opportunites",
+  about: "À propos",
+  contact: "Contact",
   centres: "Gestion des Centres",
   producteurs: "Gestion des Producteurs",
   achats: "Gestion des Achats",
   parametres: "Paramètres",
+  privacy: "Confidentialité",
   profile: "Mon Profil",
   admin: "Administration",
   "admin-users": "Gestion des Utilisateurs",
 }
 
 const PAGE_PATHS = {
+  about: "/about",
   chat: "/chat",
+  contact: "/contact",
   opportunites: "/opportunites",
+  privacy: "/privacy",
 }
 
+const PUBLIC_PAGES = new Set(["about", "contact", "privacy"])
+
 function getPageFromPath(pathname) {
+  if (pathname === "/about") return "about"
   if (pathname === "/chat") return "chat"
+  if (pathname === "/contact") return "contact"
   if (pathname === "/opportunites") return "opportunites"
+  if (pathname === "/privacy") return "privacy"
   return "dashboard"
 }
 
@@ -71,6 +85,8 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [sessionChecked, setSessionChecked] = useState(false)
+  const isPublicPage = PUBLIC_PAGES.has(activePage)
+
   const fcmListenerSetupRef = useRef(false)
   const fcmTokenSetupRef = useRef(false)
   const notificationPermissionRequestedRef = useRef(false)
@@ -220,7 +236,7 @@ export default function Layout() {
   }, [user, loading])
 
   // Show loading screen while auth is initializing
-  if (loading) {
+  if (loading && !isPublicPage) {
     return (
       <div style={loadingScreen}>
         <div style={spinner}></div>
@@ -234,6 +250,25 @@ export default function Layout() {
 
   // FIX #3: Only show login if no user AND session check is complete
   // The session check verifies no session exists before showing login
+  if (isPublicPage) {
+    return (
+      <div style={shell}>
+        <div style={publicShell}>
+          <header style={publicHeader}>
+            <button type="button" style={publicBrand} onClick={() => navigateToPage("dashboard")}>
+              SCOOP ASAB
+            </button>
+            <div style={publicHeaderLinks}>
+              {renderFooterLinks(navigateToPage)}
+            </div>
+          </header>
+          <main style={publicContent}>{renderPage()}</main>
+          <footer style={footer}>{renderFooterLinks(navigateToPage)}</footer>
+        </div>
+      </div>
+    )
+  }
+
   if (!user && sessionChecked) {
     return <Login />
   }
@@ -316,8 +351,12 @@ export default function Layout() {
         return <DashboardCentral />
       case "centres":
         return <DashboardCentral />
+      case "about":
+        return <About />
       case "chat":
         return <Chat />
+      case "contact":
+        return <Contact />
       case "opportunites":
         return <Opportunities />
       case "producteurs":
@@ -330,6 +369,8 @@ export default function Layout() {
         return <DashboardCentral />
       case "parametres":
         return <Parametres onOpenAdminUsers={() => setActivePage("admin-users")} isAdmin={isAdmin} />
+      case "privacy":
+        return <Privacy />
       case "profile":
         return <Profile />
       case "parcelles":
@@ -417,8 +458,25 @@ export default function Layout() {
           ...content,
           padding: isMobile ? "16px" : "32px",
         }}>{renderPage()}</main>
+        <footer style={footer}>{renderFooterLinks(navigateToPage)}</footer>
       </div>
     </div>
+  )
+}
+
+function renderFooterLinks(onNavigate) {
+  return (
+    <>
+      <button type="button" style={footerLink} onClick={() => onNavigate("about")}>
+        À propos
+      </button>
+      <button type="button" style={footerLink} onClick={() => onNavigate("contact")}>
+        Contact
+      </button>
+      <button type="button" style={footerLink} onClick={() => onNavigate("privacy")}>
+        Confidentialité
+      </button>
+    </>
   )
 }
 
@@ -432,6 +490,44 @@ const mainArea = {
   transition: "margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
   display: "flex",
   flexDirection: "column",
+}
+
+const publicShell = {
+  minHeight: "100vh",
+  display: "flex",
+  flexDirection: "column",
+  width: "min(1100px, calc(100% - 32px))",
+  margin: "0 auto",
+}
+
+const publicHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "24px 0 8px",
+  flexWrap: "wrap",
+}
+
+const publicBrand = {
+  border: "none",
+  background: "transparent",
+  color: "#7a1f1f",
+  fontSize: 22,
+  fontWeight: 800,
+  cursor: "pointer",
+  padding: 0,
+}
+
+const publicHeaderLinks = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 12,
+}
+
+const publicContent = {
+  flex: 1,
+  padding: "12px 0 32px",
 }
 
 const header = {
@@ -496,6 +592,26 @@ const content = {
   flex: 1,
   maxWidth: "100%",
   overflowX: "hidden",
+}
+
+const footer = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 14,
+  justifyContent: "center",
+  alignItems: "center",
+  padding: "20px 16px 28px",
+  borderTop: "1px solid rgba(15, 23, 42, 0.06)",
+  color: "#64748b",
+}
+
+const footerLink = {
+  border: "none",
+  background: "transparent",
+  color: "#64748b",
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 600,
 }
 
 const loadingScreen = {

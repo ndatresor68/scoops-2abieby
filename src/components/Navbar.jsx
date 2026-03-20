@@ -3,7 +3,10 @@ import {
   FaComments,
   FaCog,
   FaBriefcase,
+  FaEnvelope,
+  FaInfoCircle,
   FaStore,
+  FaShieldAlt,
   FaUserShield,
   FaUsers,
   FaWeightHanging,
@@ -48,6 +51,12 @@ const CENTRE_MODULES = [
   { id: "parcelles", label: "Gestion Parcelles", icon: FaSeedling },
   { id: "livraisons", label: "Livraisons", icon: FaTruck },
   { id: "parametres", label: "Paramètres", icon: FaCog },
+]
+
+const LEGAL_MODULES = [
+  { id: "about", label: "À propos", icon: FaInfoCircle },
+  { id: "contact", label: "Contact", icon: FaEnvelope },
+  { id: "privacy", label: "Confidentialité", icon: FaShieldAlt },
 ]
 
 export default function Navbar({
@@ -142,6 +151,32 @@ export default function Navbar({
             )
           })}
         </nav>
+
+        <div style={secondaryNav}>
+          {(!collapsed || isMobile) && <div style={secondaryLabel}>Informations</div>}
+          <div style={secondaryList}>
+            {LEGAL_MODULES.map((module) => {
+              const Icon = module.icon
+              const active = activePage === module.id
+              return (
+                <button
+                  key={module.id}
+                  style={{
+                    ...itemBtn,
+                    ...(active ? itemBtnActive : {}),
+                  }}
+                  onClick={() => {
+                    onNavigate(module.id)
+                    onCloseMobile?.()
+                  }}
+                >
+                  <Icon style={{ fontSize: 18, minWidth: 24 }} />
+                  {(!collapsed || isMobile) && <span>{module.label}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </aside>
     </>
   )
@@ -239,6 +274,27 @@ const navStyle = {
   flexDirection: "column",
   gap: 6,
   flex: 1,
+}
+
+const secondaryNav = {
+  marginTop: 12,
+  paddingTop: 12,
+  borderTop: "1px solid rgba(255,255,255,0.08)",
+}
+
+const secondaryLabel = {
+  padding: "0 12px 8px",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "rgba(255,255,255,0.52)",
+}
+
+const secondaryList = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
 }
 
 const itemBtn = {
