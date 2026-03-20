@@ -33,6 +33,7 @@ import AdminAgents from "./admin/AdminAgents"
 import AdminActivities from "./admin/AdminActivities"
 import AdminCentres from "./admin/AdminCentres"
 import AdminNotifications from "./admin/AdminNotifications"
+import AdminOpportunities from "./admin/Opportunities"
 import AdminParcelles from "./admin/AdminParcelles"
 import AdminPesees from "./admin/AdminPesees"
 import AdminProducteurs from "./admin/AdminProducteurs"
@@ -40,7 +41,6 @@ import AdminSettings from "./admin/AdminSettings"
 import AdminStats from "./admin/AdminStats"
 import AdminUsers from "./admin/AdminUsers"
 import Chat from "./Chat"
-import Opportunities from "./Opportunities"
 import Profile from "./Profile"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
@@ -57,7 +57,7 @@ import logoImage from "../assets/logo-scoops.png"
 const SECTIONS = {
   stats: { id: "stats", label: "Tableau de bord", icon: FaChartLine },
   chat: { id: "chat", label: "Chat", icon: FaComments },
-  opportunites: { id: "opportunites", label: "Opportunites", icon: FaBriefcase },
+  opportunities: { id: "opportunities", label: "Appels d'offres", icon: FaBriefcase },
   activites: { id: "activites", label: "Activités", icon: FaHistory },
   users: { id: "users", label: "Utilisateurs", icon: FaUsers },
   agents: { id: "agents", label: "Agents", icon: FaUserFriends },
@@ -72,7 +72,7 @@ const SECTIONS = {
 const SECTION_PATHS = {
   stats: "/admin",
   chat: "/admin/chat",
-  opportunites: "/admin/opportunites",
+  opportunities: "/admin/opportunities",
   users: "/admin/users",
   agents: "/admin/agents",
   centres: "/admin/centres",
@@ -87,7 +87,7 @@ const SECTION_PATHS = {
 const SECTION_DETAILS = {
   stats: { badge: "Overview", description: "Indicateurs principaux et activite recente." },
   chat: { badge: "Realtime", description: "Messagerie instantanée avec audio et synchronisation temps réel." },
-  opportunites: { badge: "Market", description: "Suivi des appels d'offres cacao et cafe." },
+  opportunities: { badge: "Market", description: "Suivi des appels d'offres cacao et cafe." },
   activites: { badge: "Audit", description: "Journal des actions et de la traçabilité." },
   users: { badge: "Users", description: "Gestion des comptes et des statuts." },
   agents: { badge: "Ops", description: "Pilotage des agents terrain." },
@@ -100,12 +100,13 @@ const SECTION_DETAILS = {
 }
 
 const SECTION_GROUPS = [
-  { id: "workspace", label: "Workspace", items: ["stats", "chat", "opportunites", "activites", "notifications"] },
+  { id: "workspace", label: "Workspace", items: ["stats", "chat", "opportunities", "activites", "notifications"] },
   { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "pesees", "parcelles", "settings"] },
 ]
 
 function getSectionFromPath(pathname) {
   if (pathname === "/admin/activites") return "activites"
+  if (pathname === "/admin/opportunites") return "opportunities"
   const match = Object.entries(SECTION_PATHS).find(([, path]) => path === pathname)
   return match?.[0] || "stats"
 }
@@ -394,8 +395,8 @@ export default function AdminDashboard() {
         return <AdminStats />
       case "chat":
         return <Chat adminMode />
-      case "opportunites":
-        return <Opportunities />
+      case "opportunities":
+        return <AdminOpportunities />
       case "users":
         return <AdminUsers />
       case "agents":
