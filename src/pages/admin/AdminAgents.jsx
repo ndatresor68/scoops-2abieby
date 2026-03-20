@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaPlus, FaEdit, FaTrash, FaUserFriends, FaBuilding, FaFilePdf } from "react-icons/fa"
 import Button from "../../components/ui/Button"
@@ -19,6 +19,8 @@ const INITIAL_FORM = {
   centre_id: "",
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export default function AdminAgents() {
   if (import.meta.env.DEV) {
     console.log("[AdminAgents] RENDER")
@@ -26,10 +28,10 @@ export default function AdminAgents() {
 
   const { isAdmin, user } = useAuth()
   const { showToast } = useToast()
-  const hasFetchedRef = useRef(false)
   const [agents, setAgents] = useState([])
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [editingAgent, setEditingAgent] = useState(null)
@@ -43,18 +45,26 @@ export default function AdminAgents() {
     () => Object.fromEntries(centres.map((c) => [String(c.id), c.nom])),
     [centres],
   )
+  const centreId = user?.centre_id ?? null
 
-  const fetchData = useCallback(async () => {
+  async function fetchData() {
     if (import.meta.env.DEV) {
       console.log("[AdminAgents] FETCH CALLED")
+      console.log("[AdminAgents] centre_id:", centreId)
     }
 
     try {
       setLoading(true)
+      setHasError(false)
+
+      if (centreId && !UUID_PATTERN.test(String(centreId))) {
+        console.error("[AdminAgents] Invalid centre_id:", centreId)
+      }
+
       const [{ data: agentsData, error: agentsError }, { data: centresData, error: centresError }] = await Promise.all([
         supabase
           .from("utilisateurs")
-          .select("*")
+          .select("id, nom, email, centre_id, created_at")
           .eq("role", "AGENT")
           .order("created_at", { ascending: false }),
         supabase.from("centres").select("id,nom").order("nom"),
@@ -62,33 +72,34 @@ export default function AdminAgents() {
 
       if (agentsError) {
         console.error("[AdminAgents] Error fetching agents:", agentsError)
-        throw new Error(`Erreur lors du chargement des agents: ${agentsError.message}`)
+        setHasError(true)
+        showToast("Erreur lors du chargement des agents", "error")
+        return
       }
 
       if (centresError) {
-        // Centres error is not critical, continue with empty array
+        console.error("[AdminAgents] Error fetching centres:", centresError)
+        setHasError(true)
+        showToast("Erreur lors du chargement des centres", "error")
+        return
       }
 
       setAgents(agentsData || [])
       setCentres(centresData || [])
-    } catch (error) {
-      console.error("[AdminAgents] Error:", error)
+    } catch (fetchError) {
+      console.error("[AdminAgents] Error:", fetchError)
+      setHasError(true)
       showToast("Erreur lors du chargement des agents", "error")
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }
 
   useEffect(() => {
-    if (!isAdmin) {
-      hasFetchedRef.current = false
-      setLoading(false)
-      return
-    }
-    if (hasFetchedRef.current) return
-    hasFetchedRef.current = true
     fetchData()
-  }, [fetchData, isAdmin])
+    // Intentionally mount-only to prevent automatic retry loops after API failures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function validateForm() {
     const newErrors = {}
@@ -393,6 +404,7 @@ export default function AdminAgents() {
         title="Répertoire agents"
         subtitle="Vue centralisée des agents assignés et de leurs centres de rattachement."
       >
+        {hasError ? <div style={errorState}>Erreur de chargement</div> : null}
         <Table
           data={agents}
           columns={columns}
@@ -402,7 +414,7 @@ export default function AdminAgents() {
           sortable
           pagination
           pageSize={10}
-          loading={loading}
+          loading={loading && !hasError}
           emptyMessage="Aucun agent enregistré"
         />
       </AdminPanel>
@@ -585,4 +597,14 @@ const restrictedContainer = {
   padding: "60px 20px",
   textAlign: "center",
   gap: 16,
+}
+
+const errorState = {
+  marginBottom: 16,
+  padding: "14px 16px",
+  borderRadius: 14,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontWeight: 700,
 }

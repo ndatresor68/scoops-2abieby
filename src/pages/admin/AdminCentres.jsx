@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../supabaseClient"
 import { FaPlus, FaEdit, FaTrash, FaBuilding, FaFilePdf } from "react-icons/fa"
 import Button from "../../components/ui/Button"
@@ -10,6 +10,14 @@ import { AdminPage, AdminPanel } from "../../components/ui/AdminPage"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import { exportCentresPDF } from "../../utils/exportToPDF"
+import {
+  logCentreCreated,
+  logCentreDeleted,
+  logCentreUpdated,
+  logPDFExported,
+} from "../../utils/activityLogger"
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export default function AdminCentres() {
   if (import.meta.env.DEV) {
@@ -18,9 +26,9 @@ export default function AdminCentres() {
 
   const { showToast } = useToast()
   const { user } = useAuth()
-  const hasFetchedRef = useRef(false)
   const [centres, setCentres] = useState([])
   const [loading, setLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [editingCentre, setEditingCentre] = useState(null)
@@ -32,34 +40,49 @@ export default function AdminCentres() {
   })
   const [errors, setErrors] = useState({})
   const [exportingPDF, setExportingPDF] = useState(false)
+  const centreId = user?.centre_id ?? null
 
-  const fetchCentres = useCallback(async () => {
+  async function fetchCentres() {
     if (import.meta.env.DEV) {
       console.log("[AdminCentres] FETCH CALLED")
+      console.log("[AdminCentres] centre_id:", centreId)
     }
 
     try {
       setLoading(true)
+      setHasError(false)
+
+      if (centreId && !UUID_PATTERN.test(String(centreId))) {
+        console.error("[AdminCentres] Invalid centre_id:", centreId)
+      }
+
       const { data, error } = await supabase
         .from("centres")
-        .select("*")
+        .select("id, nom, code, localite")
         .order("nom")
 
-      if (error) throw error
+      if (error) {
+        console.error("[AdminCentres] Error fetching centres:", error)
+        setHasError(true)
+        showToast("Erreur lors du chargement des centres", "error")
+        return
+      }
+
       setCentres(data || [])
-    } catch (error) {
-      console.error("[AdminCentres] Error:", error)
+    } catch (fetchError) {
+      console.error("[AdminCentres] Error:", fetchError)
+      setHasError(true)
       showToast("Erreur lors du chargement des centres", "error")
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }
 
   useEffect(() => {
-    if (hasFetchedRef.current) return
-    hasFetchedRef.current = true
     fetchCentres()
-  }, [fetchCentres])
+    // Intentionally mount-only to prevent automatic retry loops after API failures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function openCreateModal() {
     setEditingCentre(null)
@@ -305,6 +328,7 @@ export default function AdminCentres() {
         title="Liste des centres"
         subtitle="Consultez, recherchez et mettez à jour les centres de collecte."
       >
+        {hasError ? <div style={errorState}>Erreur de chargement</div> : null}
         <Table
           data={centres}
           columns={columns}
@@ -314,7 +338,7 @@ export default function AdminCentres() {
           sortable
           pagination
           pageSize={10}
-          loading={loading}
+          loading={loading && !hasError}
           emptyMessage="Aucun centre enregistré"
         />
       </AdminPanel>
@@ -536,4 +560,14 @@ const spinner = {
 const loadingText = {
   color: "#6b7280",
   fontSize: "14px",
+}
+
+const errorState = {
+  marginBottom: 16,
+  padding: "14px 16px",
+  borderRadius: 14,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#b91c1c",
+  fontWeight: 700,
 }
