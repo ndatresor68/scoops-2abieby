@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useCallback, useContext, useMemo, useState } from "react"
 import { FaCheckCircle, FaExclamationCircle, FaInfoCircle, FaTimes } from "react-icons/fa"
 
 const ToastContext = createContext(null)
@@ -6,7 +6,11 @@ const ToastContext = createContext(null)
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
-  const showToast = (message, type = "info", duration = 4000) => {
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id))
+  }, [])
+
+  const showToast = useCallback((message, type = "info", duration = 4000) => {
     const id = Date.now() + Math.random()
     setToasts((prev) => [...prev, { id, message, type, duration }])
 
@@ -17,14 +21,12 @@ export function ToastProvider({ children }) {
     }
 
     return id
-  }
+  }, [removeToast])
 
-  const removeToast = (id) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id))
-  }
+  const value = useMemo(() => ({ showToast, removeToast }), [showToast, removeToast])
 
   return (
-    <ToastContext.Provider value={{ showToast, removeToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div
         style={{

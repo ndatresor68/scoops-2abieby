@@ -20,6 +20,10 @@ const INITIAL_FORM = {
 }
 
 export default function AdminAgents() {
+  if (import.meta.env.DEV) {
+    console.log("[AdminAgents] RENDER")
+  }
+
   const { isAdmin, user } = useAuth()
   const { showToast } = useToast()
   const hasFetchedRef = useRef(false)
@@ -41,6 +45,10 @@ export default function AdminAgents() {
   )
 
   const fetchData = useCallback(async () => {
+    if (import.meta.env.DEV) {
+      console.log("[AdminAgents] FETCH CALLED")
+    }
+
     try {
       setLoading(true)
       const [{ data: agentsData, error: agentsError }, { data: centresData, error: centresError }] = await Promise.all([

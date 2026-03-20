@@ -12,6 +12,10 @@ import { useAuth } from "../../context/AuthContext"
 import { exportCentresPDF } from "../../utils/exportToPDF"
 
 export default function AdminCentres() {
+  if (import.meta.env.DEV) {
+    console.log("[AdminCentres] RENDER")
+  }
+
   const { showToast } = useToast()
   const { user } = useAuth()
   const hasFetchedRef = useRef(false)
@@ -30,6 +34,10 @@ export default function AdminCentres() {
   const [exportingPDF, setExportingPDF] = useState(false)
 
   const fetchCentres = useCallback(async () => {
+    if (import.meta.env.DEV) {
+      console.log("[AdminCentres] FETCH CALLED")
+    }
+
     try {
       setLoading(true)
       const { data, error } = await supabase

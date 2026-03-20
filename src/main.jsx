@@ -8,7 +8,7 @@ import { ToastProvider } from "./components/ui/Toast"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./index.css"
 
-if (typeof console !== "undefined") {
+if (typeof console !== "undefined" && import.meta.env.PROD) {
   console.log = () => {}
   console.debug = () => {}
   console.warn = () => {}

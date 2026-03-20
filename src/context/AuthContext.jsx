@@ -70,6 +70,16 @@ export function AuthProvider({ children }) {
   // Track ongoing operations to prevent race conditions
   const syncInProgressRef = useRef(false)
   const mountedRef = useRef(true)
+  const userRef = useRef(null)
+  const initializedRef = useRef(false)
+
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
+
+  useEffect(() => {
+    initializedRef.current = initialized
+  }, [initialized])
 
   const loadProfileForUser = useCallback(async (authUser) => {
     if (!authUser || !authUser.id) {
@@ -132,7 +142,19 @@ export function AuthProvider({ children }) {
         avatar_url: profile.avatar_url,
       }
       
-      setUser(mergedUser)
+      setUser((currentUser) => {
+        if (
+          currentUser?.id === mergedUser.id &&
+          currentUser?.email === mergedUser.email &&
+          currentUser?.role === mergedUser.role &&
+          currentUser?.nom === mergedUser.nom &&
+          currentUser?.centre_id === mergedUser.centre_id &&
+          currentUser?.avatar_url === mergedUser.avatar_url
+        ) {
+          return currentUser
+        }
+        return mergedUser
+      })
       return profile
     } catch (error) {
       console.error("[AuthContext] EXCEPTION loading profile:", error)
@@ -176,7 +198,7 @@ export function AuthProvider({ children }) {
         const sessionExists = await checkSessionExists()
         if (sessionExists) {
           syncInProgressRef.current = false
-          return user // Return current user instead of clearing
+          return userRef.current // Return current user instead of clearing
         }
         
         // Only clear user if session actually doesn't exist
@@ -203,7 +225,7 @@ export function AuthProvider({ children }) {
           const sessionExists = await checkSessionExists()
           if (sessionExists) {
             syncInProgressRef.current = false
-            return user
+            return userRef.current
           }
         }
         
@@ -273,7 +295,7 @@ export function AuthProvider({ children }) {
       const sessionExists = await checkSessionExists()
       if (sessionExists) {
         syncInProgressRef.current = false
-        return user
+        return userRef.current
       }
       
       // Only clear if session doesn't exist
@@ -283,7 +305,7 @@ export function AuthProvider({ children }) {
       syncInProgressRef.current = false
       return null
     }
-  }, [loadProfileForUser, user])
+  }, [loadProfileForUser])
 
   const refreshUser = useCallback(async () => {
     return syncAuthState(true) // Skip retry for manual refresh
@@ -302,7 +324,7 @@ export function AuthProvider({ children }) {
       try {
         // FIX #1: Increased safety timeout
         timeoutId = setTimeout(() => {
-          if (mountedRef.current && !initialized) {
+          if (mountedRef.current && !initializedRef.current) {
             setLoading(false)
             setInitialized(true)
           }
@@ -361,7 +383,7 @@ export function AuthProvider({ children }) {
             case "TOKEN_REFRESHED":
               // FIX #6: Don't clear user on token refresh - session is still valid
               // Only sync if user state is missing
-              if (!user && session?.user) {
+              if (!userRef.current && session?.user) {
                 await syncAuthState()
               }
               if (mountedRef.current) {
@@ -420,7 +442,7 @@ export function AuthProvider({ children }) {
         }
       }
     }
-  }, [syncAuthState, user, initialized])
+  }, [syncAuthState])
 
   const signInWithPassword = useCallback(async (email, password) => {
     const response = await supabase.auth.signInWithPassword({ email, password })
