@@ -155,16 +155,21 @@ export default function Chat({ adminMode = false }) {
         .from("utilisateurs")
         .select("*")
 
-      console.log("USERS RAW:", data, error)
+      console.log("RAW USERS FROM DB:", data, error)
 
       if (error) {
         throw error
       }
 
       const nextUsers = data || []
+      const otherUser = nextUsers.find((item) => item.id !== currentUser.id) || null
+
+      console.log("CURRENT USER:", currentUser?.id)
+      console.log("SELECTED USER:", otherUser?.id)
+
       setDebugUsers(nextUsers)
       setContacts(nextUsers)
-      setSelectedContact((current) => current || nextUsers[0] || null)
+      setSelectedContact(otherUser)
     } catch (error) {
       console.error("[Chat] CONTACTS ERROR:", error)
       pushDebugError("loadUsers", error)
