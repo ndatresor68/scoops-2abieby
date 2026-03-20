@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext"
 import {
   FaBars,
   FaBell,
+  FaBriefcase,
   FaBuilding,
   FaChartLine,
   FaCheckCircle,
@@ -39,6 +40,7 @@ import AdminSettings from "./admin/AdminSettings"
 import AdminStats from "./admin/AdminStats"
 import AdminUsers from "./admin/AdminUsers"
 import Chat from "./Chat"
+import Opportunities from "./Opportunities"
 import Profile from "./Profile"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
@@ -55,6 +57,7 @@ import logoImage from "../assets/logo-scoops.png"
 const SECTIONS = {
   stats: { id: "stats", label: "Tableau de bord", icon: FaChartLine },
   chat: { id: "chat", label: "Chat", icon: FaComments },
+  opportunites: { id: "opportunites", label: "Opportunites", icon: FaBriefcase },
   activites: { id: "activites", label: "Activités", icon: FaHistory },
   users: { id: "users", label: "Utilisateurs", icon: FaUsers },
   agents: { id: "agents", label: "Agents", icon: FaUserFriends },
@@ -69,6 +72,7 @@ const SECTIONS = {
 const SECTION_PATHS = {
   stats: "/admin",
   chat: "/admin/chat",
+  opportunites: "/admin/opportunites",
   users: "/admin/users",
   agents: "/admin/agents",
   centres: "/admin/centres",
@@ -83,6 +87,7 @@ const SECTION_PATHS = {
 const SECTION_DETAILS = {
   stats: { badge: "Overview", description: "Indicateurs principaux et activite recente." },
   chat: { badge: "Realtime", description: "Messagerie instantanée avec audio et synchronisation temps réel." },
+  opportunites: { badge: "Market", description: "Suivi des appels d'offres cacao et cafe." },
   activites: { badge: "Audit", description: "Journal des actions et de la traçabilité." },
   users: { badge: "Users", description: "Gestion des comptes et des statuts." },
   agents: { badge: "Ops", description: "Pilotage des agents terrain." },
@@ -95,7 +100,7 @@ const SECTION_DETAILS = {
 }
 
 const SECTION_GROUPS = [
-  { id: "workspace", label: "Workspace", items: ["stats", "chat", "activites", "notifications"] },
+  { id: "workspace", label: "Workspace", items: ["stats", "chat", "opportunites", "activites", "notifications"] },
   { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "pesees", "parcelles", "settings"] },
 ]
 
@@ -389,6 +394,8 @@ export default function AdminDashboard() {
         return <AdminStats />
       case "chat":
         return <Chat adminMode />
+      case "opportunites":
+        return <Opportunities />
       case "users":
         return <AdminUsers />
       case "agents":

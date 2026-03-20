@@ -17,6 +17,7 @@ import AdminDashboardRole from "../pages/dashboards/AdminDashboard"
 import CentreDashboardEnhanced from "../pages/dashboards/CentreDashboardEnhanced"
 import AgentDashboard from "../pages/dashboards/AgentDashboard"
 import Chat from "../pages/Chat"
+import Opportunities from "../pages/Opportunities"
 import Profile from "../pages/Profile"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
@@ -29,6 +30,7 @@ import { listenNotifications, requestNotificationPermission } from "../notificat
 const TITLES = {
   dashboard: "Tableau de Bord",
   chat: "Messagerie",
+  opportunites: "Opportunites",
   centres: "Gestion des Centres",
   producteurs: "Gestion des Producteurs",
   achats: "Gestion des Achats",
@@ -40,10 +42,13 @@ const TITLES = {
 
 const PAGE_PATHS = {
   chat: "/chat",
+  opportunites: "/opportunites",
 }
 
 function getPageFromPath(pathname) {
-  return pathname === "/chat" ? "chat" : "dashboard"
+  if (pathname === "/chat") return "chat"
+  if (pathname === "/opportunites") return "opportunites"
+  return "dashboard"
 }
 
 export default function Layout() {
@@ -313,6 +318,8 @@ export default function Layout() {
         return <DashboardCentral />
       case "chat":
         return <Chat />
+      case "opportunites":
+        return <Opportunities />
       case "producteurs":
         return <Producteurs />
       case "achats":
