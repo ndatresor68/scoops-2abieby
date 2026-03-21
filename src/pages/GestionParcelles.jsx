@@ -12,7 +12,14 @@ import { getParcellesQuery, getProducteursQuery, getUserRoleInfo } from "../util
 import useGpsTracker from "../components/maps/GpsTracker"
 import ParcelMap from "../components/maps/ParcelMap"
 import { generateParcelleCode } from "../utils/parcelleCode"
-import { saveParcelleOffline, getPendingParcelles, isOnline, onOnlineStatusChange, markParcelleSynced, deleteSyncedParcelle } from "../utils/localStorageParcelles"
+import {
+  addToQueue,
+  cacheTableData,
+  createOfflineRecord,
+  getCachedTableData,
+  isOfflineMode,
+  syncQueue,
+} from "../services/offlineService"
 import * as turf from "@turf/turf"
 
 /**
@@ -98,22 +105,34 @@ export default function GestionParcelles() {
 
   // Surveiller le statut de connexion
   useEffect(() => {
-    setOnlineStatus(isOnline())
-    const cleanup = onOnlineStatusChange((online) => {
-      setOnlineStatus(online)
-      if (online) {
-        showToast("Connexion rétablie - Synchronisation en cours...", "success")
-        syncPendingParcelles()
-      } else {
-        showToast("Mode hors ligne activé", "warning")
-      }
-    })
-    return cleanup
+    const handleOnline = () => {
+      setOnlineStatus(true)
+      showToast("Connexion rétablie - Synchronisation en cours...", "success")
+      syncPendingParcelles()
+    }
+    const handleOffline = () => {
+      setOnlineStatus(false)
+      showToast("Mode hors ligne activé", "warning")
+    }
+
+    setOnlineStatus(!isOfflineMode())
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
   }, [])
 
   async function fetchParcelles() {
     try {
       setLoading(true)
+      if (isOfflineMode()) {
+        setParcelles(getCachedTableData("parcelles"))
+        return
+      }
+
       const query = getParcellesQuery(user)
       if (!query) {
         setParcelles([])
@@ -142,6 +161,7 @@ export default function GestionParcelles() {
         centre_nom: p.centres?.nom || "-",
       }))
 
+      cacheTableData("parcelles", formatted)
       setParcelles(formatted)
     } catch (error) {
       console.error("[GestionParcelles] Exception loading parcelles:", error)
@@ -153,6 +173,11 @@ export default function GestionParcelles() {
 
   async function fetchProducteurs() {
     try {
+      if (isOfflineMode()) {
+        setProducteurs(getCachedTableData("producteurs"))
+        return
+      }
+
       const query = getProducteursQuery(user)
       const { data, error } = await query
 
@@ -161,6 +186,7 @@ export default function GestionParcelles() {
         return
       }
 
+      cacheTableData("producteurs", data || [])
       setProducteurs(data || [])
     } catch (error) {
       console.error("[GestionParcelles] Exception loading producteurs:", error)
@@ -169,6 +195,11 @@ export default function GestionParcelles() {
 
   async function fetchCentres() {
     try {
+      if (isOfflineMode()) {
+        setCentres(getCachedTableData("centres"))
+        return
+      }
+
       const { data, error } = await supabase
         .from("centres")
         .select("id, nom, code")
@@ -179,6 +210,7 @@ export default function GestionParcelles() {
         return
       }
 
+      cacheTableData("centres", data || [])
       setCentres(data || [])
     } catch (error) {
       console.error("[GestionParcelles] Exception loading centres:", error)
@@ -194,29 +226,14 @@ export default function GestionParcelles() {
 
   // Synchroniser les parcelles en attente
   async function syncPendingParcelles() {
-    if (!isOnline()) return
+    if (isOfflineMode()) return
 
     try {
-      const pending = await getPendingParcelles()
-      if (pending.length === 0) return
-
-      showToast(`Synchronisation de ${pending.length} parcelle(s)...`, "info")
-
-      for (const parcelle of pending) {
-        try {
-          const { error } = await supabase.from("parcelles").insert([parcelle])
-
-          if (!error) {
-            await markParcelleSynced(parcelle.id)
-            await deleteSyncedParcelle(parcelle.id)
-          }
-        } catch (err) {
-          console.error("[GestionParcelles] Error syncing parcelle:", err)
-        }
+      const result = await syncQueue()
+      if (result.synced > 0) {
+        await fetchParcelles()
+        showToast("Synchronisation terminée", "success")
       }
-
-      await fetchParcelles()
-      showToast("Synchronisation terminée", "success")
     } catch (error) {
       console.error("[GestionParcelles] Error syncing:", error)
     }
@@ -347,7 +364,7 @@ export default function GestionParcelles() {
         statut: "active",
       }
 
-      if (isOnline()) {
+      if (!isOfflineMode()) {
         // Sauvegarder directement dans Supabase
         const { error } = await supabase.from("parcelles").insert([payload])
 
@@ -355,8 +372,31 @@ export default function GestionParcelles() {
 
         showToast("Parcelle enregistrée avec succès", "success")
       } else {
-        // Sauvegarder dans IndexedDB pour synchronisation ultérieure
-        await saveParcelleOffline(payload)
+        cacheTableData("parcelles", parcelles)
+        const selectedCentre = centres.find((c) =>
+          String(c.id) === String(isCentre ? centreId : selectedProducteur?.centre_id || null),
+        )
+        const offlineParcelle = createOfflineRecord(
+          {
+            ...payload,
+            sync_status: "pending",
+          },
+          "PARCELLE",
+        )
+
+        addToQueue({
+          type: "insert",
+          table: "parcelles",
+          data: offlineParcelle,
+          localData: {
+            ...offlineParcelle,
+            producteur_nom: selectedProducteur?.nom || "-",
+            producteur_code: selectedProducteur?.code || "-",
+            centre_nom: selectedCentre?.nom || "-",
+          },
+        })
+
+        setParcelles(getCachedTableData("parcelles"))
         showToast("Parcelle sauvegardée hors ligne - Synchronisation à la reconnexion", "info")
       }
 

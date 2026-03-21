@@ -37,9 +37,11 @@ import { useAuth } from "../../context/AuthContext"
 import { useSettings } from "../../context/SettingsContext"
 import ImageUpload from "../../components/ImageUpload"
 import ConfirmDialog from "../../components/ui/ConfirmDialog"
+import LocalSecuritySettings from "../../components/security/LocalSecuritySettings"
 import { logActivity } from "../../utils/activityLogger"
 import { useMediaQuery } from "../../hooks/useMediaQuery"
 import { setLanguage } from "../../utils/i18n"
+import { listAllActiveSessions, revokeSession } from "../../services/deviceSessionService"
 
 const SECTIONS = {
   general: { id: "general", label: "Général", icon: FaBuilding },
@@ -100,6 +102,7 @@ export default function AdminSettings() {
   const [showResetDialog, setShowResetDialog] = useState(false)
   const [logoFile, setLogoFile] = useState(null)
   const [logoPreview, setLogoPreview] = useState("")
+  const [deviceSessions, setDeviceSessions] = useState([])
 
   // Sync with global settings when they change
   useEffect(() => {
@@ -122,6 +125,11 @@ export default function AdminSettings() {
       fetchSettings()
     }
   }, [isAdmin, globalSettings])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    loadDeviceSessions()
+  }, [isAdmin])
 
   async function fetchSettings() {
     try {
@@ -163,6 +171,15 @@ export default function AdminSettings() {
       setOriginalSettings(DEFAULT_SETTINGS)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadDeviceSessions() {
+    try {
+      const sessions = await listAllActiveSessions()
+      setDeviceSessions(sessions)
+    } catch (error) {
+      setDeviceSessions([])
     }
   }
 
@@ -350,6 +367,16 @@ export default function AdminSettings() {
       showToast(error.message || "Erreur lors de la réinitialisation", "error")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleRevokeSession(sessionId) {
+    try {
+      await revokeSession(sessionId)
+      showToast("Session révoquée", "success")
+      loadDeviceSessions()
+    } catch (error) {
+      showToast(error.message || "Impossible de révoquer la session", "error")
     }
   }
 
@@ -635,6 +662,39 @@ export default function AdminSettings() {
                   type="number"
                   icon={<FaLock />}
                 />
+              </div>
+            </div>
+
+            <LocalSecuritySettings />
+
+            <div style={section}>
+              <div style={sectionHeader}>
+                <FaShieldAlt size={20} style={{ color: "#7a1f1f" }} />
+                <h3 style={sectionTitle}>Sessions actives</h3>
+              </div>
+              <div style={sessionsTable}>
+                {deviceSessions.length === 0 ? (
+                  <div style={emptySessions}>Aucune session active détectée.</div>
+                ) : (
+                  deviceSessions.map((session) => (
+                    <div key={session.id} style={sessionRow}>
+                      <div>
+                        <strong>{session.user_id}</strong>
+                        <div style={sessionRowMeta}>
+                          {session.device_id} · {session.status || "active"} ·{" "}
+                          {session.last_active ? new Date(session.last_active).toLocaleString("fr-FR") : "-"}
+                        </div>
+                      </div>
+                      {session.is_active ? (
+                        <Button type="button" variant="secondary" onClick={() => handleRevokeSession(session.id)}>
+                          Révoquer
+                        </Button>
+                      ) : (
+                        <span style={sessionInactiveBadge}>Inactive</span>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </Card>
@@ -1041,6 +1101,49 @@ const infoBox = {
   fontSize: "13px",
   color: "#92400e",
   gridColumn: "1 / -1",
+}
+
+const sessionsTable = {
+  display: "grid",
+  gap: 12,
+}
+
+const emptySessions = {
+  padding: "14px 16px",
+  borderRadius: 12,
+  background: "#f8fafc",
+  color: "#64748b",
+  border: "1px dashed #cbd5e1",
+}
+
+const sessionRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+}
+
+const sessionRowMeta = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#64748b",
+  wordBreak: "break-all",
+}
+
+const sessionInactiveBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 28,
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "rgba(148,163,184,0.14)",
+  color: "#475569",
+  fontSize: 12,
+  fontWeight: 800,
 }
 
 const restrictedContainer = {

@@ -22,6 +22,7 @@ import { useMediaQuery } from "./hooks/useMediaQuery"
 import { exportProducteursPDF } from "./utils/exportToPDF"
 import { useAuth } from "./context/AuthContext"
 import { getProducteursQuery, getUserRoleInfo } from "./utils/rolePermissions"
+import { addToQueue, cacheTableData, createOfflineRecord, getCachedTableData, isOfflineMode } from "./services/offlineService"
 import {
   logProducerCreated,
   logProducerUpdated,
@@ -73,6 +74,11 @@ export default function Producteurs() {
 
   async function fetchProducteurs() {
     try {
+      if (isOfflineMode()) {
+        setProducteurs(getCachedTableData("producteurs"))
+        return
+      }
+
       console.log("[Producteurs] Fetching producteurs...")
       
       // Get role-based filtered query
@@ -106,6 +112,7 @@ export default function Producteurs() {
       }
 
       console.log(`[Producteurs] Loaded ${producteursData.length} producteurs`)
+      cacheTableData("producteurs", producteursData)
       setProducteurs(producteursData)
     } catch (error) {
       console.error("[Producteurs] Exception in fetchProducteurs:", error)
@@ -115,6 +122,11 @@ export default function Producteurs() {
 
   async function fetchCentres() {
     try {
+      if (isOfflineMode()) {
+        setCentres(getCachedTableData("centres"))
+        return
+      }
+
       console.log("[Producteurs] Fetching centres...")
       
       const { isAdmin, isCentre, centreId } = getUserRoleInfo(user)
@@ -148,6 +160,7 @@ export default function Producteurs() {
       }
 
       console.log(`[Producteurs] Loaded ${data?.length || 0} centres`)
+      cacheTableData("centres", data || [])
       setCentres(data || [])
     } catch (error) {
       console.error("[Producteurs] Exception in fetchCentres:", error)
@@ -194,6 +207,12 @@ export default function Producteurs() {
    */
   async function generateCode() {
     try {
+      if (isOfflineMode()) {
+        const offlineCode = `ASAB-OFF-${Date.now().toString(36).toUpperCase()}`
+        setGeneratedCode(offlineCode)
+        return offlineCode
+      }
+
       console.log("[generateCode] Fetching last code from database...")
       
       // Récupérer tous les codes depuis Supabase pour trouver le maximum numérique
@@ -522,6 +541,71 @@ export default function Producteurs() {
       let centreIdValue = null
       if (formData.centre_id && formData.centre_id.trim() !== "") {
         centreIdValue = formData.centre_id
+      }
+
+      if (isOfflineMode()) {
+        cacheTableData("producteurs", producteurs)
+
+        if (editingProducteur) {
+          const offlinePayload = {
+            code: editingProducteur.code,
+            nom: formData.nom.trim(),
+            telephone: formData.telephone.trim(),
+            sexe: formData.sexe || null,
+            localite: formData.localite?.trim() || null,
+            statut: formData.statut || null,
+            centre_id: centreIdValue,
+            photo: existingUrls.photo || null,
+            photo_cni_recto: existingUrls.photo_cni_recto || null,
+            photo_cni_verso: existingUrls.photo_cni_verso || null,
+            carte_planteur: existingUrls.carte_planteur || null,
+          }
+
+          addToQueue({
+            type: "update",
+            table: "producteurs",
+            data: offlinePayload,
+            match: { id: editingProducteur.id },
+            localData: {
+              ...editingProducteur,
+              ...offlinePayload,
+              id: editingProducteur.id,
+              sync_status: "pending",
+            },
+          })
+
+          setProducteurs(getCachedTableData("producteurs"))
+          closeForm()
+          showToast("Producteur sauvegardé hors ligne", "info")
+          return
+        }
+
+        const offlineProducteur = createOfflineRecord({
+          code: codeToUse,
+          nom: formData.nom.trim(),
+          telephone: formData.telephone.trim(),
+          sexe: formData.sexe || null,
+          localite: formData.localite?.trim() || null,
+          statut: formData.statut || null,
+          centre_id: centreIdValue,
+          photo: null,
+          photo_cni_recto: null,
+          photo_cni_verso: null,
+          carte_planteur: null,
+          sync_status: "pending",
+        }, "PRODUCTEUR")
+
+        addToQueue({
+          type: "insert",
+          table: "producteurs",
+          data: offlineProducteur,
+          localData: offlineProducteur,
+        })
+
+        setProducteurs(getCachedTableData("producteurs"))
+        closeForm()
+        showToast("Producteur enregistré hors ligne", "info")
+        return
       }
 
       if (editingProducteur) {

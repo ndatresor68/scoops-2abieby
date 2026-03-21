@@ -29,6 +29,7 @@ import { useToast } from "./ui/Toast"
 import { t } from "../utils/i18n"
 import { supabase } from "../supabaseClient"
 import { listenNotifications, requestNotificationPermission } from "../notifications"
+import { getOfflineState, subscribeOfflineState, syncQueue } from "../services/offlineService"
 
 const TITLES = {
   dashboard: "Tableau de Bord",
@@ -66,7 +67,7 @@ function getPageFromPath(pathname) {
 }
 
 export default function Layout() {
-  const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut } = useAuth()
+  const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut, sessionNotice, clearSessionNotice } = useAuth()
   const { showToast } = useToast()
   const sessionTimeoutMinutes = useSessionTimeout()
   const [notificationPermission, setNotificationPermission] = useState(() => {
@@ -85,6 +86,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [sessionChecked, setSessionChecked] = useState(false)
+  const [offlineState, setOfflineState] = useState(() => getOfflineState())
   const isPublicPage = PUBLIC_PAGES.has(activePage)
 
   const fcmListenerSetupRef = useRef(false)
@@ -118,6 +120,30 @@ export default function Layout() {
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
   }, [])
+
+  useEffect(() => {
+    const unsubscribe = subscribeOfflineState(setOfflineState)
+    const handleOnline = () => {
+      setOfflineState(getOfflineState())
+      syncQueue()
+    }
+    const handleOffline = () => setOfflineState(getOfflineState())
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!sessionNotice) return
+    showToast(sessionNotice, "info")
+    clearSessionNotice()
+  }, [clearSessionNotice, sessionNotice, showToast])
 
   useEffect(() => {
     if (!user?.id) return
@@ -440,6 +466,18 @@ export default function Layout() {
                 ...title,
                 fontSize: isMobile ? "20px" : "24px",
               }}>{TITLES[activePage] || "Application"}</h1>
+              <div style={statusRow}>
+                {!offlineState.isOnline && <span style={offlineBadge}>Mode hors ligne</span>}
+                {offlineState.isSyncing && (
+                  <span style={syncBadge}>
+                    Synchronisation... {offlineState.syncProcessed}/{offlineState.syncTotal || 0}
+                  </span>
+                )}
+                {offlineState.queueLength > 0 && (
+                  <span style={queueBadge}>{offlineState.queueLength} action(s) en attente</span>
+                )}
+                {offlineState.syncError && <span style={errorBadge}>Erreur de sync</span>}
+              </div>
               {!isMobile && (
                 <p style={subtitle}>
                   Connecté en tant que {displayName} {user?.role ? `(${user.role})` : ""}
@@ -586,6 +624,51 @@ const subtitle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+}
+
+const statusRow = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  marginTop: 8,
+}
+
+const statusBadgeBase = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 28,
+  padding: "4px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const offlineBadge = {
+  ...statusBadgeBase,
+  color: "#92400e",
+  background: "rgba(251, 191, 36, 0.18)",
+  border: "1px solid rgba(251, 191, 36, 0.32)",
+}
+
+const syncBadge = {
+  ...statusBadgeBase,
+  color: "#1d4ed8",
+  background: "rgba(59, 130, 246, 0.14)",
+  border: "1px solid rgba(59, 130, 246, 0.22)",
+}
+
+const queueBadge = {
+  ...statusBadgeBase,
+  color: "#475569",
+  background: "rgba(148, 163, 184, 0.14)",
+  border: "1px solid rgba(148, 163, 184, 0.2)",
+}
+
+const errorBadge = {
+  ...statusBadgeBase,
+  color: "#b91c1c",
+  background: "rgba(239, 68, 68, 0.14)",
+  border: "1px solid rgba(239, 68, 68, 0.2)",
 }
 
 const content = {

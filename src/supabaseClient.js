@@ -1,9 +1,10 @@
 import { createClient } from "@supabase/supabase-js"
+import { createSupabaseService } from "./services/supabaseService"
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(
+export const rawSupabase = createClient(
   supabaseUrl || "https://placeholder.supabase.co",
   supabaseKey || "placeholder-key",
   {
@@ -29,3 +30,5 @@ export const supabase = createClient(
     },
   }
 )
+
+export const supabase = createSupabaseService(rawSupabase)

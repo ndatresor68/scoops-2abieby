@@ -9,6 +9,7 @@ import { useToast } from "./components/ui/Toast"
 import { useAuth } from "./context/AuthContext"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { getParcellesQuery, getProducteursQuery, getUserRoleInfo } from "./utils/rolePermissions"
+import { addToQueue, cacheTableData, createOfflineRecord, getCachedTableData, isOfflineMode } from "./services/offlineService"
 
 export default function Parcelles() {
   const { showToast } = useToast()
@@ -36,6 +37,11 @@ export default function Parcelles() {
   async function fetchParcelles() {
     try {
       setLoading(true)
+      if (isOfflineMode()) {
+        setParcelles(getCachedTableData("parcelles"))
+        return
+      }
+
       const query = getParcellesQuery(user)
       if (!query) {
         setParcelles([])
@@ -50,6 +56,7 @@ export default function Parcelles() {
         return
       }
 
+      cacheTableData("parcelles", data || [])
       setParcelles(data || [])
     } catch (error) {
       console.error("[Parcelles] Exception loading parcelles:", error)
@@ -61,6 +68,11 @@ export default function Parcelles() {
 
   async function fetchProducteurs() {
     try {
+      if (isOfflineMode()) {
+        setProducteurs(getCachedTableData("producteurs"))
+        return
+      }
+
       const query = getProducteursQuery(user)
       const { data, error } = await query
 
@@ -69,6 +81,7 @@ export default function Parcelles() {
         return
       }
 
+      cacheTableData("producteurs", data || [])
       setProducteurs(data || [])
     } catch (error) {
       console.error("[Parcelles] Exception loading producteurs:", error)
@@ -132,6 +145,47 @@ export default function Parcelles() {
         annee_plantation: formData.annee_plantation ? Number(formData.annee_plantation) : null,
         statut: formData.statut || "active",
         created_by: user?.id || null,
+      }
+
+      if (isOfflineMode()) {
+        cacheTableData("parcelles", parcelles)
+
+        if (editingParcelle) {
+          addToQueue({
+            type: "update",
+            table: "parcelles",
+            data: payload,
+            match: { id: editingParcelle.id },
+            localData: {
+              ...editingParcelle,
+              ...payload,
+              id: editingParcelle.id,
+              sync_status: "pending",
+            },
+          })
+
+          setParcelles(getCachedTableData("parcelles"))
+          setShowForm(false)
+          showToast("Parcelle sauvegardée hors ligne", "info")
+          return
+        }
+
+        const offlineParcelle = createOfflineRecord({
+          ...payload,
+          sync_status: "pending",
+        }, "PARCELLE")
+
+        addToQueue({
+          type: "insert",
+          table: "parcelles",
+          data: offlineParcelle,
+          localData: offlineParcelle,
+        })
+
+        setParcelles(getCachedTableData("parcelles"))
+        setShowForm(false)
+        showToast("Parcelle créée hors ligne", "info")
+        return
       }
 
       if (editingParcelle) {

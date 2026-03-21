@@ -11,6 +11,7 @@ import { logAchatCreated } from "./utils/activityLogger"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import CocoaReceipt from "./components/CocoaReceipt"
 import { canPerformAction, getAchatsQuery, getProducteursQuery } from "./utils/rolePermissions"
+import { addToQueue, cacheTableData, createOfflineRecord, getCachedTableData, isOfflineMode } from "./services/offlineService"
 
 export default function Achats() {
   const { showToast } = useToast()
@@ -42,6 +43,12 @@ export default function Achats() {
   // Load purchases from Supabase with role-based filtering
   async function loadAchats() {
     try {
+      if (isOfflineMode()) {
+        const cachedAchats = getCachedTableData("achats")
+        setAchats(cachedAchats)
+        return cachedAchats
+      }
+
       console.log("[Achats] Loading purchases from Supabase...")
       
       // Check if user can view achats
@@ -67,6 +74,7 @@ export default function Achats() {
       }
 
       console.log(`[Achats] Loaded ${data?.length || 0} purchases`)
+      cacheTableData("achats", data || [])
       setAchats(data || [])
       return data || []
     } catch (error) {
@@ -79,6 +87,13 @@ export default function Achats() {
   async function fetchInitialData() {
     setLoading(true)
     try {
+      if (isOfflineMode()) {
+        setProducteurs(getCachedTableData("producteurs"))
+        setCentres(getCachedTableData("centres"))
+        setAchats(getCachedTableData("achats"))
+        return
+      }
+
       // Get role-based filtered queries
       const producteursQuery = getProducteursQuery(user)
       let centresQuery = supabase.from("centres").select("id, nom").order("nom")
@@ -94,6 +109,8 @@ export default function Achats() {
         loadAchats(), // Use loadAchats function
       ])
 
+      cacheTableData("producteurs", producteursData || [])
+      cacheTableData("centres", centresData || [])
       setProducteurs(producteursData || [])
       setCentres(centresData || [])
       // setAchats is already called in loadAchats()
@@ -152,6 +169,30 @@ export default function Achats() {
         nom_producteur: selectedProd.nom,
         code_producteur: selectedProd.code,
         nom_agent: displayName || user?.nom || user?.email?.split("@")[0] || "Unknown",
+      }
+
+      if (isOfflineMode()) {
+        cacheTableData("achats", achats)
+        const offlineAchat = createOfflineRecord(
+          {
+            ...payload,
+            sync_status: "pending",
+          },
+          "ACHAT",
+        )
+
+        addToQueue({
+          type: "insert",
+          table: "achats",
+          data: offlineAchat,
+          localData: offlineAchat,
+        })
+
+        setAchats(getCachedTableData("achats"))
+        showToast("Pesée sauvegardée hors ligne", "info")
+        setShowForm(false)
+        resetForm()
+        return
       }
 
       console.log("[Achats] Inserting purchase with payload:", payload)

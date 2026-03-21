@@ -22,6 +22,7 @@ import {
   FaShieldAlt,
   FaSignOutAlt,
   FaSun,
+  FaTabletAlt,
   FaTimesCircle,
   FaUserCircle,
   FaUserFriends,
@@ -38,6 +39,7 @@ import AdminParcelles from "./admin/AdminParcelles"
 import AdminPesees from "./admin/AdminPesees"
 import AdminProducteurs from "./admin/AdminProducteurs"
 import AdminSettings from "./admin/AdminSettings"
+import AdminSessions from "./admin/AdminSessions"
 import AdminStats from "./admin/AdminStats"
 import AdminUsers from "./admin/AdminUsers"
 import Chat from "./Chat"
@@ -66,6 +68,7 @@ const SECTIONS = {
   pesees: { id: "pesees", label: "Pesées", icon: FaWeightHanging },
   parcelles: { id: "parcelles", label: "Parcelles", icon: FaMapMarkerAlt },
   notifications: { id: "notifications", label: "Notifications", icon: FaPaperPlane },
+  sessions: { id: "sessions", label: "Sessions", icon: FaTabletAlt },
   settings: { id: "settings", label: "Paramètres", icon: FaCog },
 }
 
@@ -81,6 +84,7 @@ const SECTION_PATHS = {
   parcelles: "/admin/parcelles",
   activites: "/admin/activity",
   notifications: "/admin/notifications",
+  sessions: "/admin/sessions",
   settings: "/admin/settings",
 }
 
@@ -96,12 +100,13 @@ const SECTION_DETAILS = {
   pesees: { badge: "Weights", description: "Volumes et operations de pesee." },
   parcelles: { badge: "Maps", description: "Parcelles et informations associees." },
   notifications: { badge: "Comms", description: "Centre de notifications." },
+  sessions: { badge: "Security", description: "Sessions appareils et révocations." },
   settings: { badge: "System", description: "Configuration generale." },
 }
 
 const SECTION_GROUPS = [
   { id: "workspace", label: "Workspace", items: ["stats", "chat", "opportunities", "activites", "notifications"] },
-  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "pesees", "parcelles", "settings"] },
+  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "pesees", "parcelles", "sessions", "settings"] },
 ]
 
 function getSectionFromPath(pathname) {
@@ -413,6 +418,8 @@ export default function AdminDashboard() {
         return <AdminActivities />
       case "notifications":
         return <AdminNotifications />
+      case "sessions":
+        return <AdminSessions />
       case "settings":
         return <AdminSettings />
       default:

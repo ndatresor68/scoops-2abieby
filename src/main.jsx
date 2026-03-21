@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
 import App from "./App.jsx"
 import { AuthProvider } from "./context/AuthContext"
+import { AppLockProvider } from "./context/AppLockContext"
 import { SettingsProvider } from "./context/SettingsContext"
 import { ToastProvider } from "./components/ui/Toast"
 import { ErrorBoundary } from "./components/ErrorBoundary"
@@ -27,7 +28,9 @@ createRoot(rootElement).render(
         <AuthProvider>
           <SettingsProvider>
             <ToastProvider>
-              <App />
+              <AppLockProvider>
+                <App />
+              </AppLockProvider>
             </ToastProvider>
           </SettingsProvider>
         </AuthProvider>

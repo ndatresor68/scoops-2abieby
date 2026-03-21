@@ -6,6 +6,7 @@ import { getUserRoleInfo } from "./utils/rolePermissions"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
 import Input from "./components/ui/Input"
+import LocalSecuritySettings from "./components/security/LocalSecuritySettings"
 import { useToast } from "./components/ui/Toast"
 
 const INITIAL_PARAMS = {
@@ -241,6 +242,8 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
             </div>
           </Card>
         )}
+
+        <LocalSecuritySettings />
 
         <button type="submit" style={saveBtn}>
           {saving ? "Enregistrement..." : "Enregistrer les parametres"}
