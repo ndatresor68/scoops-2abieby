@@ -1,14 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, useRef } from "react"
 import { supabase } from "../supabaseClient"
 import { logUserLogin, logUserLogout } from "../utils/activityLogger"
-import {
-  clearSessionCache,
-  deactivateCurrentSession,
-  getOrCreateDeviceId,
-  registerDeviceSession,
-  touchCurrentSession,
-  validateDeviceSession,
-} from "../services/deviceSessionService"
 
 const AuthContext = createContext(null)
 const ALLOWED_ROLES = new Set(["ADMIN", "AGENT", "CENTRE"])
@@ -74,7 +66,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [initialized, setInitialized] = useState(false)
-  const [sessionNotice, setSessionNotice] = useState("")
   
   // Track ongoing operations to prevent race conditions
   const syncInProgressRef = useRef(false)
@@ -171,14 +162,6 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const forceLocalSignOut = useCallback(async () => {
-    clearSessionCache()
-    await supabase.auth.signOut()
-    if (mountedRef.current) {
-      setUser(null)
-    }
-  }, [])
-
   /**
    * Sync auth state with proper error handling and session verification
    * FIX: Only clear user if session actually doesn't exist
@@ -257,13 +240,6 @@ export function AuthProvider({ children }) {
       const nextUser = data?.user || null
       
       if (nextUser) {
-        const sessionValidation = await validateDeviceSession(nextUser.id)
-        if (!sessionValidation.valid) {
-          await forceLocalSignOut()
-          syncInProgressRef.current = false
-          return null
-        }
-
         // FIX #1: Increased timeout for profile loading
         const profileOperation = async () => {
           const profilePromise = loadProfileForUser(nextUser)
@@ -329,7 +305,7 @@ export function AuthProvider({ children }) {
       syncInProgressRef.current = false
       return null
     }
-  }, [forceLocalSignOut, loadProfileForUser])
+  }, [loadProfileForUser])
 
   const refreshUser = useCallback(async () => {
     return syncAuthState(true) // Skip retry for manual refresh
@@ -468,38 +444,6 @@ export function AuthProvider({ children }) {
     }
   }, [syncAuthState])
 
-  useEffect(() => {
-    if (!user?.id) return undefined
-
-    let intervalId = null
-    let touchTimeout = null
-
-    const validateStrictSession = async () => {
-      const result = await validateDeviceSession(user.id)
-      if (!result.valid) {
-        await forceLocalSignOut()
-      }
-    }
-
-    const scheduleTouch = () => {
-      if (touchTimeout) clearTimeout(touchTimeout)
-      touchTimeout = setTimeout(() => {
-        touchCurrentSession(user.id).catch(() => {})
-      }, 1000)
-    }
-
-    const activityEvents = ["mousedown", "mousemove", "keydown", "touchstart", "click"]
-    activityEvents.forEach((event) => window.addEventListener(event, scheduleTouch, true))
-    scheduleTouch()
-    intervalId = window.setInterval(validateStrictSession, 60 * 1000)
-
-    return () => {
-      if (intervalId) window.clearInterval(intervalId)
-      if (touchTimeout) window.clearTimeout(touchTimeout)
-      activityEvents.forEach((event) => window.removeEventListener(event, scheduleTouch, true))
-    }
-  }, [forceLocalSignOut, user?.id])
-
   const signInWithPassword = useCallback(async (email, password) => {
     const response = await supabase.auth.signInWithPassword({ email, password })
     
@@ -517,10 +461,6 @@ export function AuthProvider({ children }) {
     const profileResult = await loadProfileForUser(response.data.user)
     
     if (profileResult) {
-      const sessionRegistration = await registerDeviceSession(response.data.user.id)
-      if (sessionRegistration.isNewDevice) {
-        setSessionNotice("Nouvel appareil détecté")
-      }
       // Log successful login
       await logUserLogin(response.data.user.id, response.data.user.email)
     } else {
@@ -537,20 +477,14 @@ export function AuthProvider({ children }) {
     // Log logout before signing out
     if (user?.id) {
       await logUserLogout(user.id, user.email)
-      await deactivateCurrentSession(user.id)
     }
     
     const response = await supabase.auth.signOut()
     if (!response.error) {
-      clearSessionCache()
       setUser(null)
     }
     return response
   }, [user])
-
-  const clearSessionNotice = useCallback(() => {
-    setSessionNotice("")
-  }, [])
 
   // Role calculation
   const effectiveRole = useMemo(() => {
@@ -582,9 +516,6 @@ export function AuthProvider({ children }) {
       loading,
       isAuthenticated: !!user,
       displayName: getDisplayName(user),
-      deviceId: user ? getOrCreateDeviceId() : null,
-      sessionNotice,
-      clearSessionNotice,
       signInWithPassword,
       signOut,
       refreshUser,
@@ -596,8 +527,6 @@ export function AuthProvider({ children }) {
       effectiveIsAgent,
       effectiveIsCentre,
       loading,
-      sessionNotice,
-      clearSessionNotice,
       signInWithPassword,
       signOut,
       refreshUser,

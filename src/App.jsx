@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react"
 import Layout from "./components/Layout"
 import AIChatButton from "./components/AIChatButton"
-import AppLockScreen from "./components/AppLockScreen"
 import { syncQueue } from "./services/offlineService"
 
 export default function App() {
@@ -28,7 +27,6 @@ export default function App() {
     <>
       <Layout />
       <AIChatButton />
-      <AppLockScreen />
     </>
   )
 }

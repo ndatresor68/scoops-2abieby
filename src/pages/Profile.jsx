@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { FaCamera, FaSave, FaEdit, FaMobileAlt, FaShieldAlt } from "react-icons/fa"
+import { FaCamera, FaSave, FaEdit } from "react-icons/fa"
 import { supabase } from "../supabaseClient"
 import { useAuth } from "../context/AuthContext"
-import { listUserSessions, revokeOtherSessions } from "../services/deviceSessionService"
 
 function getInitialForm(user) {
   // ALWAYS use user data (which includes merged profile data from utilisateurs table)
@@ -16,7 +15,7 @@ function getInitialForm(user) {
 }
 
 export default function Profile({ initialEditMode = false }) {
-  const { user, role, refreshUser, deviceId } = useAuth()
+  const { user, role, refreshUser } = useAuth()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -29,8 +28,6 @@ export default function Profile({ initialEditMode = false }) {
   const [form, setForm] = useState(getInitialForm(user))
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState("")
-  const [sessions, setSessions] = useState([])
-  const [revokingSessions, setRevokingSessions] = useState(false)
 
   const fileInputRef = useRef(null)
 
@@ -74,38 +71,7 @@ export default function Profile({ initialEditMode = false }) {
     const nextForm = getInitialForm(userWithProfile)
 
     setForm(nextForm)
-    if (authUser?.id) {
-      try {
-        const sessionRows = await listUserSessions(authUser.id)
-        setSessions(sessionRows)
-      } catch {
-        setSessions([])
-      }
-    }
     setLoading(false)
-  }
-
-  async function handleRevokeOtherSessions() {
-    if (!user?.id) return
-
-    setRevokingSessions(true)
-    setError("")
-    setMessage("")
-
-    try {
-      const result = await revokeOtherSessions(user.id)
-      setMessage(
-        result.count > 0
-          ? `${result.count} autre(s) session(s) fermée(s)`
-          : "Aucune autre session active à fermer",
-      )
-      const sessionRows = await listUserSessions(user.id)
-      setSessions(sessionRows)
-    } catch (err) {
-      setError(err.message || "Impossible de fermer les autres sessions")
-    } finally {
-      setRevokingSessions(false)
-    }
   }
 
   function handleChange(field, value) {
@@ -274,41 +240,6 @@ export default function Profile({ initialEditMode = false }) {
             />
           </div>
 
-          <div style={securityPanel}>
-            <div style={securityHeader}>
-              <FaShieldAlt />
-              <span>Sécurité de session</span>
-            </div>
-            <div style={sessionCard}>
-              <div style={sessionLine}>
-                <FaMobileAlt />
-                <span>Appareil actuel</span>
-              </div>
-              <code style={sessionCode}>{deviceId || "indisponible"}</code>
-            </div>
-            <div style={sessionsList}>
-              {sessions.map((session) => (
-                <div key={session.id || session.device_id} style={sessionItem}>
-                  <div>
-                    <strong>{session.current_device ? "Cet appareil" : "Autre appareil"}</strong>
-                    <div style={sessionMeta}>
-                      {session.status || "active"} · Dernière activité:{" "}
-                      {session.last_active ? new Date(session.last_active).toLocaleString("fr-FR") : "-"}
-                    </div>
-                  </div>
-                  <span style={sessionBadge(session.current_device)}>
-                    {session.current_device ? "Courant" : session.is_active ? "Actif" : "Inactif"}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div style={securityActions}>
-              <button style={dangerBtn} onClick={handleRevokeOtherSessions} disabled={revokingSessions}>
-                {revokingSessions ? "Fermeture..." : "Fermer les autres sessions"}
-              </button>
-            </div>
-          </div>
-
           <div style={actions}>
             <button style={secondaryBtn} onClick={() => setIsEditing((v) => !v)}>
               <FaEdit /> {isEditing ? "Annuler" : "Modifier profil"}
@@ -445,94 +376,6 @@ const actions = {
   flexWrap: "wrap",
 }
 
-const securityPanel = {
-  marginTop: 22,
-  display: "grid",
-  gap: 12,
-  padding: 18,
-  borderRadius: 16,
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-}
-
-const securityHeader = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  fontWeight: 800,
-  color: "#0f172a",
-}
-
-const sessionCard = {
-  display: "grid",
-  gap: 8,
-}
-
-const sessionLine = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  color: "#334155",
-  fontWeight: 600,
-}
-
-const sessionCode = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  background: "#e2e8f0",
-  color: "#0f172a",
-  fontSize: 12,
-  overflowX: "auto",
-}
-
-const sessionsList = {
-  display: "grid",
-  gap: 10,
-}
-
-const sessionItem = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "center",
-  padding: "12px 14px",
-  borderRadius: 12,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-}
-
-const sessionMeta = {
-  fontSize: 12,
-  color: "#64748b",
-  marginTop: 4,
-}
-
-const sessionBadge = (current) => ({
-  display: "inline-flex",
-  alignItems: "center",
-  minHeight: 28,
-  padding: "4px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 800,
-  background: current ? "rgba(59,130,246,0.12)" : "rgba(148,163,184,0.14)",
-  color: current ? "#1d4ed8" : "#475569",
-})
-
-const securityActions = {
-  display: "flex",
-  justifyContent: "flex-start",
-}
-
-const dangerBtn = {
-  border: "none",
-  borderRadius: 10,
-  padding: "10px 16px",
-  fontWeight: 700,
-  background: "linear-gradient(135deg, #dc2626 0%, #ef4444 100%)",
-  color: "white",
-  cursor: "pointer",
-}
 
 const primaryBtn = {
   border: "none",

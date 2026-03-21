@@ -67,7 +67,7 @@ function getPageFromPath(pathname) {
 }
 
 export default function Layout() {
-  const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut, sessionNotice, clearSessionNotice } = useAuth()
+  const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut } = useAuth()
   const { showToast } = useToast()
   const sessionTimeoutMinutes = useSessionTimeout()
   const [notificationPermission, setNotificationPermission] = useState(() => {
@@ -138,12 +138,6 @@ export default function Layout() {
       window.removeEventListener("offline", handleOffline)
     }
   }, [])
-
-  useEffect(() => {
-    if (!sessionNotice) return
-    showToast(sessionNotice, "info")
-    clearSessionNotice()
-  }, [clearSessionNotice, sessionNotice, showToast])
 
   useEffect(() => {
     if (!user?.id) return
