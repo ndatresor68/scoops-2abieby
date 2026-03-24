@@ -14,6 +14,7 @@ import {
   FaEdit,
   FaExclamationTriangle,
   FaHistory,
+  FaIdBadge,
   FaKey,
   FaMapMarkerAlt,
   FaMoon,
@@ -46,6 +47,8 @@ import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
 import { useSettings } from "../context/SettingsContext"
 import { ADMIN_TOKENS, getAdminThemeVars } from "../components/ui/AdminPage"
+import { ErrorBoundary } from "../components/ErrorBoundary"
+import EmployesPage from "../modules/employes/EmployesPage"
 import {
   getUserNotifications,
   markNotificationAsRead,
@@ -63,6 +66,7 @@ const SECTIONS = {
   agents: { id: "agents", label: "Agents", icon: FaUserFriends },
   centres: { id: "centres", label: "Centres", icon: FaBuilding },
   producteurs: { id: "producteurs", label: "Producteurs", icon: FaUserTie },
+  employes: { id: "employes", label: "Personnel", icon: FaIdBadge },
   pesees: { id: "pesees", label: "Pesées", icon: FaWeightHanging },
   parcelles: { id: "parcelles", label: "Parcelles", icon: FaMapMarkerAlt },
   notifications: { id: "notifications", label: "Notifications", icon: FaPaperPlane },
@@ -77,6 +81,7 @@ const SECTION_PATHS = {
   agents: "/admin/agents",
   centres: "/admin/centres",
   producteurs: "/admin/producteurs",
+  employes: "/admin/employes",
   pesees: "/admin/pesees",
   parcelles: "/admin/parcelles",
   activites: "/admin/activity",
@@ -93,6 +98,7 @@ const SECTION_DETAILS = {
   agents: { badge: "Ops", description: "Pilotage des agents terrain." },
   centres: { badge: "Network", description: "Organisation des centres de collecte." },
   producteurs: { badge: "Growth", description: "Suivi des producteurs." },
+  employes: { badge: "HR", description: "Gestion du personnel, des salaires et des postes." },
   pesees: { badge: "Weights", description: "Volumes et operations de pesee." },
   parcelles: { badge: "Maps", description: "Parcelles et informations associees." },
   notifications: { badge: "Comms", description: "Centre de notifications." },
@@ -101,7 +107,7 @@ const SECTION_DETAILS = {
 
 const SECTION_GROUPS = [
   { id: "workspace", label: "Workspace", items: ["stats", "chat", "opportunities", "activites", "notifications"] },
-  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "pesees", "parcelles", "settings"] },
+  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "employes", "pesees", "parcelles", "settings"] },
 ]
 
 function getSectionFromPath(pathname) {
@@ -362,18 +368,33 @@ export default function AdminDashboard() {
   }
 
   function navigateToSection(sectionId) {
-    const normalizedSection = sectionId === "activity" ? "activites" : sectionId
-    setShowProfile(false)
-    setProfileEditMode(false)
-    setActiveSection(normalizedSection)
-    setSidebarOpen(false)
-    setSearchOpen(false)
-    setSearchQuery("")
+    try {
+      const normalizedSection = sectionId === "activity" ? "activites" : sectionId
+      console.log("[AdminDashboard] navigateToSection", { sectionId, normalizedSection })
 
-    if (user) {
-      const sectionLabel = SECTIONS[normalizedSection]?.label || normalizedSection
-      const sectionPath = normalizedSection === "activites" ? "/admin/activity" : SECTION_PATHS[normalizedSection] || "/admin"
-      logAppActivity(user, "navigation", `Opened ${sectionLabel}`, sectionPath)
+      if (!normalizedSection || !SECTIONS[normalizedSection]) {
+        console.error("[AdminDashboard] Unknown section:", sectionId)
+        showToast("Section indisponible.", "error")
+        setActiveSection("stats")
+        return
+      }
+
+      setShowProfile(false)
+      setProfileEditMode(false)
+      setActiveSection(normalizedSection)
+      setSidebarOpen(false)
+      setSearchOpen(false)
+      setSearchQuery("")
+
+      if (user) {
+        const sectionLabel = SECTIONS[normalizedSection]?.label || normalizedSection
+        const sectionPath = normalizedSection === "activites" ? "/admin/activity" : SECTION_PATHS[normalizedSection] || "/admin"
+        logAppActivity(user, "navigation", `Opened ${sectionLabel}`, sectionPath)
+      }
+    } catch (error) {
+      console.error("[AdminDashboard] Navigation error:", error)
+      showToast("Impossible d'ouvrir cette section pour le moment.", "error")
+      setActiveSection("stats")
     }
   }
 
@@ -405,6 +426,8 @@ export default function AdminDashboard() {
         return <AdminCentres />
       case "producteurs":
         return <AdminProducteurs />
+      case "employes":
+        return <EmployesPage />
       case "pesees":
         return <AdminPesees />
       case "parcelles":
@@ -867,7 +890,9 @@ export default function AdminDashboard() {
               padding: isMobile ? 16 : 24,
             }}
           >
-            {renderSection()}
+            <ErrorBoundary key={showProfile ? "profile" : activeSection}>
+              {renderSection()}
+            </ErrorBoundary>
           </div>
         </div>
       </main>

@@ -30,7 +30,8 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.13.1",
     "recharts": "^2.15.4",
-    "resend": "^4.8.0"
+    "resend": "^4.8.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

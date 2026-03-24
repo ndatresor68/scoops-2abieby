@@ -11,11 +11,75 @@ async function loadXLSX() {
     try {
       XLSX = await import("xlsx")
     } catch (error) {
-      console.error("[exportToExcel] xlsx library not installed. Run: npm install xlsx")
-      throw new Error("Excel export requires xlsx library. Please install it: npm install xlsx")
+      XLSX = null
     }
   }
   return XLSX
+}
+
+function escapeSpreadsheetValue(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+function getCellValue(row, col) {
+  const value = row[col.key]
+
+  if (value === null || value === undefined) {
+    return ""
+  }
+
+  if (value instanceof Date) {
+    return value.toLocaleString("fr-FR")
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value)
+  }
+
+  return value
+}
+
+function downloadExcelCompatibleFile(worksheetData, filename, sheetName = "Sheet1") {
+  const rowsXml = worksheetData
+    .map(
+      (row) =>
+        `<Row>${row
+          .map(
+            (cell) =>
+              `<Cell><Data ss:Type="String">${escapeSpreadsheetValue(cell)}</Data></Cell>`
+          )
+          .join("")}</Row>`
+    )
+    .join("")
+
+  const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Worksheet ss:Name="${escapeSpreadsheetValue(sheetName)}">
+  <Table>${rowsXml}</Table>
+ </Worksheet>
+</Workbook>`
+
+  const blob = new Blob([xml], {
+    type: "application/vnd.ms-excel;charset=utf-8;",
+  })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = `${filename}.xls`
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+
+  return `${filename}.xls`
 }
 
 /**
@@ -38,28 +102,18 @@ export async function exportToExcel(data, columns, filename = "export", sheetNam
 
     // Add data rows
     data.forEach((row) => {
-      const rowData = columns.map((col) => {
-        const value = row[col.key]
-        
-        // Handle different value types
-        if (value === null || value === undefined) {
-          return ""
-        }
-        
-        // Handle dates
-        if (value instanceof Date) {
-          return value.toLocaleString("fr-FR")
-        }
-        
-        // Handle objects (like nested data)
-        if (typeof value === "object") {
-          return JSON.stringify(value)
-        }
-        
-        return value
-      })
+      const rowData = columns.map((col) => getCellValue(row, col))
       worksheetData.push(rowData)
     })
+
+    if (!xlsx) {
+      const fallbackFilename = downloadExcelCompatibleFile(worksheetData, filename, sheetName)
+      return {
+        success: true,
+        filename: fallbackFilename,
+        count: data.length,
+      }
+    }
 
     // Create workbook and worksheet
     const workbook = xlsx.utils.book_new()

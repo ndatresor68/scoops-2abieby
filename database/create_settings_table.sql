@@ -67,7 +67,7 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM public.utilisateurs
-    WHERE user_id = auth.uid()
+    WHERE id = auth.uid()
     AND role = 'ADMIN'
   )
 );
@@ -80,7 +80,7 @@ TO authenticated
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM public.utilisateurs
-    WHERE user_id = auth.uid()
+    WHERE id = auth.uid()
     AND role = 'ADMIN'
   )
 );

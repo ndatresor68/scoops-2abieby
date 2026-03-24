@@ -2,24 +2,26 @@ import { useEffect, useState } from "react"
 import { FaCog, FaUsers, FaStore } from "react-icons/fa"
 import { supabase } from "./supabaseClient"
 import { useAuth } from "./context/AuthContext"
+import { useSettings } from "./context/SettingsContext"
 import { getUserRoleInfo } from "./utils/rolePermissions"
 import Card from "./components/ui/Card"
-import Button from "./components/ui/Button"
-import Input from "./components/ui/Input"
 import { useToast } from "./components/ui/Toast"
 
 const INITIAL_PARAMS = {
-  coop_nom: "",
-  adresse: "",
-  telephone: "",
-  devise: "FCFA",
-  unite_poids: "Kg",
-  fuseau_horaire: "Africa/Abidjan",
-  roles_disponibles: "ADMIN,AGENT,CENTRE",
+  cooperative_name: "",
+  address: "",
+  contact_phone: "",
+  contact_email: "",
+  currency: "FCFA",
+  default_language: "fr",
+  export_format: "PDF",
+  session_timeout_minutes: "30",
+  default_user_role: "AGENT",
 }
 
 export default function Parametres({ onOpenAdminUsers, isAdmin }) {
   const { user } = useAuth()
+  const { settings, loading: settingsLoading, updateSettings, refreshSettings } = useSettings()
   const { showToast } = useToast()
   const { isCentre, centreId } = getUserRoleInfo(user)
   const [loading, setLoading] = useState(true)
@@ -39,30 +41,28 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
   })
 
   useEffect(() => {
-    fetchParametres()
     if (isCentre && centreId) {
       fetchCentreData()
     }
   }, [isCentre, centreId])
 
-  async function fetchParametres() {
-    setLoading(true)
-    const { data, error: fetchError } = await supabase
-      .from("parametres")
-      .select("*")
-      .limit(1)
-      .maybeSingle()
-
-    if (fetchError && fetchError.code !== "PGRST116") {
-      setError(fetchError.message)
-    }
-
-    if (data) {
-      setFormData((prev) => ({ ...prev, ...data }))
-    }
-
-    setLoading(false)
-  }
+  useEffect(() => {
+    console.log("[Parametres] Settings context state:", { settings, settingsLoading })
+    setFormData({
+      cooperative_name: settings?.cooperative_name || INITIAL_PARAMS.cooperative_name,
+      address: settings?.address || INITIAL_PARAMS.address,
+      contact_phone: settings?.contact_phone || INITIAL_PARAMS.contact_phone,
+      contact_email: settings?.contact_email || INITIAL_PARAMS.contact_email,
+      currency: settings?.currency || INITIAL_PARAMS.currency,
+      default_language: settings?.default_language || INITIAL_PARAMS.default_language,
+      export_format: settings?.export_format || INITIAL_PARAMS.export_format,
+      session_timeout_minutes: String(
+        settings?.session_timeout_minutes ?? INITIAL_PARAMS.session_timeout_minutes
+      ),
+      default_user_role: settings?.default_user_role || INITIAL_PARAMS.default_user_role,
+    })
+    setLoading(settingsLoading)
+  }, [settings, settingsLoading])
 
   async function fetchCentreData() {
     if (!centreId) return
@@ -95,7 +95,7 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
   }
 
   async function handleSaveCentre(e) {
-    e.preventDefault()
+    e?.preventDefault?.()
     if (!centreId) return
 
     setSavingCentre(true)
@@ -123,21 +123,31 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
     setMessage("")
     setError("")
 
-    let response
+    try {
+      const payload = {
+        cooperative_name: formData.cooperative_name,
+        address: formData.address,
+        contact_phone: formData.contact_phone,
+        contact_email: formData.contact_email,
+        currency: formData.currency,
+        default_language: formData.default_language,
+        export_format: formData.export_format,
+        session_timeout_minutes: Number(formData.session_timeout_minutes) || 30,
+        default_user_role: formData.default_user_role,
+      }
 
-    if (formData.id) {
-      response = await supabase.from("parametres").update(formData).eq("id", formData.id)
-    } else {
-      response = await supabase.from("parametres").insert([formData])
+      console.log("[Parametres] Saving settings payload:", payload)
+      await updateSettings(payload)
+      await refreshSettings()
+      setMessage("Paramètres enregistrés")
+      showToast("Paramètres enregistrés avec succès", "success")
+    } catch (saveError) {
+      console.error("[Parametres] Save error:", saveError)
+      setError(saveError.message || "Erreur lors de l'enregistrement des paramètres")
+      showToast("Erreur lors de l'enregistrement", "error")
+    } finally {
+      setSaving(false)
     }
-
-    if (response.error) {
-      setError(response.error.message)
-    } else {
-      setMessage("Parametres enregistres")
-    }
-
-    setSaving(false)
   }
 
   if (loading) return <p>Chargement des parametres...</p>
@@ -157,42 +167,54 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
         <Card title="Parametres generaux">
           <Field
             label="Nom de la cooperative"
-            value={formData.coop_nom}
-            onChange={(v) => setFormData((p) => ({ ...p, coop_nom: v }))}
+            value={formData.cooperative_name}
+            onChange={(v) => setFormData((p) => ({ ...p, cooperative_name: v }))}
           />
           <Field
             label="Adresse"
-            value={formData.adresse}
-            onChange={(v) => setFormData((p) => ({ ...p, adresse: v }))}
+            value={formData.address}
+            onChange={(v) => setFormData((p) => ({ ...p, address: v }))}
           />
           <Field
             label="Telephone"
-            value={formData.telephone}
-            onChange={(v) => setFormData((p) => ({ ...p, telephone: v }))}
+            value={formData.contact_phone}
+            onChange={(v) => setFormData((p) => ({ ...p, contact_phone: v }))}
+          />
+          <Field
+            label="Email de contact"
+            type="email"
+            value={formData.contact_email}
+            onChange={(v) => setFormData((p) => ({ ...p, contact_email: v }))}
           />
         </Card>
 
         <Card title="Parametres application">
           <Field
             label="Devise"
-            value={formData.devise}
-            onChange={(v) => setFormData((p) => ({ ...p, devise: v }))}
+            value={formData.currency}
+            onChange={(v) => setFormData((p) => ({ ...p, currency: v }))}
           />
           <Field
-            label="Unite de poids"
-            value={formData.unite_poids}
-            onChange={(v) => setFormData((p) => ({ ...p, unite_poids: v }))}
+            label="Langue par défaut"
+            value={formData.default_language}
+            onChange={(v) => setFormData((p) => ({ ...p, default_language: v }))}
           />
           <Field
-            label="Fuseau horaire"
-            value={formData.fuseau_horaire}
-            onChange={(v) => setFormData((p) => ({ ...p, fuseau_horaire: v }))}
+            label="Format d'export"
+            value={formData.export_format}
+            onChange={(v) => setFormData((p) => ({ ...p, export_format: v }))}
+          />
+          <Field
+            label="Timeout session (minutes)"
+            type="number"
+            value={formData.session_timeout_minutes}
+            onChange={(v) => setFormData((p) => ({ ...p, session_timeout_minutes: v }))}
           />
         </Card>
 
         {isCentre && centreData && (
           <Card title="Informations du Centre">
-            <form onSubmit={handleSaveCentre}>
+            <div>
               <Field
                 label="Nom du centre"
                 value={centreFormData.nom}
@@ -219,19 +241,19 @@ export default function Parametres({ onOpenAdminUsers, isAdmin }) {
                 value={centreFormData.ville}
                 onChange={(v) => setCentreFormData((p) => ({ ...p, ville: v }))}
               />
-              <button type="submit" style={saveBtn} disabled={savingCentre}>
+              <button type="button" onClick={handleSaveCentre} style={saveBtn} disabled={savingCentre}>
                 {savingCentre ? "Enregistrement..." : "Enregistrer les informations du centre"}
               </button>
-            </form>
+            </div>
           </Card>
         )}
 
         {isAdmin && (
           <Card title="Administration">
             <Field
-              label="Roles autorises"
-              value={formData.roles_disponibles}
-              onChange={(v) => setFormData((p) => ({ ...p, roles_disponibles: v }))}
+              label="Rôle utilisateur par défaut"
+              value={formData.default_user_role}
+              onChange={(v) => setFormData((p) => ({ ...p, default_user_role: v }))}
             />
 
             <div style={{ marginTop: 14 }}>

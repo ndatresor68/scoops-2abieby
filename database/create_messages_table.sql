@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS public.messages (
   receiver_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   message TEXT,
   audio_url TEXT,
+  delivered_at TIMESTAMPTZ,
+  read_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT messages_content_check CHECK (
     COALESCE(NULLIF(BTRIM(message), ''), NULLIF(BTRIM(audio_url), '')) IS NOT NULL
@@ -48,7 +50,30 @@ WITH CHECK (
   )
 );
 
-GRANT SELECT, INSERT ON public.messages TO authenticated;
+CREATE POLICY "Users can update message delivery state"
+ON public.messages
+FOR UPDATE
+TO authenticated
+USING (
+  sender_id = auth.uid()
+  OR receiver_id = auth.uid()
+  OR EXISTS (
+    SELECT 1
+    FROM public.utilisateurs
+    WHERE id = auth.uid() AND role = 'ADMIN'
+  )
+)
+WITH CHECK (
+  sender_id = auth.uid()
+  OR receiver_id = auth.uid()
+  OR EXISTS (
+    SELECT 1
+    FROM public.utilisateurs
+    WHERE id = auth.uid() AND role = 'ADMIN'
+  )
+);
+
+GRANT SELECT, INSERT, UPDATE ON public.messages TO authenticated;
 
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('chat-audio', 'chat-audio', false)

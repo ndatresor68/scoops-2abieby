@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
-import { FaPlus, FaSearch, FaEdit, FaCheckCircle, FaClock, FaTruck } from "react-icons/fa"
+import { FaPlus, FaSearch, FaEdit, FaCheckCircle, FaClock } from "react-icons/fa"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
 import Input from "./components/ui/Input"
@@ -8,7 +8,7 @@ import Modal from "./components/ui/Modal"
 import { useToast } from "./components/ui/Toast"
 import { useAuth } from "./context/AuthContext"
 import { useMediaQuery } from "./hooks/useMediaQuery"
-import { getLivraisonsQuery, getUserRoleInfo } from "./utils/rolePermissions"
+import { getUserRoleInfo } from "./utils/rolePermissions"
 
 export default function Livraisons() {
   const { showToast } = useToast()
@@ -18,9 +18,10 @@ export default function Livraisons() {
   const [showForm, setShowForm] = useState(false)
   const [editingLivraison, setEditingLivraison] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
   const isMobile = useMediaQuery("(max-width: 640px)")
 
-  const { isCentre, centreId } = getUserRoleInfo(user)
+  const { isAdmin, isCentre, isAgent, centreId } = getUserRoleInfo(user)
 
   const [formData, setFormData] = useState({
     poids_total: "",
@@ -32,16 +33,34 @@ export default function Livraisons() {
   async function fetchLivraisons() {
     try {
       setLoading(true)
-      const query = getLivraisonsQuery(user)
-      if (!query) {
+      setErrorMessage("")
+
+      if (!user) {
+        console.log("[Livraisons] No authenticated user yet")
         setLivraisons([])
         return
       }
 
+      if (isAgent) {
+        console.log("[Livraisons] Agent role has no access to livraisons")
+        setLivraisons([])
+        return
+      }
+
+      let query = supabase.from("livraisons").select("*")
+      if (isCentre && centreId) {
+        query = query.eq("centre_id", centreId)
+      }
+
+      query = query.order("date_livraison", { ascending: false })
+
       const { data, error } = await query
+      console.log("[Livraisons] Data:", data)
+      console.log("[Livraisons] Error:", error)
 
       if (error) {
         console.error("[Livraisons] Error loading livraisons:", error)
+        setErrorMessage(error.message || "Erreur lors du chargement des livraisons")
         showToast("Erreur lors du chargement des livraisons", "error")
         return
       }
@@ -49,6 +68,7 @@ export default function Livraisons() {
       setLivraisons(data || [])
     } catch (error) {
       console.error("[Livraisons] Exception loading livraisons:", error)
+      setErrorMessage(error.message || "Erreur lors du chargement")
       showToast("Erreur lors du chargement", "error")
     } finally {
       setLoading(false)
@@ -56,8 +76,9 @@ export default function Livraisons() {
   }
 
   useEffect(() => {
+    console.log("[Livraisons] Initializing fetch", { user, isAdmin, isCentre, centreId })
     fetchLivraisons()
-  }, [user])
+  }, [user, isAdmin, isCentre, isAgent, centreId])
 
   function openForm(livraison = null) {
     if (livraison) {
@@ -89,14 +110,25 @@ export default function Livraisons() {
     }
 
     try {
+      if (!isAdmin && !isCentre) {
+        showToast("Vous n'avez pas l'autorisation de gérer les livraisons", "error")
+        return
+      }
+
+      if (!centreId && !editingLivraison?.centre_id) {
+        showToast("Aucun centre associé à cette livraison.", "error")
+        return
+      }
+
       const payload = {
-        centre_id: centreId,
+        centre_id: editingLivraison?.centre_id || centreId,
         poids_total: Number(formData.poids_total),
         nombre_sacs: formData.nombre_sacs ? Number(formData.nombre_sacs) : 0,
         statut: formData.statut,
         notes: formData.notes || null,
         utilisateur_id: user?.id || null,
       }
+      console.log("[Livraisons] Submit payload:", payload)
 
       if (editingLivraison) {
         const { error } = await supabase
@@ -182,6 +214,8 @@ export default function Livraisons() {
             {filteredLivraisons.length} livraison{filteredLivraisons.length > 1 ? "s" : ""}
           </div>
         </div>
+
+        {errorMessage ? <div style={errorState}>{errorMessage}</div> : null}
 
         {loading ? (
           <div style={loadingState}>
@@ -405,6 +439,17 @@ const statsBadge = {
   fontSize: "14px",
   fontWeight: 600,
   color: "#6b7280",
+}
+
+const errorState = {
+  marginBottom: 16,
+  padding: "12px 14px",
+  borderRadius: 12,
+  background: "#fef2f2",
+  border: "1px solid #fecaca",
+  color: "#b91c1c",
+  fontSize: 14,
+  fontWeight: 600,
 }
 
 const loadingState = {

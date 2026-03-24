@@ -270,9 +270,9 @@ export default function AdminActivities() {
                   {analysis.highlights.map((item) => (
                     <div key={item} style={styles.listItem}>
                       {item}
-                    </div>
+      </div>
                   ))}
-                </div>
+          </div>
               ) : (
                 <div style={styles.analysisText}>Aucun highlight détecté.</div>
               )}
@@ -286,10 +286,10 @@ export default function AdminActivities() {
                       <strong>{item.title || "Alerte"}</strong>: {item.reason || "-"}
                     </div>
                   ))}
-                </div>
+              </div>
               ) : (
                 <div style={styles.analysisText}>Aucune anomalie majeure détectée.</div>
-              )}
+            )}
             </div>
           </div>
         ) : (
@@ -306,16 +306,16 @@ export default function AdminActivities() {
           ) : (
             <div style={styles.tableWrapper}>
               <table style={styles.table}>
-                <thead>
-                  <tr>
+              <thead>
+                <tr>
                     <th style={styles.th}>Date</th>
                     <th style={styles.th}>Utilisateur</th>
                     <th style={styles.th}>Action</th>
                     <th style={styles.th}>Page</th>
                     <th style={styles.th}>Détails</th>
-                  </tr>
-                </thead>
-                <tbody>
+                </tr>
+              </thead>
+              <tbody>
                   {filteredLogs.map((log) => (
                     <tr key={log.id}>
                       <td style={styles.td}>{formatDate(log.created_at)}</td>
@@ -329,8 +329,8 @@ export default function AdminActivities() {
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+              </tbody>
+            </table>
             </div>
           )}
         </div>
@@ -350,14 +350,14 @@ const styles = {
     boxShadow: "0 18px 40px rgba(15, 23, 42, 0.08)",
   },
   restrictedTitle: {
-    margin: 0,
+  margin: 0,
     fontSize: 20,
     fontWeight: 800,
-    color: "#0f172a",
+  color: "#0f172a",
   },
   restrictedText: {
     margin: "10px 0 0",
-    color: "#64748b",
+  color: "#64748b",
   },
   filtersGrid: {
     display: "grid",
@@ -365,8 +365,8 @@ const styles = {
     gap: 16,
   },
   filterField: {
-    display: "flex",
-    flexDirection: "column",
+  display: "flex",
+  flexDirection: "column",
     gap: 8,
   },
   label: {
@@ -397,9 +397,9 @@ const styles = {
     marginTop: 16,
   },
   analysisGrid: {
-    display: "grid",
+  display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 16,
+  gap: 16,
   },
   analysisBlock: {
     borderRadius: 16,
@@ -426,8 +426,8 @@ const styles = {
     textAlign: "center",
   },
   list: {
-    display: "flex",
-    flexDirection: "column",
+  display: "flex",
+  flexDirection: "column",
     gap: 10,
   },
   listItem: {
@@ -449,15 +449,15 @@ const styles = {
     color: "#64748b",
   },
   tableWrapper: {
-    overflowX: "auto",
+  overflowX: "auto",
   },
   table: {
-    width: "100%",
-    borderCollapse: "collapse",
+  width: "100%",
+  borderCollapse: "collapse",
     minWidth: 780,
   },
   th: {
-    textAlign: "left",
+  textAlign: "left",
     padding: "14px 16px",
     fontSize: 12,
     color: "#64748b",
@@ -474,17 +474,17 @@ const styles = {
   },
   actionBadge: {
     display: "inline-flex",
-    alignItems: "center",
+  alignItems: "center",
     minHeight: 28,
     padding: "0 10px",
     borderRadius: 999,
-    background: "#eff6ff",
-    color: "#2563eb",
+  background: "#eff6ff",
+  color: "#2563eb",
     fontSize: 12,
     fontWeight: 800,
   },
   details: {
-    display: "inline-block",
+  display: "inline-block",
     maxWidth: 340,
     whiteSpace: "normal",
     wordBreak: "break-word",

@@ -1,18 +1,17 @@
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../supabaseClient"
-import { FaPlus, FaSearch, FaFilter, FaWeightHanging } from "react-icons/fa"
+import { FaPlus, FaReceipt, FaSearch, FaWeightHanging, FaBuilding } from "react-icons/fa"
 import Card from "../../components/ui/Card"
 import Button from "../../components/ui/Button"
 import Input from "../../components/ui/Input"
 import Modal from "../../components/ui/Modal"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
-import { useMediaQuery } from "../../hooks/useMediaQuery"
+import CocoaReceipt from "../../components/CocoaReceipt"
 
 export default function AdminPesees() {
   const { isAdmin, user } = useAuth()
   const { showToast } = useToast()
-  const isMobile = useMediaQuery("(max-width: 640px)")
   
   const [pesees, setPesees] = useState([])
   const [centres, setCentres] = useState([])
@@ -23,12 +22,18 @@ export default function AdminPesees() {
   const [filterCentre, setFilterCentre] = useState("")
   const [filterDate, setFilterDate] = useState("")
   const [showModal, setShowModal] = useState(false)
+  const [showReceiptsModal, setShowReceiptsModal] = useState(false)
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false)
+  const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
   
   const [formData, setFormData] = useState({
     centre_id: "",
     producteur_id: "",
     poids: "",
+    sacs: "",
+    prix_unitaire: "",
     date: new Date().toISOString().split("T")[0],
     agent_id: "",
   })
@@ -38,57 +43,67 @@ export default function AdminPesees() {
       setLoading(false)
       return
     }
+    console.log("[AdminPesees] Initializing page")
     fetchData()
   }, [isAdmin])
 
   async function fetchData() {
     try {
       setLoading(true)
-      
-      // Fetch pesees (using achats table as it already has the weight data)
-      const { data: peseesData, error: peseesError } = await supabase
-        .from("achats")
-        .select(`
-          *,
-          centres:centre_id(nom),
-          producteurs:producteur_id(nom, code),
-          agents:utilisateur_id(nom, email)
-        `)
-        .order("date_pesee", { ascending: false })
+      setErrorMessage("")
+      console.log("[AdminPesees] Fetching pesees data")
+
+      const [
+        { data: peseesData, error: peseesError },
+        { data: centresData, error: centresError },
+        { data: producteursData, error: producteursError },
+        { data: agentsData, error: agentsError },
+      ] = await Promise.all([
+        supabase
+          .from("achats")
+          .select("*")
+          .order("date_pesee", { ascending: false }),
+        supabase.from("centres").select("id, nom").order("nom"),
+        supabase.from("producteurs").select("id, nom, code, centre_id").order("nom"),
+        supabase.from("utilisateurs").select("id, nom, email, centre_id").eq("role", "AGENT").order("nom"),
+      ])
+
+      console.log("[AdminPesees] Data:", {
+        pesees: peseesData,
+        centres: centresData,
+        producteurs: producteursData,
+        agents: agentsData,
+      })
+      console.log("[AdminPesees] Error:", {
+        peseesError,
+        centresError,
+        producteursError,
+        agentsError,
+      })
 
       if (peseesError) throw peseesError
-
-      // Fetch centres
-      const { data: centresData, error: centresError } = await supabase
-        .from("centres")
-        .select("id, nom")
-        .order("nom")
-
       if (centresError) throw centresError
-
-      // Fetch producteurs
-      const { data: producteursData, error: producteursError } = await supabase
-        .from("producteurs")
-        .select("id, nom, code, centre_id")
-        .order("nom")
-
       if (producteursError) throw producteursError
-
-      // Fetch agents (users with role AGENT)
-      const { data: agentsData, error: agentsError } = await supabase
-        .from("utilisateurs")
-        .select("id, nom, email, centre_id")
-        .eq("role", "AGENT")
-        .order("nom")
-
       if (agentsError) throw agentsError
 
-      setPesees(peseesData || [])
+      const centresMap = Object.fromEntries((centresData || []).map((entry) => [String(entry.id), entry]))
+      const producteursMap = Object.fromEntries((producteursData || []).map((entry) => [String(entry.id), entry]))
+      const agentsMap = Object.fromEntries((agentsData || []).map((entry) => [String(entry.id), entry]))
+
+      const enrichedPesees = (peseesData || []).map((entry) => ({
+        ...entry,
+        centres: centresMap[String(entry.centre_id)] || null,
+        producteurs: producteursMap[String(entry.producteur_id)] || null,
+        agents: agentsMap[String(entry.utilisateur_id)] || null,
+      }))
+
+      setPesees(enrichedPesees)
       setCentres(centresData || [])
       setProducteurs(producteursData || [])
       setAgents(agentsData || [])
     } catch (error) {
       console.error("[AdminPesees] Error fetching data:", error)
+      setErrorMessage(error?.message || "Erreur lors du chargement des données")
       showToast("Erreur lors du chargement des données", "error")
     } finally {
       setLoading(false)
@@ -152,43 +167,103 @@ export default function AdminPesees() {
     return Object.values(grouped)
   }, [filteredPesees])
 
-  async function handleSave() {
-    if (!formData.centre_id || !formData.producteur_id || !formData.poids || !formData.date) {
-      showToast("Veuillez remplir tous les champs obligatoires", "error")
+  const totalMontant = useMemo(
+    () => filteredPesees.reduce((sum, entry) => sum + (Number(entry.montant) || 0), 0),
+    [filteredPesees]
+  )
+
+  const selectedProducteur = useMemo(
+    () => producteursMap[String(formData.producteur_id)] || null,
+    [formData.producteur_id, producteursMap]
+  )
+
+  const selectedAgent = useMemo(
+    () => agentsMap[String(formData.agent_id)] || null,
+    [agentsMap, formData.agent_id]
+  )
+
+  const formMontant = useMemo(() => {
+    const poids = Number(formData.poids || 0)
+    const prixUnitaire = Number(formData.prix_unitaire || 0)
+    return poids > 0 && prixUnitaire > 0 ? poids * prixUnitaire : 0
+  }, [formData.poids, formData.prix_unitaire])
+
+  async function handleSave(event) {
+    event?.preventDefault?.()
+
+    if (!formData.centre_id || !formData.producteur_id || !formData.poids || !formData.prix_unitaire || !formData.date) {
+      showToast("Veuillez remplir tous les champs obligatoires de la pesée", "error")
+      return
+    }
+
+    if (!selectedProducteur) {
+      showToast("Le producteur sélectionné est introuvable.", "error")
+      return
+    }
+
+    if (Number(formData.poids) <= 0) {
+      showToast("Le poids doit être supérieur à 0.", "error")
+      return
+    }
+
+    if (Number(formData.prix_unitaire) <= 0) {
+      showToast("Le prix unitaire doit être supérieur à 0.", "error")
+      return
+    }
+
+    if (!user?.id && !formData.agent_id) {
+      showToast("Aucun agent ou utilisateur valide n'est associé à la pesée.", "error")
       return
     }
 
     try {
       setSaving(true)
-
-      const producteur = producteursMap[formData.producteur_id]
-      const agent = agentsMap[formData.agent_id]
+      setErrorMessage("")
+      console.log("[AdminPesees] Submitting form", formData)
 
       const payload = {
         centre_id: formData.centre_id,
         producteur_id: formData.producteur_id,
         poids: Number(formData.poids),
+        sacs: Number(formData.sacs) || 0,
+        prix_unitaire: Number(formData.prix_unitaire),
+        montant: formMontant,
         date_pesee: new Date(formData.date).toISOString(),
         utilisateur_id: formData.agent_id || user?.id,
-        nom_producteur: producteur?.nom || "",
-        code_producteur: producteur?.code || "",
-        nom_agent: agent?.nom || agent?.email || user?.nom || "",
-        // Required fields for achats table
-        prix_unitaire: 0, // Will be updated later if needed
-        montant: 0, // Will be updated later if needed
-        sacs: 0,
+        nom_producteur: selectedProducteur?.nom || "",
+        code_producteur: selectedProducteur?.code || "",
+        nom_agent: selectedAgent?.nom || selectedAgent?.email || user?.nom || user?.email || "",
       }
 
-      const { error } = await supabase.from("achats").insert([payload])
+      console.log("[AdminPesees] Insert payload:", payload)
+
+      const { data: insertedData, error } = await supabase.from("achats").insert([payload]).select().single()
+      console.log("[AdminPesees] Insert result:", insertedData)
+      console.log("[AdminPesees] Insert error:", error)
 
       if (error) throw error
 
       showToast("Pesée enregistrée avec succès", "success")
       setShowModal(false)
       resetForm()
-      fetchData()
+
+      const enrichedInserted = insertedData
+        ? {
+            ...insertedData,
+            centres: centresMap[String(insertedData.centre_id)] || null,
+            producteurs: producteursMap[String(insertedData.producteur_id)] || null,
+            agents: agentsMap[String(insertedData.utilisateur_id)] || null,
+          }
+        : null
+
+      if (enrichedInserted) {
+        setPesees((current) => [enrichedInserted, ...current])
+      }
+
+      await fetchData()
     } catch (error) {
       console.error("[AdminPesees] Error saving pesee:", error)
+      setErrorMessage(error?.message || "Erreur lors de l'enregistrement")
       showToast("Erreur lors de l'enregistrement", "error")
     } finally {
       setSaving(false)
@@ -200,6 +275,8 @@ export default function AdminPesees() {
       centre_id: "",
       producteur_id: "",
       poids: "",
+      sacs: "",
+      prix_unitaire: "",
       date: new Date().toISOString().split("T")[0],
       agent_id: "",
     })
@@ -217,6 +294,28 @@ export default function AdminPesees() {
     return agents.filter((a) => String(a.centre_id) === String(formData.centre_id))
   }, [agents, formData.centre_id])
 
+  if (!isAdmin) {
+    return (
+      <Card>
+        <div style={emptyState}>
+          <FaWeightHanging size={40} style={{ color: "#cbd5e1", marginBottom: 16 }} />
+          <p style={emptyText}>Cette section est réservée aux administrateurs.</p>
+        </div>
+      </Card>
+    )
+  }
+
+  if (!Array.isArray(pesees) || !Array.isArray(centres) || !Array.isArray(producteurs) || !Array.isArray(agents)) {
+    return (
+      <Card>
+        <div style={emptyState}>
+          <FaWeightHanging size={40} style={{ color: "#cbd5e1", marginBottom: 16 }} />
+          <p style={emptyText}>Les données de pesée sont indisponibles pour le moment.</p>
+        </div>
+      </Card>
+    )
+  }
+
   return (
     <div style={container}>
       <div style={header}>
@@ -224,9 +323,19 @@ export default function AdminPesees() {
           <h2 style={title}>Gestion des Pesées</h2>
           <p style={subtitle}>Suivi des pesées de cacao par centre</p>
         </div>
-        <Button variant="primary" icon={<FaPlus />} onClick={() => setShowModal(true)}>
-          Nouvelle pesée
-        </Button>
+        <div style={headerActions}>
+          <Button
+            variant="secondary"
+            icon={<FaReceipt />}
+            onClick={() => setShowReceiptsModal(true)}
+            disabled={filteredPesees.length === 0}
+          >
+            Voir les reçus
+          </Button>
+          <Button variant="primary" icon={<FaPlus />} onClick={() => setShowModal(true)}>
+            Nouvelle pesée
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -280,6 +389,15 @@ export default function AdminPesees() {
         </div>
       </Card>
 
+      {errorMessage ? (
+        <Card>
+          <div style={errorState}>
+            <strong>Erreur</strong>
+            <span>{errorMessage}</span>
+          </div>
+        </Card>
+      ) : null}
+
       {/* Statistics */}
       <div style={statsGrid}>
         <Card style={statCard}>
@@ -308,6 +426,15 @@ export default function AdminPesees() {
             <div>
               <p style={statValue}>{groupedPesees.length}</p>
               <p style={statLabel}>Centres</p>
+            </div>
+          </div>
+        </Card>
+        <Card style={statCard}>
+          <div style={statContent}>
+            <FaReceipt size={24} style={{ color: "#7c3aed" }} />
+            <div>
+              <p style={statValue}>{totalMontant.toLocaleString("fr-FR")} FCFA</p>
+              <p style={statLabel}>Montant total pesées</p>
             </div>
           </div>
         </Card>
@@ -351,12 +478,15 @@ export default function AdminPesees() {
                     <th style={th}>Date</th>
                     <th style={th}>Producteur</th>
                     <th style={th}>Poids (kg)</th>
+                    <th style={th}>Prix unitaire</th>
+                    <th style={th}>Montant</th>
                     <th style={th}>Agent</th>
+                    <th style={th}>Reçu</th>
                   </tr>
                 </thead>
                 <tbody>
                   {group.pesees.map((pesee) => (
-                    <tr key={pesee.id}>
+                    <tr key={pesee.id} style={tableRow}>
                       <td style={td}>
                         {pesee.date_pesee
                           ? new Date(pesee.date_pesee).toLocaleDateString("fr-FR")
@@ -378,7 +508,28 @@ export default function AdminPesees() {
                         </strong>
                       </td>
                       <td style={td}>
+                        {Number(pesee.prix_unitaire || 0).toLocaleString("fr-FR")} FCFA
+                      </td>
+                      <td style={td}>
+                        <strong style={{ color: "#7c3aed" }}>
+                          {Number(pesee.montant || 0).toLocaleString("fr-FR")} FCFA
+                        </strong>
+                      </td>
+                      <td style={td}>
                         {pesee.agents?.nom || pesee.nom_agent || pesee.agents?.email || "-"}
+                      </td>
+                      <td style={td}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<FaReceipt />}
+                          onClick={() => {
+                            setSelectedReceipt(pesee)
+                            setShowReceiptPreview(true)
+                          }}
+                        >
+                          Reçu
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -399,82 +550,136 @@ export default function AdminPesees() {
         title="Nouvelle pesée"
         size="md"
       >
-        <div style={form}>
-          <div>
-            <label style={label}>Centre *</label>
-            <select
-              value={formData.centre_id}
-              onChange={(e) => {
-                setFormData({ ...formData, centre_id: e.target.value, producteur_id: "", agent_id: "" })
-              }}
-              style={selectInput}
+        <form onSubmit={handleSave} style={form}>
+          <div style={formGrid}>
+            <div>
+              <label style={label}>Centre *</label>
+              <select
+                value={formData.centre_id}
+                onChange={(e) => {
+                  setFormData({
+                    ...formData,
+                    centre_id: e.target.value,
+                    producteur_id: "",
+                    agent_id: "",
+                  })
+                }}
+                style={selectInput}
+                required
+              >
+                <option value="">Sélectionner un centre</option>
+                {centres.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={label}>Producteur *</label>
+              <select
+                value={formData.producteur_id}
+                onChange={(e) => setFormData({ ...formData, producteur_id: e.target.value })}
+                style={selectInput}
+                required
+                disabled={!formData.centre_id}
+              >
+                <option value="">Sélectionner un producteur</option>
+                {filteredProducteurs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nom} ({p.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Input
+              label="Code producteur"
+              value={selectedProducteur?.code || ""}
+              readOnly
+              disabled
+              inputStyle={readOnlyInput}
+            />
+
+            <Input
+              label="Nom du centre"
+              value={centresMap[String(formData.centre_id)] || ""}
+              readOnly
+              disabled
+              inputStyle={readOnlyInput}
+            />
+
+            <Input
+              label="Nombre de sacs"
+              type="number"
+              min="0"
+              value={formData.sacs}
+              onChange={(v) => setFormData({ ...formData, sacs: v })}
+              placeholder="Ex: 10"
+            />
+
+            <Input
+              label="Poids (kg) *"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.poids}
+              onChange={(v) => setFormData({ ...formData, poids: v })}
+              placeholder="Ex: 25.5"
               required
-            >
-              <option value="">Sélectionner un centre</option>
-              {centres.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nom}
-                </option>
-              ))}
-            </select>
+            />
+
+            <Input
+              label="Prix unitaire (FCFA) *"
+              type="number"
+              step="0.01"
+              min="0"
+              value={formData.prix_unitaire}
+              onChange={(v) => setFormData({ ...formData, prix_unitaire: v })}
+              placeholder="Ex: 1500"
+              required
+            />
+
+            <Input
+              label="Date *"
+              type="date"
+              value={formData.date}
+              onChange={(v) => setFormData({ ...formData, date: v })}
+              required
+            />
+
+            <div>
+              <label style={label}>Agent</label>
+              <select
+                value={formData.agent_id}
+                onChange={(e) => setFormData({ ...formData, agent_id: e.target.value })}
+                style={selectInput}
+                disabled={!formData.centre_id}
+              >
+                <option value="">Utilisateur actuel ({user?.email || "inconnu"})</option>
+                {filteredAgents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.nom || a.email}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label style={label}>Producteur *</label>
-            <select
-              value={formData.producteur_id}
-              onChange={(e) => setFormData({ ...formData, producteur_id: e.target.value })}
-              style={selectInput}
-              required
-              disabled={!formData.centre_id}
-            >
-              <option value="">Sélectionner un producteur</option>
-              {filteredProducteurs.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nom} ({p.code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <Input
-            label="Poids (kg) *"
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.poids}
-            onChange={(v) => setFormData({ ...formData, poids: v })}
-            placeholder="Ex: 25.5"
-            required
-          />
-
-          <Input
-            label="Date *"
-            type="date"
-            value={formData.date}
-            onChange={(v) => setFormData({ ...formData, date: v })}
-            required
-          />
-
-          <div>
-            <label style={label}>Agent</label>
-            <select
-              value={formData.agent_id}
-              onChange={(e) => setFormData({ ...formData, agent_id: e.target.value })}
-              style={selectInput}
-              disabled={!formData.centre_id}
-            >
-              <option value="">Sélectionner un agent (optionnel)</option>
-              {filteredAgents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.nom || a.email}
-                </option>
-              ))}
-            </select>
+          <div style={summaryCard}>
+            <div style={summaryRow}>
+              <span style={summaryLabel}>Montant total</span>
+              <strong style={summaryValue}>{formMontant.toLocaleString("fr-FR")} FCFA</strong>
+            </div>
+            <div style={summarySubtext}>
+              Agent utilisé : {selectedAgent?.nom || selectedAgent?.email || user?.nom || user?.email || "-"}
+            </div>
           </div>
 
           <div style={formActions}>
             <Button
+              type="button"
               variant="secondary"
               onClick={() => {
                 setShowModal(false)
@@ -484,11 +689,91 @@ export default function AdminPesees() {
             >
               Annuler
             </Button>
-            <Button variant="primary" onClick={handleSave} disabled={saving}>
+            <Button type="submit" variant="primary" disabled={saving}>
               {saving ? "Enregistrement..." : "Enregistrer"}
             </Button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={showReceiptsModal}
+        onClose={() => setShowReceiptsModal(false)}
+        title="Reçus de pesée"
+        size="lg"
+      >
+        <div style={receiptsModalContent}>
+          {filteredPesees.length === 0 ? (
+            <div style={emptyState}>
+              <FaReceipt size={40} style={{ color: "#cbd5e1", marginBottom: 16 }} />
+              <p style={emptyText}>Aucun reçu disponible.</p>
+            </div>
+          ) : (
+            <div style={tableContainer}>
+              <table style={table}>
+                <thead>
+                  <tr>
+                    <th style={th}>Date</th>
+                    <th style={th}>Producteur</th>
+                    <th style={th}>Poids</th>
+                    <th style={th}>Prix unitaire</th>
+                    <th style={th}>Montant</th>
+                    <th style={th}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPesees.map((pesee) => (
+                    <tr key={`receipt-${pesee.id}`} style={tableRow}>
+                      <td style={td}>
+                        {pesee.date_pesee
+                          ? new Date(pesee.date_pesee).toLocaleDateString("fr-FR")
+                          : pesee.created_at
+                            ? new Date(pesee.created_at).toLocaleDateString("fr-FR")
+                            : "-"}
+                      </td>
+                      <td style={td}>{pesee.nom_producteur || pesee.producteurs?.nom || "-"}</td>
+                      <td style={td}>{Number(pesee.poids || 0).toLocaleString("fr-FR")} kg</td>
+                      <td style={td}>{Number(pesee.prix_unitaire || 0).toLocaleString("fr-FR")} FCFA</td>
+                      <td style={td}>{Number(pesee.montant || 0).toLocaleString("fr-FR")} FCFA</td>
+                      <td style={td}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<FaReceipt />}
+                          onClick={() => {
+                            setSelectedReceipt(pesee)
+                            setShowReceiptPreview(true)
+                          }}
+                        >
+                          Ouvrir
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={showReceiptPreview && !!selectedReceipt}
+        onClose={() => {
+          setShowReceiptPreview(false)
+          setSelectedReceipt(null)
+        }}
+        title="Reçu de pesée"
+        size="xl"
+      >
+        <CocoaReceipt
+          achat={selectedReceipt}
+          centreNom={selectedReceipt ? centresMap[String(selectedReceipt.centre_id)] : "-"}
+          onClose={() => {
+            setShowReceiptPreview(false)
+            setSelectedReceipt(null)
+          }}
+        />
       </Modal>
     </div>
   )
@@ -507,6 +792,12 @@ const header = {
   flexWrap: "wrap",
   gap: 16,
   marginBottom: 8,
+}
+
+const headerActions = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
 }
 
 const title = {
@@ -636,6 +927,10 @@ const td = {
   color: "#1f2937",
 }
 
+const tableRow = {
+  transition: "background 0.2s ease",
+}
+
 const codeBadge = {
   display: "inline-block",
   marginLeft: 8,
@@ -653,12 +948,56 @@ const form = {
   gap: 20,
 }
 
+const formGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+}
+
 const label = {
   display: "block",
   fontSize: "13px",
   color: "#374151",
   fontWeight: 600,
   marginBottom: "8px",
+}
+
+const readOnlyInput = {
+  background: "#f8fafc",
+}
+
+const summaryCard = {
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#f8fafc",
+  border: "1px solid rgba(226, 232, 240, 0.9)",
+}
+
+const summaryRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+}
+
+const summaryLabel = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#475569",
+}
+
+const summaryValue = {
+  fontSize: 18,
+  fontWeight: 800,
+  color: "#7a1f1f",
+}
+
+const summarySubtext = {
+  marginTop: 8,
+  fontSize: 12,
+  color: "#64748b",
+  lineHeight: 1.5,
 }
 
 const formActions = {
@@ -668,6 +1007,12 @@ const formActions = {
   marginTop: 8,
 }
 
+const receiptsModalContent = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 16,
+}
+
 const loadingContainer = {
   display: "flex",
   flexDirection: "column",
@@ -675,6 +1020,16 @@ const loadingContainer = {
   justifyContent: "center",
   padding: "60px 20px",
   gap: 16,
+}
+
+const errorState = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  padding: "4px 2px",
+  color: "#b91c1c",
+  fontSize: 14,
+  lineHeight: 1.5,
 }
 
 const spinner = {

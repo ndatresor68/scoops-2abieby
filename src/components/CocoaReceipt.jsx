@@ -1,6 +1,7 @@
 import React, { useMemo } from "react"
 import jsPDF from "jspdf"
 import { QRCodeCanvas } from "qrcode.react"
+import logoImage from "../assets/logo-scoops.png"
 
 /**
  * Professional Cocoa Purchase Receipt Component
@@ -102,9 +103,24 @@ function ReceiptSection({ title, data, achat, isTop }) {
     <div style={section}>
       {/* Header */}
       <div style={header}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
+          <img
+            src={logoImage}
+            alt="SCOOP ASAB Logo"
+            style={{
+              width: 56,
+              height: 56,
+              objectFit: "contain",
+              borderRadius: 14,
+              background: "#ffffff",
+              padding: 6,
+              boxShadow: "0 8px 18px rgba(15, 23, 42, 0.12)",
+            }}
+          />
+        </div>
         <div style={coopName}>SCOOP ASAB-COOP-CA</div>
         <div style={motto}>Union • Discipline • Travail</div>
-        <div style={receiptTitle}>Reçu officiel de pesée</div>
+        <div style={receiptTitle}>Reçu de pesée</div>
       </div>
 
       {/* Purchase Information */}
