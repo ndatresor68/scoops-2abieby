@@ -13,6 +13,12 @@ import Card from "../../components/ui/Card"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import {
+  buildQuotaMetrics,
+  calculateUsedKgFromAchats,
+  getActiveCampagne,
+  getCentreQuota,
+} from "../../utils/campagnes"
+import {
   MonthlyPurchasesChart,
   TopProducteursChart,
   LivraisonsStatusChart,
@@ -43,6 +49,7 @@ export default function CentreDashboardEnhanced() {
     livraisonsStatus: [],
     stockByCentre: [],
   })
+  const [quotaMetrics, setQuotaMetrics] = useState(() => buildQuotaMetrics(null, null, 0))
 
   useEffect(() => {
     if (hasFetched.current) return
@@ -69,7 +76,7 @@ export default function CentreDashboardEnhanced() {
       setCentreInfo(centreData)
 
       // Fetch all centre-specific data
-      const [producteursRes, achatsRes, livraisonsRes] = await Promise.all([
+      const [producteursRes, achatsRes, livraisonsRes, campagneData] = await Promise.all([
         supabase
           .from("producteurs")
           .select("*", { count: "exact", head: true })
@@ -83,10 +90,18 @@ export default function CentreDashboardEnhanced() {
           .from("livraisons")
           .select("poids_total, statut, date_livraison")
           .eq("centre_id", user.centre_id),
+        getActiveCampagne(),
       ])
 
       const achatsData = achatsRes?.data || []
       const livraisonsData = livraisonsRes?.data || []
+      let computedQuotaMetrics = buildQuotaMetrics(campagneData, null, 0)
+
+      if (campagneData?.id) {
+        const quotaData = await getCentreQuota(user.centre_id, campagneData.id)
+        const usedKg = calculateUsedKgFromAchats(achatsData, user.centre_id, campagneData)
+        computedQuotaMetrics = buildQuotaMetrics(campagneData, quotaData, usedKg)
+      }
 
       // Calculate statistics
       const poidsTotal = achatsData.reduce((sum, item) => sum + (Number(item.poids) || 0), 0)
@@ -101,6 +116,7 @@ export default function CentreDashboardEnhanced() {
         livraisonsValidees,
         livraisonsEnAttente,
       })
+      setQuotaMetrics(computedQuotaMetrics)
 
       // Prepare chart data
       prepareChartData(achatsData, livraisonsData, centreData)
@@ -193,6 +209,25 @@ export default function CentreDashboardEnhanced() {
         </div>
       </div>
 
+      <Card>
+        <div style={campaignBanner}>
+          <div>
+            <p style={campaignEyebrow}>Campagne active</p>
+            <h3 style={campaignTitle}>
+              {quotaMetrics.campagne?.nom || "Aucune campagne active"}
+            </h3>
+            <p style={campaignText}>
+              {quotaMetrics.campagne
+                ? `${quotaMetrics.campagne.type || "CAMPAGNE"} · Prix ${Number(quotaMetrics.prixKg || 0).toLocaleString("fr-FR")} FCFA / kg`
+                : "Aucune campagne active n'est disponible pour calculer le quota du centre."}
+            </p>
+          </div>
+          <div style={campaignBadge}>
+            {quotaMetrics.campagne?.statut || "INACTIF"}
+          </div>
+        </div>
+      </Card>
+
       {/* Statistics Cards */}
       <div style={statsGrid}>
         <StatCard
@@ -238,6 +273,62 @@ export default function CentreDashboardEnhanced() {
           bgColor="#fffbeb"
         />
       </div>
+
+      <div style={statsGrid}>
+        <StatCard
+          icon={<FaWeightHanging size={30} />}
+          title="Quota total (Kg)"
+          value={quotaMetrics.quotaKg.toLocaleString("fr-FR")}
+          color="#7a1f1f"
+          bgColor="#fef2f2"
+        />
+        <StatCard
+          icon={<FaBox size={28} />}
+          title="Kg utilisés"
+          value={quotaMetrics.usedKg.toLocaleString("fr-FR")}
+          color="#2563eb"
+          bgColor="#eff6ff"
+        />
+        <StatCard
+          icon={<FaCheckCircle size={28} />}
+          title="Kg restants"
+          value={quotaMetrics.remainingKg.toLocaleString("fr-FR")}
+          color="#16a34a"
+          bgColor="#ecfdf3"
+        />
+        <StatCard
+          icon={<FaClock size={28} />}
+          title="Quota utilisé"
+          value={`${quotaMetrics.usagePercentage.toFixed(1)} %`}
+          color="#f59e0b"
+          bgColor="#fffbeb"
+        />
+      </div>
+
+      <Card>
+        <div style={quotaDetailCard}>
+          <div style={quotaDetailRow}>
+            <span style={quotaDetailLabel}>Budget total calculé</span>
+            <strong style={quotaDetailValue}>
+              {quotaMetrics.totalBudget.toLocaleString("fr-FR")} FCFA
+            </strong>
+          </div>
+          <div style={quotaDetailRow}>
+            <span style={quotaDetailLabel}>Budget consommé</span>
+            <strong style={quotaDetailValue}>
+              {quotaMetrics.usedBudget.toLocaleString("fr-FR")} FCFA
+            </strong>
+          </div>
+          <div style={quotaProgressTrack}>
+            <div
+              style={{
+                ...quotaProgressFill,
+                width: `${Math.max(0, Math.min(100, quotaMetrics.usagePercentage || 0))}%`,
+              }}
+            />
+          </div>
+        </div>
+      </Card>
 
       {/* Charts Grid */}
       <div style={chartsGrid}>
@@ -300,6 +391,44 @@ const subtitle = {
   color: "#6b7280",
 }
 
+const campaignBanner = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap",
+}
+
+const campaignEyebrow = {
+  margin: 0,
+  fontSize: 12,
+  color: "#7a1f1f",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+}
+
+const campaignTitle = {
+  margin: "8px 0 6px 0",
+  fontSize: "24px",
+  color: "#111827",
+}
+
+const campaignText = {
+  margin: 0,
+  color: "#6b7280",
+  lineHeight: 1.6,
+}
+
+const campaignBadge = {
+  padding: "10px 14px",
+  borderRadius: 999,
+  background: "#ecfdf3",
+  color: "#166534",
+  fontWeight: 700,
+  fontSize: 12,
+}
+
 const statsGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
@@ -340,6 +469,43 @@ const statValue = {
   fontSize: "24px",
   fontWeight: 700,
   color: "#1f2937",
+}
+
+const quotaDetailCard = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+}
+
+const quotaDetailRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap",
+}
+
+const quotaDetailLabel = {
+  color: "#6b7280",
+  fontWeight: 600,
+}
+
+const quotaDetailValue = {
+  color: "#111827",
+}
+
+const quotaProgressTrack = {
+  width: "100%",
+  height: 12,
+  borderRadius: 999,
+  background: "#e5e7eb",
+  overflow: "hidden",
+}
+
+const quotaProgressFill = {
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #f59e0b 0%, #16a34a 100%)",
 }
 
 const loadingContainer = {

@@ -13,6 +13,7 @@ import {
   FaCog,
   FaEdit,
   FaExclamationTriangle,
+  FaFlag,
   FaHistory,
   FaIdBadge,
   FaKey,
@@ -34,6 +35,7 @@ import AdminAgents from "./admin/AdminAgents"
 import AdminActivities from "./admin/AdminActivities"
 import AdminCentres from "./admin/AdminCentres"
 import AdminNotifications from "./admin/AdminNotifications"
+import Campagnes from "./admin/Campagnes"
 import AdminOpportunities from "./admin/Opportunities"
 import AdminParcelles from "./admin/AdminParcelles"
 import AdminPesees from "./admin/AdminPesees"
@@ -67,6 +69,7 @@ const SECTIONS = {
   centres: { id: "centres", label: "Centres", icon: FaBuilding },
   producteurs: { id: "producteurs", label: "Producteurs", icon: FaUserTie },
   employes: { id: "employes", label: "Personnel", icon: FaIdBadge },
+  campagnes: { id: "campagnes", label: "Campagnes", icon: FaFlag },
   pesees: { id: "pesees", label: "Pesées", icon: FaWeightHanging },
   parcelles: { id: "parcelles", label: "Parcelles", icon: FaMapMarkerAlt },
   notifications: { id: "notifications", label: "Notifications", icon: FaPaperPlane },
@@ -82,6 +85,7 @@ const SECTION_PATHS = {
   centres: "/admin/centres",
   producteurs: "/admin/producteurs",
   employes: "/admin/employes",
+  campagnes: "/admin/campagnes",
   pesees: "/admin/pesees",
   parcelles: "/admin/parcelles",
   activites: "/admin/activity",
@@ -99,6 +103,7 @@ const SECTION_DETAILS = {
   centres: { badge: "Network", description: "Organisation des centres de collecte." },
   producteurs: { badge: "Growth", description: "Suivi des producteurs." },
   employes: { badge: "HR", description: "Gestion du personnel, des salaires et des postes." },
+  campagnes: { badge: "Campaigns", description: "Gestion des campagnes, quotas centres et budgets automatiques." },
   pesees: { badge: "Weights", description: "Volumes et operations de pesee." },
   parcelles: { badge: "Maps", description: "Parcelles et informations associees." },
   notifications: { badge: "Comms", description: "Centre de notifications." },
@@ -107,7 +112,7 @@ const SECTION_DETAILS = {
 
 const SECTION_GROUPS = [
   { id: "workspace", label: "Workspace", items: ["stats", "chat", "opportunities", "activites", "notifications"] },
-  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "employes", "pesees", "parcelles", "settings"] },
+  { id: "operations", label: "Operations", items: ["users", "agents", "centres", "producteurs", "employes", "campagnes", "pesees", "parcelles", "settings"] },
 ]
 
 function getSectionFromPath(pathname) {
@@ -428,6 +433,8 @@ export default function AdminDashboard() {
         return <AdminProducteurs />
       case "employes":
         return <EmployesPage />
+      case "campagnes":
+        return <Campagnes />
       case "pesees":
         return <AdminPesees />
       case "parcelles":

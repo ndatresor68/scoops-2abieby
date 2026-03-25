@@ -11,6 +11,13 @@ import { logAchatCreated } from "./utils/activityLogger"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import CocoaReceipt from "./components/CocoaReceipt"
 import { canPerformAction, getAchatsQuery, getProducteursQuery } from "./utils/rolePermissions"
+import {
+  assertQuotaAvailable,
+  buildQuotaMetrics,
+  calculateUsedKgFromAchats,
+  getActiveCampagne,
+  getCentreQuota,
+} from "./utils/campagnes"
 import { addToQueue, cacheTableData, createOfflineRecord, getCachedTableData, isOfflineMode } from "./services/offlineService"
 
 export default function Achats() {
@@ -30,15 +37,21 @@ export default function Achats() {
 
   const [sacs, setSacs] = useState("")
   const [poids, setPoids] = useState("")
-  const [prixKg, setPrixKg] = useState("")
+  const [activeCampagne, setActiveCampagne] = useState(null)
+  const [centreQuota, setCentreQuota] = useState(null)
+  const [campagneError, setCampagneError] = useState("")
 
   const selectedProd = useMemo(
     () => producteurs.find((p) => String(p.id) === String(selectedProdId)) || null,
     [producteurs, selectedProdId],
   )
 
-  // Calculate montant automatically: montant = poids * prix_unitaire
-  const montant = poids && prixKg ? Number(poids) * Number(prixKg) : 0
+  const montant = poids && activeCampagne?.prix_kg ? Number(poids) * Number(activeCampagne.prix_kg) : 0
+
+  const quotaMetrics = useMemo(() => {
+    const usedKg = calculateUsedKgFromAchats(achats, user?.centre_id, activeCampagne)
+    return buildQuotaMetrics(activeCampagne, centreQuota, usedKg)
+  }, [achats, activeCampagne, centreQuota, user?.centre_id])
 
   // Load purchases from Supabase with role-based filtering
   async function loadAchats() {
@@ -114,6 +127,7 @@ export default function Achats() {
       setProducteurs(producteursData || [])
       setCentres(centresData || [])
       // setAchats is already called in loadAchats()
+      await loadCampagneContext()
     } catch (error) {
       console.error("[Achats] Error fetching initial data:", error)
       showToast("Erreur lors du chargement", "error")
@@ -134,7 +148,39 @@ export default function Achats() {
     setSelectedProdId("")
     setSacs("")
     setPoids("")
-    setPrixKg("")
+  }
+
+  async function loadCampagneContext() {
+    if (!user?.centre_id) {
+      setActiveCampagne(null)
+      setCentreQuota(null)
+      setCampagneError("")
+      return
+    }
+
+    try {
+      setCampagneError("")
+      const campagne = await getActiveCampagne()
+      setActiveCampagne(campagne)
+
+      if (!campagne) {
+        setCentreQuota(null)
+        setCampagneError("Aucune campagne active n'est disponible pour le moment.")
+        return
+      }
+
+      const quota = await getCentreQuota(user.centre_id, campagne.id)
+      setCentreQuota(quota)
+
+      if (!quota) {
+        setCampagneError("Aucun quota n'est configuré pour votre centre dans la campagne active.")
+      }
+    } catch (error) {
+      console.error("[Achats] Error loading campagne context:", error)
+      setActiveCampagne(null)
+      setCentreQuota(null)
+      setCampagneError(error?.message || "Erreur lors du chargement de la campagne active.")
+    }
   }
 
   async function savePesee() {
@@ -143,16 +189,17 @@ export default function Achats() {
       return
     }
 
-    if (!poids || !prixKg) {
-      showToast("Remplissez le poids et le prix", "error")
+    if (!poids) {
+      showToast("Remplissez le poids", "error")
       return
     }
 
     try {
-      // Calculate montant automatically: montant = poids * prix_unitaire
-      const prixUnitaire = Number(prixKg)
       const poidsNet = Number(poids)
+      const prixUnitaire = Number(activeCampagne?.prix_kg || 0)
       const montantCalcule = poidsNet * prixUnitaire
+
+      assertQuotaAvailable(quotaMetrics, poidsNet)
 
       // For CENTRE users, ensure centre_id matches their centre
       const centreId = user?.role === "CENTRE" ? user.centre_id : (selectedProd.centre_id || null)
@@ -219,9 +266,10 @@ export default function Achats() {
       
       // Reload purchases after inserting
       await loadAchats()
+      await loadCampagneContext()
     } catch (error) {
       console.error(error)
-      showToast("Erreur lors de l'enregistrement", "error")
+      showToast(error?.message || "Erreur lors de l'enregistrement", "error")
     }
   }
 
@@ -534,6 +582,18 @@ export default function Achats() {
           }}
         >
           <div style={formGrid}>
+            <Input
+              label="Campagne active"
+              value={
+                activeCampagne
+                  ? `${activeCampagne.nom} (${activeCampagne.type || "CAMPAGNE"})`
+                  : "Aucune campagne active"
+              }
+              readOnly
+              disabled
+              inputStyle={{ background: "#f9fafb" }}
+            />
+
             <div style={formGroup}>
               <label style={label}>Producteur *</label>
               <select
@@ -556,7 +616,7 @@ export default function Achats() {
               value={selectedProd?.code || ""}
               readOnly
               disabled
-              style={{ background: "#f9fafb" }}
+              inputStyle={{ background: "#f9fafb" }}
             />
 
             <Input
@@ -564,7 +624,7 @@ export default function Achats() {
               value={getCentreNom(selectedProd?.centre_id) || "-"}
               readOnly
               disabled
-              style={{ background: "#f9fafb" }}
+              inputStyle={{ background: "#f9fafb" }}
             />
 
             <Input
@@ -588,16 +648,36 @@ export default function Achats() {
               />
 
             <Input
-              label="Prix par Kg (FCFA) *"
-                type="number"
-                min="0"
-              step="0.01"
-                value={prixKg}
-              onChange={setPrixKg}
-              required
-              placeholder="0.00"
-              />
+              label="Prix campagne (FCFA / kg)"
+              value={Number(activeCampagne?.prix_kg || 0).toLocaleString("fr-FR")}
+              readOnly
+              disabled
+              inputStyle={{ background: "#f9fafb" }}
+            />
           </div>
+
+          {campagneError ? <div style={campaignAlert}>{campagneError}</div> : null}
+
+          {activeCampagne && centreQuota ? (
+            <div style={quotaGrid}>
+              <div style={quotaItem}>
+                <span style={quotaLabel}>Quota total</span>
+                <strong style={quotaValue}>{quotaMetrics.quotaKg.toLocaleString("fr-FR")} kg</strong>
+              </div>
+              <div style={quotaItem}>
+                <span style={quotaLabel}>Utilisé</span>
+                <strong style={quotaValue}>{quotaMetrics.usedKg.toLocaleString("fr-FR")} kg</strong>
+              </div>
+              <div style={quotaItem}>
+                <span style={quotaLabel}>Restant</span>
+                <strong style={quotaValue}>{quotaMetrics.remainingKg.toLocaleString("fr-FR")} kg</strong>
+              </div>
+              <div style={quotaItem}>
+                <span style={quotaLabel}>Budget total</span>
+                <strong style={quotaValue}>{quotaMetrics.totalBudget.toLocaleString("fr-FR")} FCFA</strong>
+              </div>
+            </div>
+          ) : null}
 
           <div style={montantBox}>
             <div style={montantLabel}>Montant total</div>
@@ -627,7 +707,7 @@ export default function Achats() {
             </Button>
             <Button type="submit" variant="primary" style={{
               width: isMobile ? "100%" : "auto",
-            }}>
+            }} disabled={!activeCampagne || !centreQuota}>
               Enregistrer la pesée
             </Button>
           </div>
@@ -790,6 +870,47 @@ const formGrid = {
   display: "grid",
   gap: 16,
   marginBottom: 20,
+}
+
+const campaignAlert = {
+  marginBottom: 20,
+  padding: "14px 16px",
+  borderRadius: "12px",
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+  color: "#9a3412",
+  fontSize: "14px",
+  lineHeight: 1.6,
+}
+
+const quotaGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gap: 12,
+  marginBottom: 20,
+}
+
+const quotaItem = {
+  padding: "14px 16px",
+  borderRadius: "12px",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+}
+
+const quotaLabel = {
+  fontSize: "12px",
+  fontWeight: 700,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}
+
+const quotaValue = {
+  fontSize: "18px",
+  color: "#0f172a",
 }
 
 const formGroup = {

@@ -8,6 +8,14 @@ import Modal from "../../components/ui/Modal"
 import { useToast } from "../../components/ui/Toast"
 import { useAuth } from "../../context/AuthContext"
 import CocoaReceipt from "../../components/CocoaReceipt"
+import {
+  assertQuotaAvailable,
+  buildQuotaMetrics,
+  calculateUsedKgFromAchats,
+  getActiveCampagne,
+  getCentreQuota,
+  isDateWithinCampagne,
+} from "../../utils/campagnes"
 
 export default function AdminPesees() {
   const { isAdmin, user } = useAuth()
@@ -27,13 +35,15 @@ export default function AdminPesees() {
   const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const [activeCampagne, setActiveCampagne] = useState(null)
+  const [selectedCentreQuota, setSelectedCentreQuota] = useState(null)
+  const [campagneError, setCampagneError] = useState("")
   
   const [formData, setFormData] = useState({
     centre_id: "",
     producteur_id: "",
     poids: "",
     sacs: "",
-    prix_unitaire: "",
     date: new Date().toISOString().split("T")[0],
     agent_id: "",
   })
@@ -46,6 +56,25 @@ export default function AdminPesees() {
     console.log("[AdminPesees] Initializing page")
     fetchData()
   }, [isAdmin])
+
+  useEffect(() => {
+    async function fetchSelectedCentreQuota() {
+      if (!formData.centre_id || !activeCampagne?.id) {
+        setSelectedCentreQuota(null)
+        return
+      }
+
+      try {
+        const quota = await getCentreQuota(formData.centre_id, activeCampagne.id)
+        setSelectedCentreQuota(quota)
+      } catch (error) {
+        console.error("[AdminPesees] Error loading selected centre quota:", error)
+        setSelectedCentreQuota(null)
+      }
+    }
+
+    fetchSelectedCentreQuota()
+  }, [formData.centre_id, activeCampagne?.id])
 
   async function fetchData() {
     try {
@@ -101,6 +130,7 @@ export default function AdminPesees() {
       setCentres(centresData || [])
       setProducteurs(producteursData || [])
       setAgents(agentsData || [])
+      await loadCampagneContext()
     } catch (error) {
       console.error("[AdminPesees] Error fetching data:", error)
       setErrorMessage(error?.message || "Erreur lors du chargement des données")
@@ -184,14 +214,35 @@ export default function AdminPesees() {
 
   const formMontant = useMemo(() => {
     const poids = Number(formData.poids || 0)
-    const prixUnitaire = Number(formData.prix_unitaire || 0)
+    const prixUnitaire = Number(activeCampagne?.prix_kg || 0)
     return poids > 0 && prixUnitaire > 0 ? poids * prixUnitaire : 0
-  }, [formData.poids, formData.prix_unitaire])
+  }, [activeCampagne?.prix_kg, formData.poids])
+
+  const selectedCentreQuotaMetrics = useMemo(() => {
+    const usedKg = calculateUsedKgFromAchats(pesees, formData.centre_id, activeCampagne)
+    return buildQuotaMetrics(activeCampagne, selectedCentreQuota, usedKg)
+  }, [activeCampagne, formData.centre_id, pesees, selectedCentreQuota])
+
+  async function loadCampagneContext() {
+    try {
+      setCampagneError("")
+      const campagne = await getActiveCampagne()
+      setActiveCampagne(campagne)
+
+      if (!campagne) {
+        setCampagneError("Aucune campagne active n'est disponible pour les pesées.")
+      }
+    } catch (error) {
+      console.error("[AdminPesees] Error loading campagne context:", error)
+      setActiveCampagne(null)
+      setCampagneError(error?.message || "Erreur lors du chargement de la campagne active.")
+    }
+  }
 
   async function handleSave(event) {
     event?.preventDefault?.()
 
-    if (!formData.centre_id || !formData.producteur_id || !formData.poids || !formData.prix_unitaire || !formData.date) {
+    if (!formData.centre_id || !formData.producteur_id || !formData.poids || !formData.date) {
       showToast("Veuillez remplir tous les champs obligatoires de la pesée", "error")
       return
     }
@@ -206,8 +257,13 @@ export default function AdminPesees() {
       return
     }
 
-    if (Number(formData.prix_unitaire) <= 0) {
-      showToast("Le prix unitaire doit être supérieur à 0.", "error")
+    if (!activeCampagne?.id) {
+      showToast("Aucune campagne active n'est disponible.", "error")
+      return
+    }
+
+    if (!isDateWithinCampagne(formData.date, activeCampagne)) {
+      showToast("La date choisie est hors de la campagne active.", "error")
       return
     }
 
@@ -221,12 +277,14 @@ export default function AdminPesees() {
       setErrorMessage("")
       console.log("[AdminPesees] Submitting form", formData)
 
+      assertQuotaAvailable(selectedCentreQuotaMetrics, Number(formData.poids))
+
       const payload = {
         centre_id: formData.centre_id,
         producteur_id: formData.producteur_id,
         poids: Number(formData.poids),
         sacs: Number(formData.sacs) || 0,
-        prix_unitaire: Number(formData.prix_unitaire),
+        prix_unitaire: Number(activeCampagne?.prix_kg || 0),
         montant: formMontant,
         date_pesee: new Date(formData.date).toISOString(),
         utilisateur_id: formData.agent_id || user?.id,
@@ -264,7 +322,7 @@ export default function AdminPesees() {
     } catch (error) {
       console.error("[AdminPesees] Error saving pesee:", error)
       setErrorMessage(error?.message || "Erreur lors de l'enregistrement")
-      showToast("Erreur lors de l'enregistrement", "error")
+      showToast(error?.message || "Erreur lors de l'enregistrement", "error")
     } finally {
       setSaving(false)
     }
@@ -276,7 +334,6 @@ export default function AdminPesees() {
       producteur_id: "",
       poids: "",
       sacs: "",
-      prix_unitaire: "",
       date: new Date().toISOString().split("T")[0],
       agent_id: "",
     })
@@ -552,6 +609,18 @@ export default function AdminPesees() {
       >
         <form onSubmit={handleSave} style={form}>
           <div style={formGrid}>
+            <Input
+              label="Campagne active"
+              value={
+                activeCampagne
+                  ? `${activeCampagne.nom} (${activeCampagne.type || "CAMPAGNE"})`
+                  : "Aucune campagne active"
+              }
+              readOnly
+              disabled
+              inputStyle={readOnlyInput}
+            />
+
             <div>
               <label style={label}>Centre *</label>
               <select
@@ -631,14 +700,11 @@ export default function AdminPesees() {
             />
 
             <Input
-              label="Prix unitaire (FCFA) *"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.prix_unitaire}
-              onChange={(v) => setFormData({ ...formData, prix_unitaire: v })}
-              placeholder="Ex: 1500"
-              required
+              label="Prix campagne (FCFA / kg)"
+              value={Number(activeCampagne?.prix_kg || 0).toLocaleString("fr-FR")}
+              readOnly
+              disabled
+              inputStyle={readOnlyInput}
             />
 
             <Input
@@ -667,6 +733,43 @@ export default function AdminPesees() {
             </div>
           </div>
 
+          {campagneError ? <div style={campaignAlert}>{campagneError}</div> : null}
+
+          {!campagneError && activeCampagne && formData.centre_id && !selectedCentreQuota ? (
+            <div style={campaignAlert}>
+              Aucun quota n'est configuré pour ce centre dans la campagne active.
+            </div>
+          ) : null}
+
+          {activeCampagne && formData.centre_id ? (
+            <div style={quotaSummaryGrid}>
+              <div style={quotaSummaryItem}>
+                <span style={quotaSummaryLabel}>Quota total</span>
+                <strong style={quotaSummaryValue}>
+                  {selectedCentreQuotaMetrics.quotaKg.toLocaleString("fr-FR")} kg
+                </strong>
+              </div>
+              <div style={quotaSummaryItem}>
+                <span style={quotaSummaryLabel}>Déjà utilisé</span>
+                <strong style={quotaSummaryValue}>
+                  {selectedCentreQuotaMetrics.usedKg.toLocaleString("fr-FR")} kg
+                </strong>
+              </div>
+              <div style={quotaSummaryItem}>
+                <span style={quotaSummaryLabel}>Restant</span>
+                <strong style={quotaSummaryValue}>
+                  {selectedCentreQuotaMetrics.remainingKg.toLocaleString("fr-FR")} kg
+                </strong>
+              </div>
+              <div style={quotaSummaryItem}>
+                <span style={quotaSummaryLabel}>Budget quota</span>
+                <strong style={quotaSummaryValue}>
+                  {selectedCentreQuotaMetrics.totalBudget.toLocaleString("fr-FR")} FCFA
+                </strong>
+              </div>
+            </div>
+          ) : null}
+
           <div style={summaryCard}>
             <div style={summaryRow}>
               <span style={summaryLabel}>Montant total</span>
@@ -689,7 +792,11 @@ export default function AdminPesees() {
             >
               Annuler
             </Button>
-            <Button type="submit" variant="primary" disabled={saving}>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={saving || !activeCampagne || !selectedCentreQuota}
+            >
               {saving ? "Enregistrement..." : "Enregistrer"}
             </Button>
           </div>
@@ -964,6 +1071,45 @@ const label = {
 
 const readOnlyInput = {
   background: "#f8fafc",
+}
+
+const campaignAlert = {
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+  color: "#9a3412",
+  fontSize: "14px",
+  lineHeight: 1.6,
+}
+
+const quotaSummaryGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
+}
+
+const quotaSummaryItem = {
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#f8fafc",
+  border: "1px solid rgba(226, 232, 240, 0.9)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+}
+
+const quotaSummaryLabel = {
+  fontSize: "12px",
+  color: "#64748b",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+}
+
+const quotaSummaryValue = {
+  color: "#0f172a",
+  fontSize: "18px",
 }
 
 const summaryCard = {
