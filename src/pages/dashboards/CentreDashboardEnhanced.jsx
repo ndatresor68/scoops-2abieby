@@ -83,7 +83,7 @@ export default function CentreDashboardEnhanced() {
           .eq("centre_id", user.centre_id),
         supabase
           .from("achats")
-          .select("poids, montant, date_pesee, nom_producteur, code_producteur")
+          .select("poids, montant, campagne_id, date_pesee, nom_producteur, code_producteur")
           .eq("centre_id", user.centre_id)
           .order("date_pesee", { ascending: false }),
         supabase

@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS public.settings (
   contact_email TEXT,
   default_language TEXT DEFAULT 'fr',
   currency TEXT DEFAULT 'FCFA',
+  homepage_banner_enabled BOOLEAN DEFAULT true,
+  homepage_banner_text TEXT DEFAULT 'Bienvenue sur SCOOP ASAB-COOP-CA • Suivi des campagnes • Gestion des quotas • Pesées sécurisées en temps réel',
+  homepage_banner_speed_seconds INTEGER DEFAULT 22,
   
   -- System Settings
   notifications_enabled BOOLEAN DEFAULT true,

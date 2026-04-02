@@ -7,11 +7,10 @@ export default function Contact() {
       intro="Pour toute demande d'information, d'assistance ou de partenariat, vous pouvez joindre directement l'équipe de référence de la plateforme."
       sections={[
         {
-          heading: "Coordonnées",
+          heading: "CONTACTS",
           content: [
             "Email : ndatresor68@gmail.com",
             "Téléphone : 0715887556",
-            "WhatsApp : https://wa.me/2250715887555",
           ],
         },
         {

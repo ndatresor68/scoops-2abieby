@@ -58,6 +58,10 @@ const DEFAULT_SETTINGS = {
   contact_email: "",
   default_language: "fr",
   currency: "FCFA",
+  homepage_banner_enabled: true,
+  homepage_banner_text:
+    "Bienvenue sur SCOOP ASAB-COOP-CA • Suivi des campagnes • Gestion des quotas • Pesées sécurisées en temps réel",
+  homepage_banner_speed_seconds: 22,
   
   // System Settings
   notifications_enabled: true,
@@ -518,6 +522,52 @@ export default function AdminSettings() {
                     <option value="USD">USD</option>
                   </select>
                 </div>
+              </div>
+            </div>
+
+            <div style={section}>
+              <div style={sectionHeader}>
+                <FaImage size={20} style={{ color: "#7a1f1f" }} />
+                <h3 style={sectionTitle}>Bannière d'accueil</h3>
+              </div>
+              <div style={toggleGroup}>
+                <label style={toggleLabel}>
+                  <input
+                    type="checkbox"
+                    checked={!!settings.homepage_banner_enabled}
+                    onChange={(e) =>
+                      setSettings({ ...settings, homepage_banner_enabled: e.target.checked })
+                    }
+                    style={checkbox}
+                  />
+                  <span>Afficher une bannière défilante en haut de l'accueil</span>
+                </label>
+              </div>
+              <div style={fieldsGrid}>
+                <div style={fullWidth}>
+                  <label style={label}>Texte de la bannière</label>
+                  <textarea
+                    value={settings.homepage_banner_text || ""}
+                    onChange={(e) =>
+                      setSettings({ ...settings, homepage_banner_text: e.target.value })
+                    }
+                    placeholder="Ex: Campagne principale en cours • Prix mis à jour • Quotas centres disponibles"
+                    rows={4}
+                    style={textarea}
+                  />
+                </div>
+                <Input
+                  label="Durée du défilement (secondes)"
+                  value={settings.homepage_banner_speed_seconds}
+                  onChange={(v) =>
+                    setSettings({
+                      ...settings,
+                      homepage_banner_speed_seconds: Math.max(8, parseInt(v, 10) || 22),
+                    })
+                  }
+                  type="number"
+                  icon={<FaClock />}
+                />
               </div>
             </div>
           </Card>
@@ -1008,6 +1058,22 @@ const select = {
   color: "#111827",
   cursor: "pointer",
   transition: "border-color 0.2s ease",
+}
+
+const textarea = {
+  width: "100%",
+  minHeight: 112,
+  border: "1px solid #e5e7eb",
+  borderRadius: "14px",
+  padding: "12px 14px",
+  fontSize: "14px",
+  background: "white",
+  color: "#111827",
+  fontFamily: "inherit",
+  lineHeight: 1.6,
+  boxSizing: "border-box",
+  resize: "vertical",
+  outline: "none",
 }
 
 const toggleGroup = {

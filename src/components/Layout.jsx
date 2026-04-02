@@ -1,27 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react"
 import { FaBars, FaChevronLeft, FaChevronRight } from "react-icons/fa"
-import Achats from "../achats"
-import Centres from "../Centres"
-import DashboardCentral from "../DashboardCentral"
-import About from "../pages/About"
-import Contact from "../pages/Contact"
-import Login from "../Login"
-import Parametres from "../Parametres"
-import Privacy from "../pages/Privacy"
-import Producteurs from "../Producteurs"
-import Parcelles from "../Parcelles"
-import GestionParcelles from "../pages/GestionParcelles"
-import Livraisons from "../Livraisons"
 import { useAuth } from "../context/AuthContext"
 import { useSettings, useSessionTimeout } from "../context/SettingsContext"
-import AdminUsers from "../pages/AdminUsers"
-import AdminDashboard from "../pages/AdminDashboard"
-import AdminDashboardRole from "../pages/dashboards/AdminDashboard"
-import CentreDashboardEnhanced from "../pages/dashboards/CentreDashboardEnhanced"
-import AgentDashboard from "../pages/dashboards/AgentDashboard"
-import Chat from "../pages/Chat"
-import Opportunities from "../pages/Opportunities"
-import Profile from "../pages/Profile"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
 import { initializeSessionTimeout } from "../utils/sessionManager"
@@ -56,6 +36,23 @@ const PAGE_PATHS = {
 }
 
 const PUBLIC_PAGES = new Set(["about", "contact", "privacy"])
+
+const Achats = lazy(() => import("../achats"))
+const DashboardCentral = lazy(() => import("../DashboardCentral"))
+const About = lazy(() => import("../pages/About"))
+const Contact = lazy(() => import("../pages/Contact"))
+const Login = lazy(() => import("../Login"))
+const Parametres = lazy(() => import("../Parametres"))
+const Privacy = lazy(() => import("../pages/Privacy"))
+const Producteurs = lazy(() => import("../Producteurs"))
+const GestionParcelles = lazy(() => import("../pages/GestionParcelles"))
+const Livraisons = lazy(() => import("../Livraisons"))
+const AdminDashboard = lazy(() => import("../pages/AdminDashboard"))
+const CentreDashboardEnhanced = lazy(() => import("../pages/dashboards/CentreDashboardEnhanced"))
+const AgentDashboard = lazy(() => import("../pages/dashboards/AgentDashboard"))
+const Chat = lazy(() => import("../pages/Chat"))
+const Opportunities = lazy(() => import("../pages/Opportunities"))
+const Profile = lazy(() => import("../pages/Profile"))
 
 function getPageFromPath(pathname) {
   if (pathname === "/about") return "about"
@@ -92,6 +89,7 @@ export default function Layout() {
   const fcmListenerSetupRef = useRef(false)
   const fcmTokenSetupRef = useRef(false)
   const notificationPermissionRequestedRef = useRef(false)
+  const notificationWarningShownRef = useRef(false)
 
   // Initialize session timeout
   useEffect(() => {
@@ -179,6 +177,16 @@ export default function Layout() {
       }
     })()
   }, [user?.id])
+
+  useEffect(() => {
+    if (!user || notificationPermission !== "denied" || notificationWarningShownRef.current) return
+    notificationWarningShownRef.current = true
+    showToast(
+      "Les notifications sont désactivées. L'application reste utilisable, mais certaines alertes temps réel peuvent manquer.",
+      "warning",
+      5000
+    )
+  }, [notificationPermission, showToast, user])
 
   // FCM: listen for foreground messages + register device token in DB.
   // This is best-effort: it must never break the app if FCM isn't available/configured.
@@ -290,7 +298,11 @@ export default function Layout() {
   }
 
   if (!user && sessionChecked) {
-    return <Login />
+    return (
+      <Suspense fallback={<div style={loadingScreen}><div style={spinner}></div><p style={{ marginTop: 20, fontSize: 16, color: "#6b7280" }}>Chargement...</p></div>}>
+        <Login />
+      </Suspense>
+    )
   }
 
   // If user is null but session check hasn't completed, show loading
@@ -303,49 +315,13 @@ export default function Layout() {
     )
   }
 
-  if (user && !notificationPermissionResolved) {
-    return (
-      <div style={permissionScreen}>
-        <div style={permissionCard}>
-          <h1 style={permissionTitle}>Activation des notifications</h1>
-          <p style={permissionMessage}>
-            Une demande d'autorisation est en cours. Veuillez accepter les notifications pour
-            continuer.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  if (user && notificationPermission === "denied") {
-    return (
-      <div style={permissionScreen}>
-        <div style={permissionCard}>
-          <h1 style={permissionTitle}>Notifications requises</h1>
-          <p style={permissionMessage}>
-            Les notifications sont obligatoires pour utiliser l'application
-          </p>
-          <p style={permissionHelp}>
-            Android Chrome: Paramètres &gt; Notifications &gt; Autoriser
-          </p>
-          <button
-            type="button"
-            style={permissionButton}
-            onClick={() => {
-              window.alert("Paramètres > Notifications > Autoriser")
-              window.location.reload()
-            }}
-          >
-            Activer les notifications
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   // ADMIN users: Show only the AdminDashboard interface (no regular Layout)
   if (isAdmin) {
-    return <AdminDashboard />
+    return (
+      <Suspense fallback={<div style={loadingScreen}><div style={spinner}></div><p style={{ marginTop: 20, fontSize: 16, color: "#6b7280" }}>Chargement du dashboard admin...</p></div>}>
+        <AdminDashboard />
+      </Suspense>
+    )
   }
 
   function navigateToPage(nextPage) {
@@ -489,7 +465,18 @@ export default function Layout() {
         <main style={{
           ...content,
           padding: isMobile ? "16px" : "32px",
-        }}>{renderPage()}</main>
+        }}>
+          <Suspense
+            fallback={
+              <div style={pageFallback}>
+                <div style={spinner}></div>
+                <p style={pageFallbackText}>Chargement de la page...</p>
+              </div>
+            }
+          >
+            {renderPage()}
+          </Suspense>
+        </main>
         <footer style={footer}>{renderFooterLinks(navigateToPage)}</footer>
       </div>
     </div>
@@ -522,6 +509,21 @@ const mainArea = {
   transition: "margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
   display: "flex",
   flexDirection: "column",
+}
+
+const pageFallback = {
+  minHeight: 260,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 14,
+}
+
+const pageFallbackText = {
+  margin: 0,
+  fontSize: 14,
+  color: "#64748b",
 }
 
 const publicShell = {

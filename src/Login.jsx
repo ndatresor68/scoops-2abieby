@@ -1,13 +1,27 @@
-import { useState } from "react"
-import { FaArrowRight, FaCheckCircle, FaEnvelope, FaLock, FaPhoneAlt, FaShieldAlt, FaUser } from "react-icons/fa"
+import { useMemo, useState } from "react"
+import {
+  FaArrowRight,
+  FaChartLine,
+  FaCheckCircle,
+  FaEnvelope,
+  FaEye,
+  FaEyeSlash,
+  FaLock,
+  FaPhoneAlt,
+  FaShieldAlt,
+  FaUser,
+  FaUserFriends,
+  FaWeightHanging,
+} from "react-icons/fa"
 import { useAuth } from "./context/AuthContext"
-import { useUserRegistration } from "./context/SettingsContext"
+import { useSettings, useUserRegistration } from "./context/SettingsContext"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { useTranslation } from "./utils/i18n"
 import logoImage from "./assets/logo-scoops.png"
 
 export default function Login() {
   const { signInWithPassword } = useAuth()
+  const { settings } = useSettings()
   const allowRegistration = useUserRegistration()
   const isMobile = useMediaQuery("(max-width: 900px)")
   const { t } = useTranslation()
@@ -16,6 +30,22 @@ export default function Login() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const marqueeText = settings?.homepage_banner_text?.trim()
+  const marqueeEnabled = !!settings?.homepage_banner_enabled && !!marqueeText
+  const marqueeDuration = Math.max(8, Number(settings?.homepage_banner_speed_seconds) || 22)
+  const contactEmail = settings?.contact_email || "ndatresor68@gmail.com"
+  const contactPhone = settings?.contact_phone || "0715887556"
+  const cooperativeName = settings?.cooperative_name || "SCOOP ASAB-COOP-CA"
+  const cooperativeMotto = settings?.cooperative_motto || "Union • Discipline • Travail"
+  const heroStats = useMemo(
+    () => [
+      { label: "Campagnes", value: "Pilotage", icon: <FaChartLine size={14} /> },
+      { label: "Centres", value: "Connectés", icon: <FaUserFriends size={14} /> },
+      { label: "Pesées", value: "Sécurisées", icon: <FaWeightHanging size={14} /> },
+    ],
+    []
+  )
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -94,9 +124,41 @@ export default function Login() {
           text-decoration: underline;
           text-underline-offset: 3px;
         }
+
+        @keyframes loginMarquee {
+          0% {
+            transform: translate3d(0, 0, 0);
+          }
+          100% {
+            transform: translate3d(-50%, 0, 0);
+          }
+        }
+
+        @keyframes loginFloat {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-6px);
+          }
+        }
       `}</style>
       <div style={overlayStyle}>
         <div style={frameStyle}>
+          {marqueeEnabled ? (
+            <div style={loginMarqueeShell}>
+              <div
+                style={{
+                  ...loginMarqueeTrack,
+                  animationDuration: `${marqueeDuration}s`,
+                }}
+              >
+                <span style={loginMarqueeText}>{marqueeText}</span>
+                <span style={loginMarqueeSeparator}>•</span>
+                <span style={loginMarqueeText}>{marqueeText}</span>
+              </div>
+            </div>
+          ) : null}
           <div
             className="login-shell"
             style={{
@@ -111,26 +173,38 @@ export default function Login() {
                 ...(isMobile ? marketingCardMobile : null),
               }}
             >
-              <div style={logoContainer}>
-                <img
-                  src={logoImage}
-                  alt="SCOOP ASAB Logo"
-                  style={logoStyle}
-                />
+              <div style={heroTopRow}>
+                <div style={logoContainer}>
+                  <img src={settings?.logo_url || logoImage} alt="SCOOP ASAB Logo" style={logoStyle} />
+                </div>
+                <div style={heroBadge}>Plateforme premium</div>
               </div>
-              <span style={eyebrowStyle}>Plateforme professionnelle</span>
-              <h1 style={heroTitleStyle}>Accédez aux meilleures opportunités cacao et café</h1>
+
+              <span style={eyebrowStyle}>{cooperativeName}</span>
+              <h1 style={heroTitleStyle}>La gestion coopérative nouvelle génération</h1>
               <p style={heroTextStyle}>
-                Découvrez des appels d&apos;offres en temps réel, profitez d&apos;une analyse intelligente et prenez
-                de meilleures décisions pour vos centres, agents et producteurs.
+                {cooperativeMotto}. Centralisez vos opérations, vos pesées, vos centres et vos
+                campagnes dans une expérience claire, rapide et professionnelle.
               </p>
+
+              <div style={heroStatsGrid}>
+                {heroStats.map((item) => (
+                  <div key={item.label} style={heroStatCard}>
+                    <span style={heroStatIcon}>{item.icon}</span>
+                    <div>
+                      <div style={heroStatValue}>{item.value}</div>
+                      <div style={heroStatLabel}>{item.label}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               <div style={benefitsList}>
                 {[
-                  "Découvrez des appels d’offres en temps réel",
-                  "Analyse intelligente pour maximiser vos profits",
-                  "Plateforme dédiée aux centres, agents et producteurs",
-                  "Gagnez du temps et prenez de meilleures décisions",
+                  "Campagnes, quotas et budgets centralisés",
+                  "Suivi en temps réel des centres, producteurs et pesées",
+                  "Expérience pensée pour l'administration, les agents et les centres",
+                  "Accès rapide, interface élégante et données mieux organisées",
                 ].map((item) => (
                   <div key={item} style={benefitItem}>
                     <span style={benefitIcon}>
@@ -139,6 +213,20 @@ export default function Login() {
                     <span>{item}</span>
                   </div>
                 ))}
+              </div>
+
+              <div style={heroHighlightCard}>
+                <div style={heroHighlightVisual}>
+                  <div style={heroHighlightCirclePrimary} />
+                  <div style={heroHighlightCircleSecondary} />
+                </div>
+                <div style={heroHighlightContent}>
+                  <div style={heroHighlightTitle}>Espace sécurisé et intelligent</div>
+                  <div style={heroHighlightText}>
+                    Connectez-vous pour suivre vos données stratégiques, vos indicateurs terrain et
+                    vos opportunités de marché depuis un seul espace.
+                  </div>
+                </div>
               </div>
 
               <div style={trustBox}>
@@ -155,10 +243,6 @@ export default function Login() {
                   <span>Utilisé par des professionnels du secteur agricole</span>
                 </div>
               </div>
-
-              <p style={adsenseNote}>
-                Cette plateforme peut afficher des annonces publicitaires (Google AdSense).
-              </p>
             </section>
 
             <section
@@ -168,38 +252,62 @@ export default function Login() {
                 ...(isMobile ? cardStyleMobile : null),
               }}
             >
-              <h2 style={titleStyle}>Connexion</h2>
+              <div style={formHeader}>
+                <div style={formEyebrow}>Connexion sécurisée</div>
+                <h2 style={titleStyle}>Bienvenue</h2>
+              </div>
               <p style={subtitleStyle}>
-                Connectez-vous pour accéder à vos données, à vos messages et aux opportunités du marché.
+                Connectez-vous pour accéder à vos tableaux de bord, vos messages et vos opérations.
               </p>
 
               <form onSubmit={handleLogin} style={{ width: "100%" }}>
-                <div style={inputContainerStyle}>
-                  <span style={iconStyle}>
-                    <FaUser size={14} />
-                  </span>
-                  <input
-                    type="email"
-                    placeholder="Entrez votre email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={inputStyle}
-                    required
-                  />
-                </div>
+                <label style={fieldBlock}>
+                  <span style={fieldLabel}>Adresse email</span>
+                  <div style={inputContainerStyle}>
+                    <span style={iconStyle}>
+                      <FaUser size={14} />
+                    </span>
+                    <input
+                      type="email"
+                      placeholder="Entrez votre email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                  </div>
+                </label>
 
-                <div style={{ ...inputContainerStyle, marginTop: 16 }}>
+                <label style={{ ...fieldBlock, marginTop: 16 }}>
+                  <span style={fieldLabel}>Mot de passe</span>
                   <span style={iconStyle}>
                     <FaLock size={14} />
                   </span>
-                  <input
-                    type="password"
-                    placeholder="Entrez votre mot de passe"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={inputStyle}
-                    required
-                  />
+                  <div style={inputContainerStyle}>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Entrez votre mot de passe"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      style={passwordToggleButton}
+                      aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    >
+                      {showPassword ? <FaEyeSlash size={15} /> : <FaEye size={15} />}
+                    </button>
+                  </div>
+                </label>
+
+                <div style={formMetaRow}>
+                  <div style={statusChip}>
+                    <FaShieldAlt size={12} />
+                    Authentification protégée
+                  </div>
                 </div>
 
                 <button type="submit" className="login-gradient-button" style={buttonStyle} disabled={loading}>
@@ -221,13 +329,13 @@ export default function Login() {
               )}
 
               <div style={contactRow}>
-                <a href="mailto:ndatresor68@gmail.com" className="login-contact-link" style={contactLink}>
+                <a href={`mailto:${contactEmail}`} className="login-contact-link" style={contactLink}>
                   <FaEnvelope size={12} />
-                  ndatresor68@gmail.com
+                  {contactEmail}
                 </a>
-                <a href="tel:0715887556" className="login-contact-link" style={contactLink}>
+                <a href={`tel:${contactPhone}`} className="login-contact-link" style={contactLink}>
                   <FaPhoneAlt size={12} />
-                  0715887556
+                  {contactPhone}
                 </a>
               </div>
 
@@ -273,19 +381,55 @@ const overlayStyle = {
 
 const frameStyle = {
   width: "min(1160px, 100%)",
-  padding: 14,
-  borderRadius: 32,
-  background: "rgba(255,255,255,0.07)",
-  border: "1px solid rgba(255,255,255,0.12)",
-  boxShadow: "0 30px 80px rgba(0,0,0,0.22)",
-  backdropFilter: "blur(8px)",
+  padding: 16,
+  display: "flex",
+  flexDirection: "column",
+  gap: 20,
+  borderRadius: 34,
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.16)",
+  boxShadow: "0 34px 84px rgba(0,0,0,0.24)",
+  backdropFilter: "blur(10px)",
+}
+
+const loginMarqueeShell = {
+  overflow: "hidden",
+  borderRadius: 20,
+  border: "1px solid rgba(255, 214, 165, 0.38)",
+  background: "linear-gradient(90deg, rgba(255,247,237,0.96) 0%, rgba(255,251,235,0.96) 100%)",
+  boxShadow: "0 14px 28px rgba(15, 23, 42, 0.12)",
+}
+
+const loginMarqueeTrack = {
+  display: "inline-flex",
+  minWidth: "200%",
+  alignItems: "center",
+  whiteSpace: "nowrap",
+  padding: "12px 0",
+  animationName: "loginMarquee",
+  animationTimingFunction: "linear",
+  animationIterationCount: "infinite",
+}
+
+const loginMarqueeText = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#9a3412",
+  letterSpacing: "0.01em",
+  paddingLeft: 24,
+}
+
+const loginMarqueeSeparator = {
+  padding: "0 18px",
+  color: "#f59e0b",
+  fontWeight: 900,
 }
 
 const shellStyle = {
   width: "min(1100px, 100%)",
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1.08fr) minmax(380px, 430px)",
-  gap: 28,
+  gridTemplateColumns: "minmax(0, 1.15fr) minmax(390px, 450px)",
+  gap: 24,
   alignItems: "stretch",
 }
 
@@ -295,19 +439,19 @@ const shellStyleMobile = {
 }
 
 const marketingCard = {
-  background: "rgba(255, 255, 255, 0.08)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
   color: "#ffffff",
-  borderRadius: 24,
-  padding: "36px 36px 38px",
-  boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+  borderRadius: 28,
+  padding: "38px 38px 40px",
+  boxShadow: "0 22px 46px rgba(0,0,0,0.2)",
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-  alignItems: "center",
-  textAlign: "center",
+  alignItems: "flex-start",
+  textAlign: "left",
   minHeight: 0,
   backdropFilter: "blur(15px)",
-  border: "1px solid rgba(255,255,255,0.2)",
+  border: "1px solid rgba(255,255,255,0.18)",
 }
 
 const marketingCardMobile = {
@@ -315,19 +459,19 @@ const marketingCardMobile = {
 }
 
 const cardStyle = {
-  background: "rgba(255, 255, 255, 0.1)",
-  padding: 30,
-  borderRadius: 20,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.1))",
+  padding: 32,
+  borderRadius: 28,
   width: "100%",
   maxWidth: 430,
   justifySelf: "center",
-  boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+  boxShadow: "0 20px 44px rgba(0,0,0,0.22)",
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
-  alignItems: "center",
+  alignItems: "stretch",
   backdropFilter: "blur(15px)",
-  border: "1px solid rgba(255,255,255,0.24)",
+  border: "1px solid rgba(255,255,255,0.26)",
 }
 
 const cardStyleMobile = {
@@ -339,13 +483,12 @@ const logoContainer = {
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  marginBottom: 18,
-  width: "100%",
-  maxWidth: "240px",
-  height: "84px",
+  width: 180,
+  height: 72,
   overflow: "hidden",
   borderRadius: "16px",
-  background: "rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.16)",
 }
 
 const logoStyle = {
@@ -358,25 +501,26 @@ const logoStyle = {
 
 const titleStyle = {
   margin: 0,
-  textAlign: "center",
-  fontSize: 30,
-  fontWeight: 800,
+  textAlign: "left",
+  fontSize: 34,
+  fontWeight: 900,
   color: "#ffffff",
+  letterSpacing: "-0.04em",
 }
 
 const subtitleStyle = {
-  margin: "10px 0 22px",
-  textAlign: "center",
+  margin: "10px 0 24px",
+  textAlign: "left",
   color: "rgba(255,255,255,0.78)",
   lineHeight: 1.6,
   fontSize: 14,
-  maxWidth: 360,
+  maxWidth: 340,
 }
 
 const eyebrowStyle = {
   display: "inline-flex",
   alignItems: "center",
-  alignSelf: "center",
+  alignSelf: "flex-start",
   padding: "6px 10px",
   borderRadius: 999,
   background: "rgba(255,255,255,0.16)",
@@ -391,6 +535,7 @@ const heroTitleStyle = {
   fontSize: "clamp(28px, 4vw, 42px)",
   lineHeight: 1.08,
   letterSpacing: "-0.03em",
+  maxWidth: 560,
 }
 
 const heroTextStyle = {
@@ -398,6 +543,7 @@ const heroTextStyle = {
   color: "rgba(255,255,255,0.82)",
   lineHeight: 1.75,
   fontSize: 15,
+  maxWidth: 560,
 }
 
 const benefitsList = {
@@ -406,13 +552,12 @@ const benefitsList = {
   gap: 12,
   marginTop: 24,
   width: "100%",
-  maxWidth: 520,
+  maxWidth: 560,
 }
 
 const benefitItem = {
   display: "flex",
   alignItems: "flex-start",
-  justifyContent: "center",
   gap: 10,
   color: "#ffffff",
   lineHeight: 1.6,
@@ -441,7 +586,7 @@ const trustBox = {
   background: "rgba(255,255,255,0.08)",
   border: "1px solid rgba(255,255,255,0.16)",
   width: "100%",
-  maxWidth: 520,
+  maxWidth: 560,
 }
 
 const trustItem = {
@@ -459,11 +604,159 @@ const adsenseNote = {
   lineHeight: 1.6,
 }
 
+const heroTopRow = {
+  width: "100%",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  flexWrap: "wrap",
+  marginBottom: 10,
+}
+
+const heroBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.12)",
+  border: "1px solid rgba(255,255,255,0.14)",
+  color: "#fff7ed",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+}
+
+const heroStatsGrid = {
+  width: "100%",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+  marginTop: 24,
+}
+
+const heroStatCard = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  padding: "14px 16px",
+  borderRadius: 18,
+  background: "rgba(255,255,255,0.1)",
+  border: "1px solid rgba(255,255,255,0.14)",
+}
+
+const heroStatIcon = {
+  width: 34,
+  height: 34,
+  borderRadius: 12,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "rgba(255,255,255,0.16)",
+  color: "#fff",
+  flexShrink: 0,
+}
+
+const heroStatValue = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#ffffff",
+}
+
+const heroStatLabel = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "rgba(255,255,255,0.72)",
+}
+
+const heroHighlightCard = {
+  marginTop: 24,
+  width: "100%",
+  maxWidth: 560,
+  borderRadius: 22,
+  padding: "20px 20px 18px",
+  background: "linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
+  border: "1px solid rgba(255,255,255,0.16)",
+  display: "flex",
+  alignItems: "center",
+  gap: 18,
+}
+
+const heroHighlightVisual = {
+  position: "relative",
+  width: 74,
+  height: 74,
+  minWidth: 74,
+  animation: "loginFloat 4.8s ease-in-out infinite",
+}
+
+const heroHighlightCirclePrimary = {
+  position: "absolute",
+  inset: 0,
+  borderRadius: "50%",
+  background: "radial-gradient(circle at 30% 30%, #fef3c7 0%, #f59e0b 72%, #c2410c 100%)",
+  opacity: 0.95,
+}
+
+const heroHighlightCircleSecondary = {
+  position: "absolute",
+  right: -8,
+  bottom: -6,
+  width: 28,
+  height: 28,
+  borderRadius: "50%",
+  background: "radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.38) 100%)",
+}
+
+const heroHighlightContent = {
+  minWidth: 0,
+}
+
+const heroHighlightTitle = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#ffffff",
+}
+
+const heroHighlightText = {
+  marginTop: 8,
+  fontSize: 13,
+  lineHeight: 1.7,
+  color: "rgba(255,255,255,0.8)",
+}
+
+const formHeader = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+}
+
+const formEyebrow = {
+  fontSize: 12,
+  fontWeight: 800,
+  textTransform: "uppercase",
+  letterSpacing: "0.12em",
+  color: "#fde68a",
+}
+
+const fieldBlock = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+}
+
+const fieldLabel = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#ffffff",
+}
+
 const inputContainerStyle = {
   display: "flex",
   alignItems: "center",
-  background: "rgba(255, 255, 255, 0.2)",
-  borderRadius: 10,
+  background: "rgba(255, 255, 255, 0.16)",
+  borderRadius: 14,
   padding: "14px 16px",
   border: "1px solid rgba(255,255,255,0.24)",
   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
@@ -484,14 +777,49 @@ const inputStyle = {
   color: "#ffffff",
 }
 
+const passwordToggleButton = {
+  appearance: "none",
+  border: "none",
+  background: "transparent",
+  color: "rgba(255,255,255,0.8)",
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+  marginLeft: 10,
+}
+
+const formMetaRow = {
+  marginTop: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+}
+
+const statusChip = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: "rgba(16,185,129,0.14)",
+  border: "1px solid rgba(110,231,183,0.24)",
+  color: "#d1fae5",
+  fontSize: 12,
+  fontWeight: 700,
+}
+
 const buttonStyle = {
   marginTop: 22,
   width: "100%",
-  padding: 14,
+  padding: 16,
   background: "linear-gradient(135deg, #7b1e1e 0%, #c0392b 58%, #8e44ad 100%)",
   color: "white",
   border: "none",
-  borderRadius: 14,
+  borderRadius: 16,
   cursor: "pointer",
   fontSize: 15,
   fontWeight: "bold",
@@ -508,8 +836,9 @@ const buttonContentStyle = {
 const errorStyle = {
   marginTop: 15,
   color: "#fecaca",
-  textAlign: "center",
+  textAlign: "left",
   fontSize: 14,
+  lineHeight: 1.6,
 }
 
 const registrationDisabledBox = {
@@ -530,7 +859,7 @@ const registrationDisabledText = {
 const contactRow = {
   display: "flex",
   flexWrap: "wrap",
-  justifyContent: "center",
+  justifyContent: "flex-start",
   gap: 12,
   marginTop: 18,
 }
@@ -549,7 +878,7 @@ const contactLink = {
 const legalFooter = {
   display: "flex",
   flexWrap: "wrap",
-  justifyContent: "center",
+  justifyContent: "flex-start",
   gap: 14,
   marginTop: 22,
   paddingTop: 16,

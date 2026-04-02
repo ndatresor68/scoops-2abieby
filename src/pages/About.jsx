@@ -4,7 +4,7 @@ export default function About() {
   return (
     <PublicInfoPage
       title="À propos"
-      intro="SCOOP ASAB est une plateforme de gestion cooperative pensée pour structurer les activités cacao et café, suivre les appels d'offres et améliorer la prise de décision."
+      intro="SCOOP ASAB COOP-CA est une plateforme de gestion cooperative pensée pour structurer les activités cacao et café, suivre les appels d'offres et améliorer la prise de décision."
       sections={[
         {
           heading: "Gestion filière",

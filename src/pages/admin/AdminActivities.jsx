@@ -20,6 +20,35 @@ function formatDate(value) {
   })
 }
 
+function buildLocalAnalysis(logs = []) {
+  const suspiciousKeywords = ["delete", "ban", "suspend", "remove", "ai_", "settings", "export"]
+  const suspiciousLogs = logs.filter((log) =>
+    suspiciousKeywords.some((keyword) => String(log.action || "").toLowerCase().includes(keyword))
+  )
+
+  const topUsers = Object.entries(
+    logs.reduce((accumulator, log) => {
+      const key = log.user_name || log.user_id || "Utilisateur inconnu"
+      accumulator[key] = (accumulator[key] || 0) + 1
+      return accumulator
+    }, {})
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+
+  return {
+    summary: `Analyse locale de ${logs.length} logs. ${suspiciousLogs.length} action(s) sensible(s) potentielle(s) détectée(s).`,
+    highlights: [
+      ...topUsers.map(([name, count]) => `${name} apparaît ${count} fois dans les logs analysés.`),
+      ...suspiciousLogs.slice(0, 3).map((log) => `${log.action || "Action"} • ${log.user_name || "Utilisateur"} • ${log.details || "-"}`),
+    ].slice(0, 5),
+    anomalies: suspiciousLogs.slice(0, 5).map((log) => ({
+      title: log.action || "Action sensible",
+      reason: log.details || "Action potentiellement sensible détectée dans les logs.",
+    })),
+  }
+}
+
 export default function AdminActivities() {
   const { isAdmin, user: currentUser } = useAuth()
   const { showToast } = useToast()
@@ -40,9 +69,9 @@ export default function AdminActivities() {
       setLoading(true)
       const { data, error } = await supabase
         .from("activity_logs")
-        .select("*")
+        .select("id, user_id, user_name, action, details, page, created_at")
         .order("created_at", { ascending: false })
-        .limit(1000)
+        .limit(400)
 
       if (error) throw error
       setLogs(data || [])
@@ -154,9 +183,9 @@ export default function AdminActivities() {
         }),
       })
 
-      const data = await response.json().catch(() => ({}))
+      const data = await response.json().catch(() => null)
       if (!response.ok) {
-        throw new Error(data?.reply || "Analyse impossible")
+        throw new Error(data?.reply || `Analyse impossible (${response.status})`)
       }
 
       setAnalysis({
@@ -166,7 +195,10 @@ export default function AdminActivities() {
       })
       showToast("Analyse IA générée", "success")
     } catch (error) {
-      showToast(error.message || "Impossible d'analyser les logs", "error")
+      console.error("[AdminActivities] AI analysis error:", error)
+      const fallbackAnalysis = buildLocalAnalysis(filteredLogs.slice(0, 200))
+      setAnalysis(fallbackAnalysis)
+      showToast("Analyse IA indisponible. Résumé local affiché à la place.", "warning")
     } finally {
       setAnalyzing(false)
     }

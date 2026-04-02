@@ -93,7 +93,7 @@ export function AuthProvider({ children }) {
       // Primary lookup: id matches auth.users.id
       const { data: profileById, error: error1 } = await supabase
         .from("utilisateurs")
-        .select("*")
+        .select("id, email, role, nom, centre_id, avatar_url")
         .eq("id", authUser.id)
         .single()
       
@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
         if (authUser.email) {
           const { data: profileByEmail, error: emailError } = await supabase
             .from("utilisateurs")
-            .select("*")
+            .select("id, email, role, nom, centre_id, avatar_url")
             .eq("email", authUser.email)
             .single()
           

@@ -29,6 +29,10 @@ export function isDateWithinCampagne(dateValue, campagne) {
 }
 
 export function isAchatInCampagne(achat, campagne) {
+  if (achat?.campagne_id && campagne?.id) {
+    return String(achat.campagne_id) === String(campagne.id)
+  }
+
   return isDateWithinCampagne(achat?.date_pesee || achat?.created_at, campagne)
 }
 

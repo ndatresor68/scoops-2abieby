@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS public.campagnes (
   date_debut DATE NOT NULL,
   date_fin DATE NOT NULL,
   prix_kg NUMERIC NOT NULL,
+  tonnage_estime_tonnes NUMERIC NOT NULL DEFAULT 0,
+  tonnage_estime_kg NUMERIC GENERATED ALWAYS AS (tonnage_estime_tonnes * 1000) STORED,
   statut TEXT DEFAULT 'ACTIVE',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

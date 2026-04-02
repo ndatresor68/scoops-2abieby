@@ -13,6 +13,10 @@ const DEFAULT_SETTINGS = {
   contact_email: "",
   default_language: "fr",
   currency: "FCFA",
+  homepage_banner_enabled: true,
+  homepage_banner_text:
+    "Bienvenue sur SCOOP ASAB-COOP-CA • Suivi des campagnes • Gestion des quotas • Pesées sécurisées en temps réel",
+  homepage_banner_speed_seconds: 22,
   
   // System Settings
   notifications_enabled: true,

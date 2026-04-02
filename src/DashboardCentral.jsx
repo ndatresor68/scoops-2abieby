@@ -1,13 +1,55 @@
-import { useCallback, useEffect, useState } from "react"
-import { supabase } from "./supabaseClient"
-import { FaBalanceScale, FaBuilding, FaCheckCircle, FaClock, FaBox } from "react-icons/fa"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import {
+  FaBalanceScale,
+  FaBox,
+  FaBuilding,
+  FaChartLine,
+  FaCheckCircle,
+  FaClock,
+  FaStore,
+  FaWeightHanging,
+} from "react-icons/fa"
 import { GiFarmer } from "react-icons/gi"
 import Card from "./components/ui/Card"
-import { useToast } from "./components/ui/Toast"
 import { useMediaQuery } from "./hooks/useMediaQuery"
+import { useSettings } from "./context/SettingsContext"
+import { supabase } from "./supabaseClient"
+
+function toNumber(value) {
+  return Number(value || 0)
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("fr-FR")
+}
+
+function formatWeight(value) {
+  return `${formatNumber(value)} kg`
+}
+
+function getQuantite(item) {
+  return Number(item?.quantite ?? item?.poids ?? 0)
+}
+
+function StatCard({ icon, title, value, helper, accent }) {
+  const isMobile = useMediaQuery("(max-width: 640px)")
+
+  return (
+    <Card padding={isMobile ? "18px" : "22px"} style={styles.statCard}>
+      <div style={styles.statInner}>
+        <div style={{ ...styles.statIcon, background: `${accent}14`, color: accent }}>{icon}</div>
+        <div style={styles.statContent}>
+          <div style={styles.statLabel}>{title}</div>
+          <div style={styles.statValue}>{value}</div>
+          {helper ? <div style={styles.statHelper}>{helper}</div> : null}
+        </div>
+      </div>
+    </Card>
+  )
+}
 
 export default function DashboardCentral() {
-  const { showToast } = useToast()
+  const { settings } = useSettings()
   const [loading, setLoading] = useState(true)
   const isMobile = useMediaQuery("(max-width: 640px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
@@ -21,181 +63,143 @@ export default function DashboardCentral() {
     stockGlobal: 0,
     poidsTotal: 0,
   })
-
   const [centresStats, setCentresStats] = useState([])
   const [recentAchats, setRecentAchats] = useState([])
 
-  function getQuantite(item) {
-    return Number(item?.quantite ?? item?.poids ?? 0)
-  }
+  const heroMetrics = useMemo(
+    () => [
+      {
+        label: "Volume acheté",
+        value: formatWeight(stats.poidsTotal),
+        accent: "#2563eb",
+      },
+      {
+        label: "Stock disponible",
+        value: formatWeight(stats.stockGlobal),
+        accent: stats.stockGlobal < 100 ? "#dc2626" : "#16a34a",
+      },
+      {
+        label: "Livraisons validées",
+        value: formatNumber(stats.livraisonsValidees),
+        accent: "#f59e0b",
+      },
+    ],
+    [stats]
+  )
+
+  const statCards = useMemo(
+    () => [
+      {
+        title: "Producteurs",
+        value: formatNumber(stats.producteurs),
+        helper: "Réseau coopératif",
+        icon: <GiFarmer size={26} />,
+        accent: "#7a1f1f",
+      },
+      {
+        title: "Centres",
+        value: formatNumber(stats.centres),
+        helper: "Implantations actives",
+        icon: <FaBuilding size={22} />,
+        accent: "#2563eb",
+      },
+      {
+        title: "Pesées",
+        value: formatNumber(stats.achats),
+        helper: "Opérations enregistrées",
+        icon: <FaBalanceScale size={24} />,
+        accent: "#16a34a",
+      },
+      {
+        title: "Poids total",
+        value: formatWeight(stats.poidsTotal),
+        helper: "Volume cumulé",
+        icon: <FaWeightHanging size={22} />,
+        accent: "#f59e0b",
+      },
+      {
+        title: "Livraisons validées",
+        value: formatNumber(stats.livraisonsValidees),
+        helper: "Sorties confirmées",
+        icon: <FaCheckCircle size={22} />,
+        accent: "#16a34a",
+      },
+      {
+        title: "Livraisons en attente",
+        value: formatNumber(stats.livraisonsAttente),
+        helper: "À traiter",
+        icon: <FaClock size={22} />,
+        accent: "#f59e0b",
+      },
+    ],
+    [stats]
+  )
 
   const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true)
-      console.log("[Dashboard] Fetching dashboard data...")
 
-      // Timeout protection: max 20 seconds for all queries
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Dashboard query timeout")), 20000)
-      )
-
-      const queriesPromise = Promise.all([
+      const [
+        producteursRes,
+        centresRes,
+        achatsCountRes,
+        livraisonsValideesRes,
+        livraisonsAttenteRes,
+        achatsDetailsRes,
+        livraisonsDetailsRes,
+        centresListRes,
+        recentAchatsRes,
+      ] = await Promise.all([
         supabase.from("producteurs").select("*", { count: "exact", head: true }),
         supabase.from("centres").select("*", { count: "exact", head: true }),
         supabase.from("achats").select("*", { count: "exact", head: true }),
         supabase.from("livraisons").select("*", { count: "exact", head: true }).eq("statut", "VALIDEE"),
         supabase.from("livraisons").select("*", { count: "exact", head: true }).eq("statut", "EN_ATTENTE"),
+        supabase.from("achats").select("id, centre_id, poids, created_at, nom_producteur"),
+        supabase.from("livraisons").select("centre_id, poids_total, quantite, statut").eq("statut", "VALIDEE"),
+        supabase.from("centres").select("id, nom, code").order("nom"),
+        supabase.from("achats").select("id, nom_producteur, poids, created_at").order("created_at", { ascending: false }).limit(6),
       ])
 
-      const [
-        producteursRes,
-        centresRes,
-        achatsRes,
-        livraisonsValideesRes,
-        livraisonsAttenteRes,
-      ] = await Promise.race([queriesPromise, timeoutPromise]).catch((err) => {
-        console.error("[Dashboard] Query timeout or error:", err)
-        // Return default values on timeout
-        return [
-          { count: 0 },
-          { count: 0 },
-          { count: 0 },
-          { count: 0 },
-          { count: 0 },
-        ]
-      })
+      const achatsData = achatsDetailsRes?.data || []
+      const livraisonsData = livraisonsDetailsRes?.data || []
+      const centresData = centresListRes?.data || []
 
-      // Fetch detailed data with timeout protection
-      const detailTimeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Detail query timeout")), 15000)
-      )
-
-      const detailQueriesPromise = Promise.all([
-        supabase.from("achats").select("*"),
-        supabase.from("livraisons").select("*").eq("statut", "VALIDEE")
-      ])
-
-      const [achatsResult, livraisonsResult] = await Promise.race([
-        detailQueriesPromise,
-        detailTimeoutPromise
-      ]).catch((err) => {
-        console.error("[Dashboard] Detail query timeout:", err)
-        return [{ data: [] }, { data: [] }]
-      })
-
-      const achatsData = achatsResult?.data || []
-      const livraisonsData = livraisonsResult?.data || []
-
-      const totalAchats = achatsData ? achatsData.reduce((sum, item) => sum + getQuantite(item), 0) : 0
-      const totalLivraisons = livraisonsData
-        ? livraisonsData.reduce((sum, item) => sum + getQuantite(item), 0)
-        : 0
-
+      const totalAchats = achatsData.reduce((sum, item) => sum + getQuantite(item), 0)
+      const totalLivraisons = livraisonsData.reduce((sum, item) => sum + getQuantite(item), 0)
       const stockGlobal = totalAchats - totalLivraisons
-      const poidsTotal = achatsData ? achatsData.reduce((sum, item) => sum + (item.poids || 0), 0) : 0
+      const poidsTotal = achatsData.reduce((sum, item) => sum + toNumber(item.poids), 0)
 
       setStats({
-        producteurs: producteursRes.count || 0,
-        centres: centresRes.count || 0,
-        achats: achatsRes.count || 0,
-        livraisonsValidees: livraisonsValideesRes.count || 0,
-        livraisonsAttente: livraisonsAttenteRes.count || 0,
+        producteurs: producteursRes?.count || 0,
+        centres: centresRes?.count || 0,
+        achats: achatsCountRes?.count || 0,
+        livraisonsValidees: livraisonsValideesRes?.count || 0,
+        livraisonsAttente: livraisonsAttenteRes?.count || 0,
         stockGlobal,
         poidsTotal,
       })
 
-      const centresQueryPromise = supabase.from("centres").select("id, nom, code")
-      const centresTimeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Centres query timeout")), 10000)
-      )
+      const centresCalculated = centresData.slice(0, 10).map((centre) => {
+        const totalCentreAchats = achatsData
+          .filter((entry) => String(entry.centre_id) === String(centre.id))
+          .reduce((sum, entry) => sum + getQuantite(entry), 0)
+        const totalCentreLivraisons = livraisonsData
+          .filter((entry) => String(entry.centre_id) === String(centre.id))
+          .reduce((sum, entry) => sum + getQuantite(entry), 0)
 
-      const { data: centresData } = await Promise.race([
-        centresQueryPromise,
-        centresTimeoutPromise
-      ]).catch((err) => {
-        console.error("[Dashboard] Centres query timeout:", err)
-        return { data: [] }
+        return {
+          id: centre.id,
+          nom: centre.nom,
+          code: centre.code,
+          stock: totalCentreAchats - totalCentreLivraisons,
+        }
       })
 
-      if (centresData && centresData.length > 0) {
-        // Limit concurrent queries to avoid overwhelming the database
-        const centresCalcul = await Promise.all(
-          centresData.slice(0, 10).map(async (centre) => {
-            try {
-              const centreTimeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Centre detail timeout")), 5000)
-              )
-
-              const centreQueriesPromise = Promise.all([
-                supabase.from("achats").select("*").eq("centre_id", centre.id),
-                supabase.from("livraisons").select("*").eq("centre_id", centre.id).eq("statut", "VALIDEE")
-              ])
-
-              const [achatsResult, livraisonsResult] = await Promise.race([
-                centreQueriesPromise,
-                centreTimeoutPromise
-              ]).catch((err) => {
-                console.warn(`[Dashboard] Centre ${centre.id} query timeout:`, err)
-                return [{ data: [] }, { data: [] }]
-              })
-
-              const achatsCentre = achatsResult?.data || []
-              const livraisonsCentre = livraisonsResult?.data || []
-
-              const totalCentreAchats = achatsCentre
-                ? achatsCentre.reduce((sum, item) => sum + getQuantite(item), 0)
-                : 0
-
-              const totalCentreLivraisons = livraisonsCentre
-                ? livraisonsCentre.reduce((sum, item) => sum + getQuantite(item), 0)
-                : 0
-
-              return {
-                id: centre.id,
-                nom: centre.nom,
-                code: centre.code,
-                stock: totalCentreAchats - totalCentreLivraisons,
-              }
-            } catch (error) {
-              console.error(`[Dashboard] Error loading centre ${centre.id}:`, error)
-              // Return default values on error
-              return {
-                id: centre.id,
-                nom: centre.nom,
-                code: centre.code,
-                stock: 0,
-              }
-            }
-          }),
-        )
-
-        setCentresStats(centresCalcul)
-      }
-
-      // Fetch recent achats with timeout
-      const recentTimeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Recent achats timeout")), 10000)
-      )
-
-      const recentQueryPromise = supabase
-        .from("achats")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(5)
-
-      const { data: recentAchatsData } = await Promise.race([
-        recentQueryPromise,
-        recentTimeoutPromise
-      ]).catch((err) => {
-        console.warn("[Dashboard] Recent achats query timeout:", err)
-        return { data: [] }
-      })
-
-      setRecentAchats(recentAchatsData || [])
-      console.log("[Dashboard] Dashboard data loaded successfully")
+      setCentresStats(centresCalculated)
+      setRecentAchats(recentAchatsRes?.data || [])
     } catch (error) {
-      console.error("[Dashboard] Erreur Dashboard:", error)
-      // Don't show toast on initial load to avoid spam
+      console.error("[DashboardCentral] Error:", error)
       setStats({
         producteurs: 0,
         centres: 0,
@@ -210,312 +214,428 @@ export default function DashboardCentral() {
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }, [])
 
   useEffect(() => {
-    let mounted = true
-    
-    console.log("[Dashboard] Component mounted, fetching dashboard...")
-    fetchDashboard().catch((error) => {
-      console.error("[Dashboard] Error in useEffect:", error)
-      if (mounted) {
-        setLoading(false)
-      }
-    })
-    
-    return () => {
-      mounted = false
-    }
-  }, []) // Empty deps - fetchDashboard is stable
+    fetchDashboard()
+  }, [fetchDashboard])
 
   if (loading) {
     return (
-      <div style={{ padding: 40, display: "flex", justifyContent: "center", alignItems: "center", minHeight: "400px" }}>
-        <div style={{ textAlign: "center" }}>
-          <div
-            style={{
-              width: "48px",
-              height: "48px",
-              border: "4px solid #e5e7eb",
-              borderTopColor: "#7a1f1f",
-              borderRadius: "50%",
-              animation: "spin 0.8s linear infinite",
-              margin: "0 auto",
-            }}
-          ></div>
-          <p style={{ marginTop: 16, color: "#6b7280" }}>Chargement du dashboard...</p>
-        </div>
+      <div style={styles.loadingWrap}>
+        <div style={styles.loader} />
+        <div style={styles.loadingText}>Chargement de l'accueil...</div>
       </div>
     )
   }
 
   return (
-    <div style={container}>
-      <div style={headerSection}>
-        <div>
-          <h1 style={{
-            ...mainTitle,
-            fontSize: isMobile ? "24px" : "32px",
-          }}>Tableau de Bord</h1>
-          <p style={subtitle}>Vue d'ensemble de l'activité de la coopérative</p>
+    <div style={styles.page}>
+      <section
+        style={{
+          ...styles.hero,
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.6fr) minmax(320px, 0.9fr)",
+        }}
+      >
+        <div style={styles.heroMain}>
+          <div style={styles.heroEyebrow}>Accueil du logiciel</div>
+          <h1 style={{ ...styles.heroTitle, fontSize: isMobile ? 28 : 40 }}>
+            {settings?.cooperative_name || "SCOOP ASAB-COOP-CA"}
+          </h1>
+          <p style={styles.heroSubtitle}>{settings?.cooperative_motto || "Union • Discipline • Travail"}</p>
+          <p style={styles.heroDescription}>
+            Une vue centrale plus moderne pour suivre la coopérative, piloter les opérations
+            terrain et visualiser instantanément l'activité globale.
+          </p>
+
+          <div style={styles.heroMetricGrid}>
+            {heroMetrics.map((item) => (
+              <div key={item.label} style={styles.heroMetricCard}>
+                <div style={{ ...styles.heroMetricDot, background: item.accent }} />
+                <div>
+                  <div style={styles.heroMetricLabel}>{item.label}</div>
+                  <div style={styles.heroMetricValue}>{item.value}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div style={{
-        ...statsGrid,
-        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))",
-        gap: isMobile ? 12 : 16,
-      }}>
-        <StatCard
-          icon={<GiFarmer size={32} />}
-          title="Producteurs"
-          value={stats.producteurs}
-          color="#7a1f1f"
-          bgColor="#fef2f2"
-        />
-        <StatCard
-          icon={<FaBuilding size={28} />}
-          title="Centres"
-          value={stats.centres}
-          color="#2563eb"
-          bgColor="#eff6ff"
-        />
-        <StatCard
-          icon={<FaBalanceScale size={32} />}
-          title="Pesées"
-          value={stats.achats}
-          color="#16a34a"
-          bgColor="#ecfdf3"
-        />
-        <StatCard
-          icon={<FaBox size={28} />}
-          title="Poids Total (Kg)"
-          value={stats.poidsTotal.toLocaleString()}
-          color="#f59e0b"
-          bgColor="#fffbeb"
-        />
-        <StatCard
-          icon={<FaCheckCircle size={32} />}
-          title="Livraisons Validées"
-          value={stats.livraisonsValidees}
-          color="#16a34a"
-          bgColor="#ecfdf3"
-        />
-        <StatCard
-          icon={<FaClock size={32} />}
-          title="En Attente"
-          value={stats.livraisonsAttente}
-          color="#f59e0b"
-          bgColor="#fffbeb"
-        />
-        <StatCard
-          icon={<FaBox size={28} />}
-          title="Stock Global (Kg)"
-          value={stats.stockGlobal.toLocaleString()}
-          color={stats.stockGlobal < 100 ? "#dc2626" : "#16a34a"}
-          bgColor={stats.stockGlobal < 100 ? "#fef2f2" : "#ecfdf3"}
-        />
-      </div>
+        <div style={styles.heroAside}>
+          <div style={styles.heroAsideCard}>
+            <div style={styles.heroAsideLabel}>Situation opérationnelle</div>
+            <div style={styles.heroAsideValue}>{formatNumber(stats.achats)} pesées</div>
+            <div style={styles.heroAsideText}>
+              {formatNumber(stats.centres)} centres suivis et {formatNumber(stats.producteurs)} producteurs actifs.
+            </div>
+          </div>
+          <div style={styles.heroAsideCardMuted}>
+            <div style={styles.heroAsideLabel}>Stock global</div>
+            <div style={styles.heroAsideValue}>{formatWeight(stats.stockGlobal)}</div>
+            <div style={styles.heroAsideText}>
+              {stats.stockGlobal < 100 ? "Niveau faible à surveiller" : "Niveau stable de stockage"}
+            </div>
+          </div>
+        </div>
+      </section>
 
-      <div style={{
-        ...contentGrid,
-        gridTemplateColumns: isTablet ? "1fr" : "repeat(3, 1fr)",
-        gap: isTablet ? 16 : 20,
-      }}>
-        <Card title="Stock par Centre">
+      <section style={styles.statsGrid}>
+        {statCards.map((item) => (
+          <StatCard key={item.title} {...item} />
+        ))}
+      </section>
+
+      <section
+        style={{
+          ...styles.contentGrid,
+          gridTemplateColumns: isTablet ? "1fr" : "minmax(0, 1.2fr) minmax(0, 0.8fr)",
+        }}
+      >
+        <Card title="Stock par centre" subtitle="Synthèse des volumes disponibles par centre de collecte.">
           {centresStats.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#6b7280", padding: 20 }}>Aucun centre enregistré</p>
+            <div style={styles.emptyState}>Aucun centre enregistré.</div>
           ) : (
-            <div style={{
-              ...centresGrid,
-              gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))",
-              gap: isMobile ? 12 : 16,
-            }}>
+            <div style={styles.centreList}>
               {centresStats.map((centre) => (
-                <div key={centre.id} style={centreCard}>
-                  <div style={centreHeader}>
-                    <h4 style={centreName}>{centre.nom}</h4>
-                    <span style={centreCode}>{centre.code}</span>
+                <div key={centre.id} style={styles.centreItem}>
+                  <div>
+                    <div style={styles.centreName}>{centre.nom}</div>
+                    <div style={styles.centreCode}>{centre.code || "Centre"}</div>
                   </div>
-                  <p
-                    style={{
-                      ...stockValue,
-                      color: centre.stock < 100 ? "#dc2626" : "#16a34a",
-                    }}
-                  >
-                    {centre.stock.toLocaleString()} Kg
-                  </p>
+                  <div style={styles.centreStockWrap}>
+                    <FaStore size={16} color={centre.stock < 100 ? "#dc2626" : "#16a34a"} />
+                    <strong
+                      style={{
+                        ...styles.centreStock,
+                        color: centre.stock < 100 ? "#dc2626" : "#16a34a",
+                      }}
+                    >
+                      {formatWeight(centre.stock)}
+                    </strong>
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </Card>
 
-        <Card title="Pesées Récentes">
+        <Card title="Activité récente" subtitle="Dernières pesées enregistrées dans le système.">
           {recentAchats.length === 0 ? (
-            <p style={{ textAlign: "center", color: "#6b7280", padding: 20 }}>Aucune pesée récente</p>
+            <div style={styles.emptyState}>Aucune pesée récente.</div>
           ) : (
-            <div style={recentList}>
+            <div style={styles.recentList}>
               {recentAchats.map((achat) => (
-                <div key={achat.id} style={recentItem}>
+                <div key={achat.id} style={styles.recentItem}>
                   <div>
-                    <p style={recentProducteur}>{achat.nom_producteur || "-"}</p>
-                    <p style={recentDate}>
-                      {achat.created_at ? new Date(achat.created_at).toLocaleDateString() : "-"}
-                    </p>
+                    <div style={styles.recentProducteur}>{achat.nom_producteur || "Producteur"}</div>
+                    <div style={styles.recentDate}>
+                      {achat.created_at
+                        ? new Date(achat.created_at).toLocaleDateString("fr-FR", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })
+                        : "-"}
+                    </div>
                   </div>
-                  <div style={recentWeight}>{achat.poids || 0} Kg</div>
+                  <div style={styles.recentWeight}>{formatWeight(achat.poids)}</div>
                 </div>
               ))}
             </div>
           )}
         </Card>
-      </div>
+      </section>
+
+      <Card title="Lecture rapide" subtitle="Indicateurs clés pour suivre la dynamique de la coopérative.">
+        <div style={styles.insightGrid}>
+          <div style={styles.insightItem}>
+            <FaChartLine size={18} color="#2563eb" />
+            <span>Le volume total acheté atteint {formatWeight(stats.poidsTotal)}.</span>
+          </div>
+          <div style={styles.insightItem}>
+            <FaCheckCircle size={18} color="#16a34a" />
+            <span>{formatNumber(stats.livraisonsValidees)} livraisons ont déjà été validées.</span>
+          </div>
+          <div style={styles.insightItem}>
+            <FaClock size={18} color="#f59e0b" />
+            <span>{formatNumber(stats.livraisonsAttente)} livraisons restent en attente de traitement.</span>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
 
-function StatCard({ icon, title, value, color, bgColor }) {
-  const isMobile = useMediaQuery("(max-width: 640px)")
-  
-  return (
-    <Card>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-        <div
-          style={{
-            width: isMobile ? 48 : 56,
-            height: isMobile ? 48 : 56,
-            minWidth: isMobile ? 48 : 56,
-            borderRadius: "16px",
-            background: bgColor,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: color,
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: "13px", color: "#6b7280", fontWeight: 500, marginBottom: 4 }}>
-            {title}
-          </p>
-          <p style={{ margin: 0, fontSize: isMobile ? "20px" : "24px", fontWeight: 700, color: "#1f2937" }}>{value}</p>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-const container = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 24,
-}
-
-const headerSection = {
-  marginBottom: 8,
-}
-
-const mainTitle = {
-  margin: 0,
-  fontSize: "32px",
-  fontWeight: 800,
-  color: "#1f2937",
-  letterSpacing: "-0.02em",
-}
-
-const subtitle = {
-  margin: "8px 0 0 0",
-  fontSize: "15px",
-  color: "#6b7280",
-}
-
-const statsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 16,
-}
-
-const contentGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: 20,
-}
-
-const centresGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-  gap: 16,
-}
-
-const centreCard = {
-  padding: 16,
-  background: "#f9fafb",
-  borderRadius: "12px",
-  border: "1px solid #e5e7eb",
-}
-
-const centreHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: 12,
-}
-
-const centreName = {
-  margin: 0,
-  fontSize: "15px",
-  fontWeight: 600,
-  color: "#1f2937",
-}
-
-const centreCode = {
-  fontSize: "12px",
-  color: "#6b7280",
-  background: "white",
-  padding: "4px 8px",
-  borderRadius: "6px",
-  fontWeight: 500,
-}
-
-const stockValue = {
-  margin: 0,
-  fontSize: "24px",
-  fontWeight: 700,
-}
-
-const recentList = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 12,
-}
-
-const recentItem = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: 12,
-  background: "#f9fafb",
-  borderRadius: "10px",
-}
-
-const recentProducteur = {
-  margin: 0,
-  fontSize: "14px",
-  fontWeight: 600,
-  color: "#1f2937",
-}
-
-const recentDate = {
-  margin: "4px 0 0 0",
-  fontSize: "12px",
-  color: "#6b7280",
-}
-
-const recentWeight = {
-  fontSize: "16px",
-  fontWeight: 700,
-  color: "#7a1f1f",
+const styles = {
+  page: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 22,
+  },
+  loadingWrap: {
+    minHeight: 420,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  loader: {
+    width: 48,
+    height: 48,
+    borderRadius: "50%",
+    border: "4px solid #e5e7eb",
+    borderTopColor: "#7a1f1f",
+    animation: "spin 0.8s linear infinite",
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  hero: {
+    display: "grid",
+    gap: 20,
+    padding: 24,
+    borderRadius: 28,
+    background:
+      "linear-gradient(135deg, rgba(122,31,31,0.08) 0%, rgba(255,255,255,0.96) 36%, rgba(239,246,255,0.92) 100%)",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    boxShadow: "0 24px 48px rgba(15, 23, 42, 0.06)",
+  },
+  heroMain: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  heroEyebrow: {
+    fontSize: 12,
+    fontWeight: 800,
+    textTransform: "uppercase",
+    letterSpacing: "0.12em",
+    color: "#7a1f1f",
+  },
+  heroTitle: {
+    margin: 0,
+    lineHeight: 1.05,
+    color: "#0f172a",
+    fontWeight: 900,
+    letterSpacing: "-0.05em",
+  },
+  heroSubtitle: {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 700,
+    color: "#7a1f1f",
+  },
+  heroDescription: {
+    margin: 0,
+    maxWidth: 780,
+    color: "#475569",
+    lineHeight: 1.7,
+    fontSize: 14,
+  },
+  heroMetricGrid: {
+    marginTop: 8,
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 14,
+  },
+  heroMetricCard: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 16px",
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.82)",
+    border: "1px solid rgba(226,232,240,0.95)",
+  },
+  heroMetricDot: {
+    width: 12,
+    height: 12,
+    borderRadius: "50%",
+    flexShrink: 0,
+  },
+  heroMetricLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: 700,
+  },
+  heroMetricValue: {
+    marginTop: 4,
+    fontSize: 18,
+    color: "#0f172a",
+    fontWeight: 800,
+  },
+  heroAside: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+  },
+  heroAsideCard: {
+    padding: "18px 18px 20px",
+    borderRadius: 22,
+    background: "linear-gradient(135deg, #7a1f1f 0%, #b02a2a 100%)",
+    color: "#fff",
+    boxShadow: "0 18px 30px rgba(122, 31, 31, 0.22)",
+  },
+  heroAsideCardMuted: {
+    padding: "18px 18px 20px",
+    borderRadius: 22,
+    background: "#ffffff",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+  },
+  heroAsideLabel: {
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
+    fontWeight: 800,
+    opacity: 0.86,
+  },
+  heroAsideValue: {
+    marginTop: 10,
+    fontSize: 28,
+    fontWeight: 900,
+    letterSpacing: "-0.04em",
+    color: "inherit",
+  },
+  heroAsideText: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 1.6,
+    color: "inherit",
+    opacity: 0.88,
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 16,
+  },
+  statCard: {
+    minHeight: 124,
+  },
+  statInner: {
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+  statIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  statContent: {
+    minWidth: 0,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: 700,
+  },
+  statValue: {
+    marginTop: 6,
+    fontSize: 26,
+    fontWeight: 800,
+    color: "#0f172a",
+    letterSpacing: "-0.04em",
+  },
+  statHelper: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#94a3b8",
+  },
+  contentGrid: {
+    display: "grid",
+    gap: 20,
+  },
+  centreList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  centreItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 16px",
+    borderRadius: 16,
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    background: "#f8fafc",
+  },
+  centreName: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  centreCode: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#64748b",
+  },
+  centreStockWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  centreStock: {
+    fontSize: 14,
+  },
+  recentList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  recentItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 16px",
+    borderRadius: 16,
+    background: "#f8fafc",
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+  },
+  recentProducteur: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  recentDate: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#64748b",
+  },
+  recentWeight: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: "#7a1f1f",
+    flexShrink: 0,
+  },
+  emptyState: {
+    padding: "20px 4px",
+    textAlign: "center",
+    color: "#64748b",
+  },
+  insightGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 14,
+  },
+  insightItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "16px 18px",
+    borderRadius: 16,
+    border: "1px solid rgba(226, 232, 240, 0.95)",
+    background: "#ffffff",
+    color: "#334155",
+    lineHeight: 1.6,
+    fontSize: 14,
+  },
 }

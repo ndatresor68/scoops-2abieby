@@ -90,7 +90,9 @@ export default function AdminPesees() {
       ] = await Promise.all([
         supabase
           .from("achats")
-          .select("*")
+          .select(
+            "id, centre_id, producteur_id, utilisateur_id, campagne_id, poids, sacs, prix_unitaire, montant, date_pesee, created_at, nom_producteur, code_producteur, nom_agent"
+          )
           .order("date_pesee", { ascending: false }),
         supabase.from("centres").select("id, nom").order("nom"),
         supabase.from("producteurs").select("id, nom, code, centre_id").order("nom"),
@@ -282,6 +284,7 @@ export default function AdminPesees() {
       const payload = {
         centre_id: formData.centre_id,
         producteur_id: formData.producteur_id,
+        campagne_id: activeCampagne.id,
         poids: Number(formData.poids),
         sacs: Number(formData.sacs) || 0,
         prix_unitaire: Number(activeCampagne?.prix_kg || 0),

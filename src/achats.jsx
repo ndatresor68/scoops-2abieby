@@ -207,6 +207,7 @@ export default function Achats() {
       const payload = {
         producteur_id: selectedProd.id,
         centre_id: centreId,
+        campagne_id: activeCampagne?.id || null,
         poids: poidsNet,
         sacs: Number(sacs) || 0,
         prix_unitaire: prixUnitaire, // Changed from prix_kg to prix_unitaire

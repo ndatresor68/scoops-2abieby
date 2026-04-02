@@ -169,7 +169,10 @@ export default function AdminStats() {
       setErrorMessage("")
 
       const [usersRes, centresRes, achatsRes, notificationsResRaw, employesResRaw] = await Promise.all([
-        runDashboardQuery("utilisateurs", supabase.from("utilisateurs").select("*")),
+        runDashboardQuery(
+          "utilisateurs",
+          supabase.from("utilisateurs").select("id, nom, email, role, status, created_at")
+        ),
         runDashboardQuery("centres", supabase.from("centres").select("id, nom")),
         runDashboardQuery(
           "achats",

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react"
 import { useAuth } from "../context/AuthContext"
 import {
   FaBars,
@@ -31,26 +31,11 @@ import {
   FaUsers,
   FaWeightHanging,
 } from "react-icons/fa"
-import AdminAgents from "./admin/AdminAgents"
-import AdminActivities from "./admin/AdminActivities"
-import AdminCentres from "./admin/AdminCentres"
-import AdminNotifications from "./admin/AdminNotifications"
-import Campagnes from "./admin/Campagnes"
-import AdminOpportunities from "./admin/Opportunities"
-import AdminParcelles from "./admin/AdminParcelles"
-import AdminPesees from "./admin/AdminPesees"
-import AdminProducteurs from "./admin/AdminProducteurs"
-import AdminSettings from "./admin/AdminSettings"
-import AdminStats from "./admin/AdminStats"
-import AdminUsers from "./admin/AdminUsers"
-import Chat from "./Chat"
-import Profile from "./Profile"
 import { useMediaQuery } from "../hooks/useMediaQuery"
 import { useToast } from "../components/ui/Toast"
 import { useSettings } from "../context/SettingsContext"
 import { ADMIN_TOKENS, getAdminThemeVars } from "../components/ui/AdminPage"
 import { ErrorBoundary } from "../components/ErrorBoundary"
-import EmployesPage from "../modules/employes/EmployesPage"
 import {
   getUserNotifications,
   markNotificationAsRead,
@@ -58,6 +43,22 @@ import {
 } from "../utils/notifications"
 import { logAppActivity } from "../utils/activityLogger"
 import logoImage from "../assets/logo-scoops.png"
+
+const AdminAgents = lazy(() => import("./admin/AdminAgents"))
+const AdminActivities = lazy(() => import("./admin/AdminActivities"))
+const AdminCentres = lazy(() => import("./admin/AdminCentres"))
+const AdminNotifications = lazy(() => import("./admin/AdminNotifications"))
+const Campagnes = lazy(() => import("./admin/Campagnes"))
+const AdminOpportunities = lazy(() => import("./admin/Opportunities"))
+const AdminParcelles = lazy(() => import("./admin/AdminParcelles"))
+const AdminPesees = lazy(() => import("./admin/AdminPesees"))
+const AdminProducteurs = lazy(() => import("./admin/AdminProducteurs"))
+const AdminSettings = lazy(() => import("./admin/AdminSettings"))
+const AdminStats = lazy(() => import("./admin/AdminStats"))
+const AdminUsers = lazy(() => import("./admin/AdminUsers"))
+const Chat = lazy(() => import("./Chat"))
+const Profile = lazy(() => import("./Profile"))
+const EmployesPage = lazy(() => import("../modules/employes/EmployesPage"))
 
 const SECTIONS = {
   stats: { id: "stats", label: "Tableau de bord", icon: FaChartLine },
@@ -898,7 +899,16 @@ export default function AdminDashboard() {
             }}
           >
             <ErrorBoundary key={showProfile ? "profile" : activeSection}>
-              {renderSection()}
+              <Suspense
+                fallback={
+                  <div style={styles.sectionLoadingState}>
+                    <div style={styles.spinner}></div>
+                    <p style={styles.loadingText}>Chargement de la section...</p>
+                  </div>
+                }
+              >
+                {renderSection()}
+              </Suspense>
             </ErrorBoundary>
           </div>
         </div>
@@ -1630,6 +1640,14 @@ const styles = {
   loadingText: {
     fontSize: 14,
     color: "var(--admin-text-soft)",
+  },
+  sectionLoadingState: {
+    minHeight: 280,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
   },
   restrictedState: {
     minHeight: "100vh",

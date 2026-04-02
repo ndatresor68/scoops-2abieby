@@ -349,11 +349,17 @@ export default function GestionParcelles() {
 
     try {
       const selectedProducteur = producteurs.find((p) => String(p.id) === String(formData.producteur_id))
+      const resolvedCentreId = isCentre ? centreId : (selectedProducteur?.centre_id || null)
+
+      if (!resolvedCentreId) {
+        showToast("Centre introuvable pour cette parcelle", "error")
+        return
+      }
       
       const payload = {
         code_parcelle: formData.code_parcelle,
         producteur_id: formData.producteur_id,
-        centre_id: isCentre ? centreId : (selectedProducteur?.centre_id || null),
+        centre_id: resolvedCentreId,
         superficie: Number(formData.superficie),
         coordonnees: formData.coordonnees,
         date_mesure: formData.date_mesure,
@@ -366,15 +372,32 @@ export default function GestionParcelles() {
 
       if (!isOfflineMode()) {
         // Sauvegarder directement dans Supabase
-        const { error } = await supabase.from("parcelles").insert([payload])
+        const { data, error } = await supabase
+          .from("parcelles")
+          .insert([payload])
+          .select(`
+            *,
+            producteurs:producteur_id(nom, code),
+            centres:centre_id(nom)
+          `)
+          .single()
 
         if (error) throw error
 
+        setParcelles((prev) => [
+          {
+            ...data,
+            producteur_nom: data?.producteurs?.nom || selectedProducteur?.nom || "-",
+            producteur_code: data?.producteurs?.code || selectedProducteur?.code || "-",
+            centre_nom: data?.centres?.nom || centres.find((c) => String(c.id) === String(resolvedCentreId))?.nom || "-",
+          },
+          ...prev,
+        ])
         showToast("Parcelle enregistrée avec succès", "success")
       } else {
         cacheTableData("parcelles", parcelles)
         const selectedCentre = centres.find((c) =>
-          String(c.id) === String(isCentre ? centreId : selectedProducteur?.centre_id || null),
+          String(c.id) === String(resolvedCentreId),
         )
         const offlineParcelle = createOfflineRecord(
           {
@@ -405,7 +428,7 @@ export default function GestionParcelles() {
       await fetchParcelles()
     } catch (error) {
       console.error("[GestionParcelles] Error saving parcelle:", error)
-      showToast("Erreur lors de l'enregistrement", "error")
+      showToast(error?.message || "Erreur lors de l'enregistrement", "error")
     }
   }
 
