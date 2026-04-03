@@ -13,7 +13,7 @@ import { GiFarmer } from "react-icons/gi"
 import Card from "./components/ui/Card"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { useSettings } from "./context/SettingsContext"
-import { supabase } from "./supabaseClient"
+import { fetchDashboardData, refreshDashboardCache } from "./services/dashboardService"
 
 function toNumber(value) {
   return Number(value || 0)
@@ -138,66 +138,23 @@ export default function DashboardCentral() {
   const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true)
-
-      const [
-        producteursRes,
-        centresRes,
-        achatsCountRes,
-        livraisonsValideesRes,
-        livraisonsAttenteRes,
-        achatsDetailsRes,
-        livraisonsDetailsRes,
-        centresListRes,
-        recentAchatsRes,
-      ] = await Promise.all([
-        supabase.from("producteurs").select("*", { count: "exact", head: true }),
-        supabase.from("centres").select("*", { count: "exact", head: true }),
-        supabase.from("achats").select("*", { count: "exact", head: true }),
-        supabase.from("livraisons").select("*", { count: "exact", head: true }).eq("statut", "VALIDEE"),
-        supabase.from("livraisons").select("*", { count: "exact", head: true }).eq("statut", "EN_ATTENTE"),
-        supabase.from("achats").select("id, centre_id, poids, created_at, nom_producteur"),
-        supabase.from("livraisons").select("centre_id, poids_total, quantite, statut").eq("statut", "VALIDEE"),
-        supabase.from("centres").select("id, nom, code").order("nom"),
-        supabase.from("achats").select("id, nom_producteur, poids, created_at").order("created_at", { ascending: false }).limit(6),
-      ])
-
-      const achatsData = achatsDetailsRes?.data || []
-      const livraisonsData = livraisonsDetailsRes?.data || []
-      const centresData = centresListRes?.data || []
-
-      const totalAchats = achatsData.reduce((sum, item) => sum + getQuantite(item), 0)
-      const totalLivraisons = livraisonsData.reduce((sum, item) => sum + getQuantite(item), 0)
-      const stockGlobal = totalAchats - totalLivraisons
-      const poidsTotal = achatsData.reduce((sum, item) => sum + toNumber(item.poids), 0)
+      console.log('[DashboardCentral] Fetching dashboard data...')
+      
+      // Use optimized service instead of 9 individual queries
+      const data = await fetchDashboardData()
 
       setStats({
-        producteurs: producteursRes?.count || 0,
-        centres: centresRes?.count || 0,
-        achats: achatsCountRes?.count || 0,
-        livraisonsValidees: livraisonsValideesRes?.count || 0,
-        livraisonsAttente: livraisonsAttenteRes?.count || 0,
-        stockGlobal,
-        poidsTotal,
+        producteurs: data.producteurs || 0,
+        centres: data.centres || 0,
+        achats: data.achats || 0,
+        livraisonsValidees: data.livraisonsValidees || 0,
+        livraisonsAttente: data.livraisonsAttente || 0,
+        stockGlobal: data.stockGlobal || 0,
+        poidsTotal: data.poidsTotal || 0,
       })
 
-      const centresCalculated = centresData.slice(0, 10).map((centre) => {
-        const totalCentreAchats = achatsData
-          .filter((entry) => String(entry.centre_id) === String(centre.id))
-          .reduce((sum, entry) => sum + getQuantite(entry), 0)
-        const totalCentreLivraisons = livraisonsData
-          .filter((entry) => String(entry.centre_id) === String(centre.id))
-          .reduce((sum, entry) => sum + getQuantite(entry), 0)
-
-        return {
-          id: centre.id,
-          nom: centre.nom,
-          code: centre.code,
-          stock: totalCentreAchats - totalCentreLivraisons,
-        }
-      })
-
-      setCentresStats(centresCalculated)
-      setRecentAchats(recentAchatsRes?.data || [])
+      setCentresStats(data.centresStats || [])
+      setRecentAchats(data.recentAchats || [])
     } catch (error) {
       console.error("[DashboardCentral] Error:", error)
       setStats({
@@ -218,6 +175,15 @@ export default function DashboardCentral() {
 
   useEffect(() => {
     fetchDashboard()
+    
+    // Refresh dashboard every 5 minutes
+    const interval = setInterval(() => {
+      console.log('[DashboardCentral] Auto-refresh triggered')
+      refreshDashboardCache()
+      fetchDashboard()
+    }, 5 * 60 * 1000)
+    
+    return () => clearInterval(interval)
   }, [fetchDashboard])
 
   if (loading) {

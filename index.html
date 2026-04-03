@@ -1,9 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/cacao.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="apple-touch-icon" href="/cacao.png" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#7a1f1f" />
+    <meta name="description" content="Plateforme de gestion des coopératives agricoles - SCOOP ASAB" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SCOOPS" />
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="SCOOP ASAB COOP-CA" />
+    <meta property="og:description" content="Plateforme de gestion des coopératives agricoles" />
+    <meta property="og:image" content="/cacao.png" />
+    <meta property="og:type" content="website" />
+    
     <title>SCOOP ASAB COOP-CA</title>
     <script
       async
@@ -14,5 +31,26 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(
+            (registration) => {
+              console.log('[PWA] Service Worker registered:', registration)
+            },
+            (err) => {
+              console.log('[PWA] Service Worker registration failed:', err)
+            }
+          )
+        })
+      }
+
+      // Handle install prompt
+      let deferredPrompt
+      window.addEventListener('beforeinstallprompt', (e) => {
+        deferredPrompt = e
+      })
+    </script>
   </body>
 </html>

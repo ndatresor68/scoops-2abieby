@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from "react"
-import { FaCamera, FaImage, FaTimes } from "react-icons/fa"
+import { FaCamera, FaImage, FaTimes, FaSpinner } from "react-icons/fa"
 import { useMediaQuery } from "../hooks/useMediaQuery"
+import { compressImage } from "../services/imageCompressionService"
 
 export default function ImageUpload({
   label,
@@ -14,6 +15,7 @@ export default function ImageUpload({
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
   const [preview, setPreview] = useState("")
+  const [compressing, setCompressing] = useState(false)
 
   useEffect(() => {
     if (value) {
@@ -31,14 +33,35 @@ export default function ImageUpload({
     }
   }, [preview])
 
-  function handleFileSelect(event) {
+  async function handleFileSelect(event) {
     const file = event.target.files?.[0]
     if (!file) return
 
-    if (file.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/")) {
+      console.warn("[ImageUpload] Invalid file type:", file.type)
+      return
+    }
+
+    try {
+      console.log(`[ImageUpload] File selected: ${file.name} (${file.size} bytes)`)
+      setCompressing(true)
+      
+      // ✅ COMPRESS the image before using it
+      const compressedFile = await compressImage(file)
+      
+      const previewUrl = URL.createObjectURL(compressedFile)
+      setPreview(previewUrl)
+      onChange?.(compressedFile)
+      
+      console.log(`[ImageUpload] File ready for upload: ${compressedFile.size} bytes`)
+    } catch (error) {
+      console.error("[ImageUpload] Error processing image:", error)
+      // Fallback: use original file
       const previewUrl = URL.createObjectURL(file)
       setPreview(previewUrl)
       onChange?.(file)
+    } finally {
+      setCompressing(false)
     }
   }
 
@@ -71,7 +94,12 @@ export default function ImageUpload({
       {preview ? (
         <div style={previewContainer}>
           <img src={preview} alt="Preview" style={previewImage} />
-          <button type="button" onClick={handleRemove} style={removeBtn}>
+          <button 
+            type="button" 
+            onClick={handleRemove} 
+            style={removeBtn}
+            disabled={compressing}
+          >
             <FaTimes />
           </button>
         </div>
@@ -81,12 +109,15 @@ export default function ImageUpload({
             <button
               type="button"
               onClick={handleCameraClick}
-              style={uploadBtn}
+              style={{...uploadBtn, opacity: compressing ? 0.6 : 1}}
               title="Prendre une photo"
+              disabled={compressing}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#f3f4f6"
-                e.currentTarget.style.borderColor = "#7a1f1f"
-                e.currentTarget.style.color = "#7a1f1f"
+                if (!compressing) {
+                  e.currentTarget.style.background = "#f3f4f6"
+                  e.currentTarget.style.borderColor = "#7a1f1f"
+                  e.currentTarget.style.color = "#7a1f1f"
+                }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = "white"
@@ -94,18 +125,23 @@ export default function ImageUpload({
                 e.currentTarget.style.color = "#6b7280"
               }}
             >
-              <FaCamera style={{ fontSize: 20 }} />
-              <span style={{ fontSize: isMobile ? "13px" : "12px" }}>Caméra</span>
+              {compressing ? <FaSpinner style={{ fontSize: 20, animation: 'spin 1s linear infinite' }} /> : <FaCamera style={{ fontSize: 20 }} />}
+              <span style={{ fontSize: isMobile ? "13px" : "12px" }}>
+                {compressing ? "Traitement..." : "Caméra"}
+              </span>
             </button>
             <button
               type="button"
               onClick={handleFileClick}
-              style={uploadBtn}
+              style={{...uploadBtn, opacity: compressing ? 0.6 : 1}}
               title="Choisir un fichier"
+              disabled={compressing}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = "#f3f4f6"
-                e.currentTarget.style.borderColor = "#7a1f1f"
-                e.currentTarget.style.color = "#7a1f1f"
+                if (!compressing) {
+                  e.currentTarget.style.background = "#f3f4f6"
+                  e.currentTarget.style.borderColor = "#7a1f1f"
+                  e.currentTarget.style.color = "#7a1f1f"
+                }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = "white"
@@ -113,8 +149,10 @@ export default function ImageUpload({
                 e.currentTarget.style.color = "#6b7280"
               }}
             >
-              <FaImage style={{ fontSize: 20 }} />
-              <span style={{ fontSize: isMobile ? "13px" : "12px" }}>Fichier</span>
+              {compressing ? <FaSpinner style={{ fontSize: 20, animation: 'spin 1s linear infinite' }} /> : <FaImage style={{ fontSize: 20 }} />}
+              <span style={{ fontSize: isMobile ? "13px" : "12px" }}>
+                {compressing ? "Traitement..." : "Fichier"}
+              </span>
             </button>
           </div>
         </div>

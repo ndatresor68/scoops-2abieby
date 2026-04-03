@@ -87,77 +87,81 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      let profile = null
-      let error = null
+      console.log('[AuthContext] Loading profile for user:', authUser.id)
       
-      // Primary lookup: id matches auth.users.id
-      const { data: profileById, error: error1 } = await supabase
+      // ✅ OPTIMIZATION: Single direct query instead of 2-3 retries
+      const { data: profile, error } = await supabase
         .from("utilisateurs")
         .select("id, email, role, nom, centre_id, avatar_url")
         .eq("id", authUser.id)
         .single()
-      
-      if (!error1 && profileById) {
-        profile = profileById
-      } else {
-        // Fallback: try email if id lookup fails
-        if (authUser.email) {
-          const { data: profileByEmail, error: emailError } = await supabase
-            .from("utilisateurs")
-            .select("id, email, role, nom, centre_id, avatar_url")
-            .eq("email", authUser.email)
-            .single()
-          
-          if (!emailError && profileByEmail) {
-            profile = profileByEmail
-          } else {
-            error = emailError || error1
-          }
-        } else {
-          error = error1
-        }
-      }
-      
-      if (error && !profile) {
-        console.error("[AuthContext] ERROR loading profile from utilisateurs:", error)
-        return null
+
+      // PGRST116 = Row not found (not a real error)
+      if (error && error.code !== 'PGRST116') {
+        console.error("[AuthContext] Error loading profile:", error)
+        throw error
       }
 
       if (!profile) {
+        console.log('[AuthContext] No profile found for user', authUser.id)
         return null
       }
       
-      // Verify role is NOT "authenticated" (PostgreSQL role)
+      // Validate role is not a PostgreSQL system role
       if (profile.role === "authenticated" || profile.role === "AUTHENTICATED") {
-        console.error("[AuthContext] CRITICAL ERROR: Profile role is 'authenticated' - this is a PostgreSQL role, not application role!")
+        console.error("[AuthContext] CRITICAL: Profile role is 'authenticated' (system role)!")
         return null
       }
       
-      // Merge profile data into user state
+      // Normalize and validate role
+      const normalizedRole = normalizeRole(profile.role)
+      const displayName = getDisplayName(profile)
+      
       const mergedUser = {
         ...authUser,
-        role: profile.role,
+        id: profile.id,
+        email: profile.email,
+        role: normalizedRole || 'AGENT',
         nom: profile.nom,
         centre_id: profile.centre_id,
         avatar_url: profile.avatar_url,
+        displayName
       }
       
+      console.log('[AuthContext] Profile loaded successfully:', {
+        id: mergedUser.id,
+        email: mergedUser.email,
+        role: mergedUser.role
+      })
+      
       setUser((currentUser) => {
+        // Avoid unnecessary re-renders
         if (
           currentUser?.id === mergedUser.id &&
           currentUser?.email === mergedUser.email &&
           currentUser?.role === mergedUser.role &&
-          currentUser?.nom === mergedUser.nom &&
-          currentUser?.centre_id === mergedUser.centre_id &&
-          currentUser?.avatar_url === mergedUser.avatar_url
+          currentUser?.nom === mergedUser.nom
         ) {
           return currentUser
         }
         return mergedUser
       })
+      
       return profile
     } catch (error) {
-      console.error("[AuthContext] EXCEPTION loading profile:", error)
+      console.error("[AuthContext] Exception loading profile:", error)
+      
+      // Return minimal profile on offline mode
+      if (!navigator.onLine) {
+        console.log('[AuthContext] Offline - returning cached user')
+        return {
+          id: authUser.id,
+          email: authUser.email,
+          role: 'AGENT',
+          nom: authUser.email?.split('@')[0] || 'Utilisateur'
+        }
+      }
+      
       return null
     }
   }, [])

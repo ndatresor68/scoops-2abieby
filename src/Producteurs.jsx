@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { supabase } from "./supabaseClient"
 import {
   FaPlus,
@@ -10,6 +10,8 @@ import {
   FaFilePdf,
   FaTimes,
   FaFilter,
+  FaChevronLeft,
+  FaChevronRight,
 } from "react-icons/fa"
 import Card from "./components/ui/Card"
 import Button from "./components/ui/Button"
@@ -29,6 +31,7 @@ import {
   logProducerDeleted,
   logPDFExported,
 } from "./utils/activityLogger"
+import { fetchProducteurs as fetchProducteursService, fetchCentres as fetchCentresService } from "./services/producteursService"
 
 export default function Producteurs() {
   const { showToast } = useToast()
@@ -48,6 +51,12 @@ export default function Producteurs() {
   const [pdfCentreFilter, setPdfCentreFilter] = useState("")
   const [generatingPdf, setGeneratingPdf] = useState(false)
   const isMobile = useMediaQuery("(max-width: 640px)")
+  
+  // ✅ PAGINATION STATES
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [pageLoading, setPageLoading] = useState(false)
 
   const [formData, setFormData] = useState({
     nom: "",
@@ -72,55 +81,40 @@ export default function Producteurs() {
     carte_planteur: "",
   })
 
-  async function fetchProducteurs() {
+  // ✅ OPTIMIZED: Paginated fetch with caching and filtering
+  const fetchProducteurs = useCallback(async (pageNum = 1) => {
     try {
       if (isOfflineMode()) {
         setProducteurs(getCachedTableData("producteurs"))
         return
       }
 
-      console.log("[Producteurs] Fetching producteurs...")
+      console.log(`[Producteurs] Fetching page ${pageNum}...`)
+      setPageLoading(true)
       
-      // Get role-based filtered query
-      const query = getProducteursQuery(user)
+      // Use the optimized service with pagination
+      const result = await fetchProducteursService(pageNum, searchTerm, selectedCentre)
       
-      // Timeout protection: max 15 seconds
-      const queryPromise = query
+      setProducteurs(result.producteurs)
+      setPage(result.page)
+      setTotalPages(result.totalPages)
+      setTotalCount(result.total)
       
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Query timeout")), 15000)
-      )
+      console.log(`[Producteurs] Loaded ${result.producteurs.length} items (page ${result.page}/${result.totalPages})`)
       
-      const { data: producteursData, error } = await Promise.race([
-        queryPromise,
-        timeoutPromise
-      ]).catch((err) => {
-        console.error("[Producteurs] Query timeout or error:", err)
-        return { data: null, error: err }
-      })
-
-      if (error) {
-        console.error("[Producteurs] Erreur fetch producteurs:", error)
-        // Don't show toast on initial load to avoid spam
-        setProducteurs([])
-        return
-      }
-
-      if (!producteursData) {
-        setProducteurs([])
-        return
-      }
-
-      console.log(`[Producteurs] Loaded ${producteursData.length} producteurs`)
-      cacheTableData("producteurs", producteursData)
-      setProducteurs(producteursData)
+      // Cache for offline
+      cacheTableData("producteurs", result.producteurs)
     } catch (error) {
-      console.error("[Producteurs] Exception in fetchProducteurs:", error)
+      console.error("[Producteurs] Error fetching paginated data:", error)
+      showToast("Erreur lors du chargement des producteurs", "error")
       setProducteurs([])
+    } finally {
+      setPageLoading(false)
     }
-  }
+  }, [searchTerm, selectedCentre, showToast])
 
-  async function fetchCentres() {
+  // ✅ OPTIMIZED: Fetch centres once on mount
+  const fetchCentres = useCallback(async () => {
     try {
       if (isOfflineMode()) {
         setCentres(getCachedTableData("centres"))
@@ -128,60 +122,39 @@ export default function Producteurs() {
       }
 
       console.log("[Producteurs] Fetching centres...")
+      const centresList = await fetchCentresService()
       
-      const { isAdmin, isCentre, centreId } = getUserRoleInfo(user)
-      
-      // Build query based on role
-      let query = supabase.from("centres").select("id, nom").order("nom")
-      
-      // CENTRE users: Only see their own centre
-      if (isCentre && centreId) {
-        query = query.eq("id", centreId)
-      }
-      
-      // Timeout protection: max 10 seconds
-      const queryPromise = query
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Query timeout")), 10000)
-      )
-      
-      const { data, error } = await Promise.race([
-        queryPromise,
-        timeoutPromise
-      ]).catch((err) => {
-        console.error("[Producteurs] Centres query timeout or error:", err)
-        return { data: null, error: err }
-      })
-
-      if (error) {
-        console.error("[Producteurs] Error fetching centres:", error)
-        setCentres([])
-        return
-      }
-
-      console.log(`[Producteurs] Loaded ${data?.length || 0} centres`)
-      cacheTableData("centres", data || [])
-      setCentres(data || [])
+      cacheTableData("centres", centresList)
+      setCentres(centresList)
+      console.log(`[Producteurs] Loaded ${centresList.length} centres`)
     } catch (error) {
-      console.error("[Producteurs] Exception in fetchCentres:", error)
+      console.error("[Producteurs] Error fetching centres:", error)
       setCentres([])
     }
-  }
+  }, [])
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [searchTerm, selectedCentre])
+
+  // Load data on mount and when page/filters change
   useEffect(() => {
     let mounted = true
     
     async function loadData() {
-      setLoading(true)
+      if (mounted) {
+        setLoading(true)
+      }
       try {
-        console.log("[Producteurs] Starting data load...")
-        await Promise.all([
-          fetchProducteurs(),
-    fetchCentres()
-        ])
-        console.log("[Producteurs] Data load completed")
+        console.log("[Producteurs] Loading initial data...")
+        await fetchCentres()
+        
+        if (mounted) {
+          await fetchProducteurs(page)
+        }
       } catch (error) {
-        console.error("[Producteurs] Error loading initial data:", error)
+        console.error("[Producteurs] Error in loadData:", error)
       } finally {
         if (mounted) {
           setLoading(false)
@@ -194,7 +167,7 @@ export default function Producteurs() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [page, fetchProducteurs, fetchCentres])
 
   /**
    * Génère un code producteur unique basé sur le dernier code dans la base de données
@@ -1320,6 +1293,41 @@ export default function Producteurs() {
             </table>
           </div>
         )}
+
+        {/* ✅ PAGINATION CONTROLS */}
+        {totalPages > 1 && !loading && (
+          <div style={paginationContainer}>
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={page === 1 || pageLoading}
+              style={{
+                ...paginationBtn,
+                opacity: page === 1 ? 0.5 : 1,
+                cursor: page === 1 ? 'not-allowed' : 'pointer'
+              }}
+              title="Page précédente"
+            >
+              <FaChevronLeft /> Précédent
+            </button>
+
+            <div style={paginationInfo}>
+              Page {page} / {totalPages} ({totalCount} total)
+            </div>
+
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={page === totalPages || pageLoading}
+              style={{
+                ...paginationBtn,
+                opacity: page === totalPages ? 0.5 : 1,
+                cursor: page === totalPages ? 'not-allowed' : 'pointer'
+              }}
+              title="Page suivante"
+            >
+              Suivant <FaChevronRight />
+            </button>
+          </div>
+        )}
       </Card>
 
       {/* Modal formulaire */}
@@ -1990,6 +1998,39 @@ const documentsSection = {
   marginTop: 24,
   paddingTop: 24,
   borderTop: "1px solid #e5e7eb",
+}
+
+const paginationContainer = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  gap: 16,
+  padding: "24px 16px 0",
+  borderTop: "1px solid #e5e7eb",
+  flexWrap: "wrap"
+}
+
+const paginationBtn = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "10px 16px",
+  borderRadius: "8px",
+  border: "1px solid #d1d5db",
+  background: "#ffffff",
+  color: "#374151",
+  fontWeight: 600,
+  fontSize: "14px",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+  userSelect: "none"
+}
+
+const paginationInfo = {
+  fontSize: "14px",
+  color: "#6b7280",
+  fontWeight: 600,
+  whiteSpace: "nowrap"
 }
 
 const sectionTitle = {

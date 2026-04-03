@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext"
 import { useSettings, useSessionTimeout } from "../context/SettingsContext"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
+import PWAInstallPrompt from "./PWAInstallPrompt"
+import PWAWelcomeScreen from "./PWAWelcomeScreen"
 import { initializeSessionTimeout } from "../utils/sessionManager"
 import { useToast } from "./ui/Toast"
 import { t } from "../utils/i18n"
@@ -480,6 +482,12 @@ export default function Layout() {
         <footer style={footer}>{renderFooterLinks(navigateToPage)}</footer>
       </div>
     </div>
+
+    {/* PWA Welcome Screen (au premier lancement) */}
+    <PWAWelcomeScreen />
+
+    {/* PWA Installation Prompt */}
+    <PWAInstallPrompt />
   )
 }
 
