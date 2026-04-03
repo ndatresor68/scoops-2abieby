@@ -1,27 +1,31 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: '/',
   plugins: [react()],
-  // Build configuration
   build: {
-    // Source maps for debugging in production (set to true if needed)
     sourcemap: false,
-    // Minification
     minify: 'esbuild',
-    // Ensure environment variables are included in build
-    // Vite automatically includes all VITE_ prefixed variables
+    esbuild: {
+      drop: mode === 'production' ? ['console', 'debugger'] : [],
+    },
+    chunkSizeWarningLimit: 600,
+    target: ['es2020', 'chrome91', 'firefox88', 'safari14'],
+    cssCodeSplit: true,
+    reportCompressedSize: false,
+    modulePreload: {
+      polyfill: false,
+    },
   },
-  // Server configuration for development
   server: {
     port: 3000,
     strictPort: false,
+    host: '127.0.0.1',
   },
-  // Preview configuration (for testing production build locally)
   preview: {
     port: 3000,
     strictPort: false,
+    host: '127.0.0.1',
   },
-})
+}))

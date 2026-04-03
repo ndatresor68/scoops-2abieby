@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { supabase } from "./supabaseClient"
 import {
   FaPlus,
@@ -23,7 +23,7 @@ import { useToast } from "./components/ui/Toast"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { exportProducteursPDF } from "./utils/exportToPDF"
 import { useAuth } from "./context/AuthContext"
-import { getProducteursQuery, getUserRoleInfo } from "./utils/rolePermissions"
+import { getUserRoleInfo } from "./utils/rolePermissions"
 import { addToQueue, cacheTableData, createOfflineRecord, getCachedTableData, isOfflineMode } from "./services/offlineService"
 import {
   logProducerCreated,
@@ -32,6 +32,9 @@ import {
   logPDFExported,
 } from "./utils/activityLogger"
 import { fetchProducteurs as fetchProducteursService, fetchCentres as fetchCentresService } from "./services/producteursService"
+import { usePrefetch } from "./hooks/useOptimizedData"
+import { getUltraPerformanceOptimizer } from "./services/ultraPerformanceOptimizer"
+import { getCacheManager } from "./services/advancedCacheService"
 
 export default function Producteurs() {
   const { showToast } = useToast()
@@ -81,6 +84,11 @@ export default function Producteurs() {
     carte_planteur: "",
   })
 
+  // ✅ ULTRA PERFORMANCE: Initialize optimizer & cache manager
+  const optimizer = getUltraPerformanceOptimizer()
+  const cacheManager = getCacheManager()
+  const { prefetch } = usePrefetch()
+
   // ✅ OPTIMIZED: Paginated fetch with caching and filtering
   const fetchProducteurs = useCallback(async (pageNum = 1) => {
     try {
@@ -89,21 +97,36 @@ export default function Producteurs() {
         return
       }
 
-      console.log(`[Producteurs] Fetching page ${pageNum}...`)
+      console.log(`[Producteurs] Fetching page ${pageNum} (optimized)...`)
       setPageLoading(true)
       
-      // Use the optimized service with pagination
-      const result = await fetchProducteursService(pageNum, searchTerm, selectedCentre)
+      // Create cache key based on filters & page
+      const cacheKey = `producteurs-page-${pageNum}-${searchTerm}-${selectedCentre}`
       
-      setProducteurs(result.producteurs)
-      setPage(result.page)
-      setTotalPages(result.totalPages)
-      setTotalCount(result.total)
+      // Use Cache-First strategy for fast loads
+      const result = await cacheManager.getWithCacheFirst(
+        cacheKey,
+        () => fetchProducteursService(pageNum, searchTerm, selectedCentre),
+        { ttl: 300000, store: 'producteurs' } // 5 min cache
+      )
       
-      console.log(`[Producteurs] Loaded ${result.producteurs.length} items (page ${result.page}/${result.totalPages})`)
-      
-      // Cache for offline
-      cacheTableData("producteurs", result.producteurs)
+      if (result) {
+        setProducteurs(result.producteurs)
+        setPage(result.page)
+        setTotalPages(result.totalPages)
+        setTotalCount(result.total)
+        
+        console.log(`[Producteurs] Loaded ${result.producteurs.length} items (cache) (page ${result.page}/${result.totalPages})`)
+        
+        // Prefetch next page in background
+        if (pageNum < result.totalPages) {
+          const nextPageKey = `producteurs-page-${pageNum + 1}-${searchTerm}-${selectedCentre}`
+          prefetch(nextPageKey, () => fetchProducteursService(pageNum + 1, searchTerm, selectedCentre))
+        }
+        
+        // Cache for offline
+        cacheTableData("producteurs", result.producteurs)
+      }
     } catch (error) {
       console.error("[Producteurs] Error fetching paginated data:", error)
       showToast("Erreur lors du chargement des producteurs", "error")
@@ -111,9 +134,9 @@ export default function Producteurs() {
     } finally {
       setPageLoading(false)
     }
-  }, [searchTerm, selectedCentre, showToast])
+  }, [searchTerm, selectedCentre, showToast, cacheManager, prefetch])
 
-  // ✅ OPTIMIZED: Fetch centres once on mount
+  // ✅ OPTIMIZED: Fetch centres once on mount with deduplication
   const fetchCentres = useCallback(async () => {
     try {
       if (isOfflineMode()) {
@@ -121,17 +144,24 @@ export default function Producteurs() {
         return
       }
 
-      console.log("[Producteurs] Fetching centres...")
-      const centresList = await fetchCentresService()
+      console.log("[Producteurs] Fetching centres (optimized)...")
       
-      cacheTableData("centres", centresList)
-      setCentres(centresList)
-      console.log(`[Producteurs] Loaded ${centresList.length} centres`)
+      // Use deduplicated request to prevent duplicate API calls
+      const centresList = await optimizer.deduplicateRequest(
+        'producteurs-centres-fetch',
+        () => fetchCentresService()
+      )
+      
+      if (centresList) {
+        cacheTableData("centres", centresList)
+        setCentres(centresList)
+        console.log(`[Producteurs] Loaded ${centresList.length} centres (dedup)`)
+      }
     } catch (error) {
       console.error("[Producteurs] Error fetching centres:", error)
       setCentres([])
     }
-  }, [])
+  }, [optimizer])
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -1994,7 +2024,7 @@ const selectInput = {
   fontFamily: "inherit",
 }
 
-const documentsSection = {
+const _documentsSection = {
   marginTop: 24,
   paddingTop: 24,
   borderTop: "1px solid #e5e7eb",
@@ -2033,7 +2063,7 @@ const paginationInfo = {
   whiteSpace: "nowrap"
 }
 
-const sectionTitle = {
+const _sectionTitle = {
   margin: "0 0 16px 0",
   fontSize: "16px",
   fontWeight: 700,

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import Layout from "./components/Layout"
 import AIChatButton from "./components/AIChatButton"
 import { syncQueue } from "./services/offlineService"
+import { PerformanceProvider } from "./context/PerformanceContext"
 
 export default function App() {
   const requestedRef = useRef(false)
@@ -24,9 +25,9 @@ export default function App() {
   }, [])
 
   return (
-    <>
+    <PerformanceProvider>
       <Layout />
       <AIChatButton />
-    </>
+    </PerformanceProvider>
   )
 }

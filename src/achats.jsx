@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import jsPDF from "jspdf"
 import { supabase } from "./supabaseClient"
 import { FaPlus, FaFilePdf, FaSearch, FaCalendar, FaReceipt } from "react-icons/fa"
 import Card from "./components/ui/Card"
@@ -19,10 +20,13 @@ import {
   getCentreQuota,
 } from "./utils/campagnes"
 import { addToQueue, cacheTableData, createOfflineRecord, getCachedTableData, isOfflineMode } from "./services/offlineService"
+import { getCacheManager } from "./services/advancedCacheService"
 
 export default function Achats() {
   const { showToast } = useToast()
   const { user, displayName } = useAuth()
+  const cacheManager = getCacheManager()
+
   const [showForm, setShowForm] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [selectedAchat, setSelectedAchat] = useState(null)
@@ -54,7 +58,7 @@ export default function Achats() {
   }, [achats, activeCampagne, centreQuota, user?.centre_id])
 
   // Load purchases from Supabase with role-based filtering
-  async function loadAchats() {
+  const loadAchats = useCallback(async () => {
     try {
       if (isOfflineMode()) {
         const cachedAchats = getCachedTableData("achats")
@@ -62,7 +66,7 @@ export default function Achats() {
         return cachedAchats
       }
 
-      console.log("[Achats] Loading purchases from Supabase...")
+      console.log("[Achats] Loading purchases (cache-first)...")
       
       // Check if user can view achats
       if (!canPerformAction(user, "view_achats")) {
@@ -79,14 +83,18 @@ export default function Achats() {
         return []
       }
 
-      const { data, error } = await query
+      // ✅ ULTRA PERFORMANCE: Use Cache-First strategy
+      const data = await cacheManager.getWithCacheFirst(
+        `achats-list-${user?.centre_id || 'all'}`,
+        async () => {
+          const { data: result, error } = await query
+          if (error) throw error
+          return result
+        },
+        { ttl: 300000, store: 'achats' } // 5 min cache
+      )
 
-      if (error) {
-        console.error("[Achats] Error loading purchases:", error)
-        throw error
-      }
-
-      console.log(`[Achats] Loaded ${data?.length || 0} purchases`)
+      console.log(`[Achats] Loaded ${data?.length || 0} purchases (cache-aware)`)
       cacheTableData("achats", data || [])
       setAchats(data || [])
       return data || []
@@ -95,9 +103,9 @@ export default function Achats() {
       showToast("Erreur lors du chargement des achats", "error")
       return []
     }
-  }
+  }, [cacheManager, showToast, user])
 
-  async function fetchInitialData() {
+  const fetchInitialData = useCallback(async () => {
     setLoading(true)
     try {
       if (isOfflineMode()) {
@@ -116,7 +124,7 @@ export default function Achats() {
         centresQuery = centresQuery.eq("id", user.centre_id)
       }
 
-      const [{ data: producteursData }, { data: centresData }, achatsData] = await Promise.all([
+      const [{ data: producteursData }, { data: centresData }] = await Promise.all([
         producteursQuery,
         centresQuery,
         loadAchats(), // Use loadAchats function
@@ -134,11 +142,11 @@ export default function Achats() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [loadAchats, loadCampagneContext, showToast, user])
 
   useEffect(() => {
     fetchInitialData()
-  }, [])
+  }, [fetchInitialData])
 
   function getCentreNom(centreId) {
     return centres.find((c) => String(c.id) === String(centreId))?.nom || ""
@@ -150,7 +158,7 @@ export default function Achats() {
     setPoids("")
   }
 
-  async function loadCampagneContext() {
+  const loadCampagneContext = useCallback(async () => {
     if (!user?.centre_id) {
       setActiveCampagne(null)
       setCentreQuota(null)
@@ -181,7 +189,7 @@ export default function Achats() {
       setCentreQuota(null)
       setCampagneError(error?.message || "Erreur lors du chargement de la campagne active.")
     }
-  }
+  }, [user?.centre_id])
 
   async function savePesee() {
     if (!selectedProd) {

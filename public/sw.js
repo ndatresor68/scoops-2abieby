@@ -1,5 +1,5 @@
 // Service Worker pour SCOOPS PWA
-const CACHE_VERSION = 'v1'
+const CACHE_VERSION = 'v2'
 const CACHE_NAME = `scoops-${CACHE_VERSION}`
 
 // Assets à mettre en cache au démarrage

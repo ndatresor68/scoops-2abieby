@@ -6,8 +6,12 @@
     <link rel="apple-touch-icon" href="/cacao.png" />
     <link rel="manifest" href="/manifest.json" />
     
+    <!-- Performance Optimizations for Mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="color-scheme" content="light dark" />
+    
     <!-- PWA Meta Tags -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#7a1f1f" />
     <meta name="description" content="Plateforme de gestion des coopératives agricoles - SCOOP ASAB" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -21,7 +25,36 @@
     <meta property="og:image" content="/cacao.png" />
     <meta property="og:type" content="website" />
     
+    <!-- Critical CSS for faster rendering -->
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow-x: hidden;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: #f8f7f6;
+      }
+      
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+    
     <title>SCOOP ASAB COOP-CA</title>
+    
+    <!-- Defer non-critical scripts -->
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7155441039968263"

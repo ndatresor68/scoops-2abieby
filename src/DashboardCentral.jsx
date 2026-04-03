@@ -14,10 +14,7 @@ import Card from "./components/ui/Card"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { useSettings } from "./context/SettingsContext"
 import { fetchDashboardData, refreshDashboardCache } from "./services/dashboardService"
-
-function toNumber(value) {
-  return Number(value || 0)
-}
+import { getCacheManager } from "./services/advancedCacheService"
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("fr-FR")
@@ -25,10 +22,6 @@ function formatNumber(value) {
 
 function formatWeight(value) {
   return `${formatNumber(value)} kg`
-}
-
-function getQuantite(item) {
-  return Number(item?.quantite ?? item?.poids ?? 0)
 }
 
 function StatCard({ icon, title, value, helper, accent }) {
@@ -53,6 +46,8 @@ export default function DashboardCentral() {
   const [loading, setLoading] = useState(true)
   const isMobile = useMediaQuery("(max-width: 640px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
+
+  const cacheManager = getCacheManager()
 
   const [stats, setStats] = useState({
     producteurs: 0,
@@ -138,23 +133,36 @@ export default function DashboardCentral() {
   const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true)
-      console.log('[DashboardCentral] Fetching dashboard data...')
+      console.log('[DashboardCentral] Fetching dashboard data (network-first)...')
       
-      // Use optimized service instead of 9 individual queries
-      const data = await fetchDashboardData()
+      // ✅ ULTRA PERFORMANCE: Use Network-First strategy for real-time data
+      // Try network first (with 3s timeout), fall back to cache if network slow
+      const data = await cacheManager.getWithNetworkFirst(
+        'dashboard-stats-main',
+        () => fetchDashboardData(),
+        { 
+          ttl: 120000, // 2 min cache for real-time data
+          timeout: 3000, // 3s network timeout
+          store: 'producteurs'
+        }
+      )
 
-      setStats({
-        producteurs: data.producteurs || 0,
-        centres: data.centres || 0,
-        achats: data.achats || 0,
-        livraisonsValidees: data.livraisonsValidees || 0,
-        livraisonsAttente: data.livraisonsAttente || 0,
-        stockGlobal: data.stockGlobal || 0,
-        poidsTotal: data.poidsTotal || 0,
-      })
+      if (data) {
+        setStats({
+          producteurs: data.producteurs || 0,
+          centres: data.centres || 0,
+          achats: data.achats || 0,
+          livraisonsValidees: data.livraisonsValidees || 0,
+          livraisonsAttente: data.livraisonsAttente || 0,
+          stockGlobal: data.stockGlobal || 0,
+          poidsTotal: data.poidsTotal || 0,
+        })
 
-      setCentresStats(data.centresStats || [])
-      setRecentAchats(data.recentAchats || [])
+        setCentresStats(data.centresStats || [])
+        setRecentAchats(data.recentAchats || [])
+        
+        console.log('[DashboardCentral] Dashboard data loaded (cache-aware)')
+      }
     } catch (error) {
       console.error("[DashboardCentral] Error:", error)
       setStats({
@@ -171,7 +179,7 @@ export default function DashboardCentral() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [cacheManager])
 
   useEffect(() => {
     fetchDashboard()

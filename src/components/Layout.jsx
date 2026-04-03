@@ -1,17 +1,19 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react"
 import { FaBars, FaChevronLeft, FaChevronRight } from "react-icons/fa"
 import { useAuth } from "../context/AuthContext"
-import { useSettings, useSessionTimeout } from "../context/SettingsContext"
+import { useSessionTimeout } from "../context/SettingsContext"
 import Navbar from "./Navbar"
 import UserMenu from "./UserMenu"
 import PWAInstallPrompt from "./PWAInstallPrompt"
 import PWAWelcomeScreen from "./PWAWelcomeScreen"
+import LoadingSpinner from "./LoadingSpinner"
 import { initializeSessionTimeout } from "../utils/sessionManager"
 import { useToast } from "./ui/Toast"
 import { t } from "../utils/i18n"
 import { supabase } from "../supabaseClient"
 import { listenNotifications, requestNotificationPermission } from "../notifications"
 import { getOfflineState, subscribeOfflineState, syncQueue } from "../services/offlineService"
+import { preloadCriticalResources } from "../services/mobileOptimization"
 
 const TITLES = {
   dashboard: "Tableau de Bord",
@@ -66,16 +68,12 @@ function getPageFromPath(pathname) {
 }
 
 export default function Layout() {
-  const { user, loading, displayName, isAdmin, isAgent, isCentre, role, signOut } = useAuth()
+  const { user, loading, displayName, isAdmin, isAgent, isCentre, signOut } = useAuth()
   const { showToast } = useToast()
   const sessionTimeoutMinutes = useSessionTimeout()
   const [notificationPermission, setNotificationPermission] = useState(() => {
     if (typeof Notification === "undefined") return "unsupported"
     return Notification.permission
-  })
-  const [notificationPermissionResolved, setNotificationPermissionResolved] = useState(() => {
-    if (typeof Notification === "undefined") return true
-    return Notification.permission === "granted" || Notification.permission === "denied"
   })
   const [activePage, setActivePage] = useState(() => {
     if (typeof window === "undefined") return "dashboard"
@@ -92,6 +90,11 @@ export default function Layout() {
   const fcmTokenSetupRef = useRef(false)
   const notificationPermissionRequestedRef = useRef(false)
   const notificationWarningShownRef = useRef(false)
+
+  // Précharger les ressources critiques pour mobile
+  useEffect(() => {
+    preloadCriticalResources()
+  }, [])
 
   // Initialize session timeout
   useEffect(() => {
@@ -143,7 +146,6 @@ export default function Layout() {
     if (!user?.id) return
     if (typeof Notification === "undefined") {
       setNotificationPermission("unsupported")
-      setNotificationPermissionResolved(true)
       return
     }
 
@@ -151,22 +153,18 @@ export default function Layout() {
     setNotificationPermission(currentPermission)
 
     if (currentPermission === "granted") {
-      setNotificationPermissionResolved(true)
       return
     }
 
     if (currentPermission === "denied") {
-      setNotificationPermissionResolved(true)
       return
     }
 
     if (notificationPermissionRequestedRef.current) {
-      setNotificationPermissionResolved(true)
       return
     }
 
     notificationPermissionRequestedRef.current = true
-    setNotificationPermissionResolved(false)
 
     ;(async () => {
       try {
@@ -175,7 +173,6 @@ export default function Layout() {
         const updatedPermission =
           typeof Notification === "undefined" ? "unsupported" : Notification.permission
         setNotificationPermission(updatedPermission)
-        setNotificationPermissionResolved(true)
       }
     })()
   }, [user?.id])
@@ -208,7 +205,7 @@ export default function Layout() {
       if (typeof unsubscribe === "function") unsubscribe()
       fcmListenerSetupRef.current = false
     }
-  }, [user?.id, showToast])
+  }, [showToast, user])
 
   useEffect(() => {
     if (!user?.id) return
@@ -251,9 +248,9 @@ export default function Layout() {
   useEffect(() => {
     async function checkSession() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        await supabase.auth.getSession()
         setSessionChecked(true)
-      } catch (error) {
+      } catch {
         setSessionChecked(true)
       }
     }
@@ -338,56 +335,142 @@ export default function Layout() {
   }
 
   function renderPage() {
+    const suspenseFallback = <LoadingSpinner />
+
     switch (activePage) {
       case "dashboard":
         // Role-specific dashboards (non-admin only)
         if (isCentre) {
-          return <CentreDashboardEnhanced />
+          return (
+            <Suspense fallback={suspenseFallback}>
+              <CentreDashboardEnhanced />
+            </Suspense>
+          )
         } else if (isAgent) {
-          return <AgentDashboard />
+          return (
+            <Suspense fallback={suspenseFallback}>
+              <AgentDashboard />
+            </Suspense>
+          )
         }
-        return <DashboardCentral />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
       case "centres":
-        return <DashboardCentral />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
       case "about":
-        return <About />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <About />
+          </Suspense>
+        )
       case "chat":
-        return <Chat />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Chat />
+          </Suspense>
+        )
       case "contact":
-        return <Contact />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Contact />
+          </Suspense>
+        )
       case "opportunites":
-        return <Opportunities />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Opportunities />
+          </Suspense>
+        )
       case "producteurs":
-        return <Producteurs />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Producteurs />
+          </Suspense>
+        )
       case "achats":
         // Only CENTRE can access achats (admin uses AdminDashboard)
         if (isCentre) {
-          return <Achats />
+          return (
+            <Suspense fallback={suspenseFallback}>
+              <Achats />
+            </Suspense>
+          )
         }
-        return <DashboardCentral />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
       case "parametres":
-        return <Parametres onOpenAdminUsers={() => setActivePage("admin-users")} isAdmin={isAdmin} />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Parametres onOpenAdminUsers={() => setActivePage("admin-users")} isAdmin={isAdmin} />
+          </Suspense>
+        )
       case "privacy":
-        return <Privacy />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Privacy />
+          </Suspense>
+        )
       case "profile":
-        return <Profile />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <Profile />
+          </Suspense>
+        )
       case "parcelles":
         // Parcelles management (AGENT and CENTRE) - Nouvelle version avec GPS
         if (isAgent || isCentre) {
-          return <GestionParcelles />
+          return (
+            <Suspense fallback={suspenseFallback}>
+              <GestionParcelles />
+            </Suspense>
+          )
         }
-        return <DashboardCentral />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
       case "livraisons":
         // Livraisons management (CENTRE only)
         if (isCentre) {
-          return <Livraisons />
+          return (
+            <Suspense fallback={suspenseFallback}>
+              <Livraisons />
+            </Suspense>
+          )
         }
-        return <DashboardCentral />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
       case "activites":
         // Field activities (AGENT only)
-        return isAgent ? <DashboardCentral /> : <DashboardCentral />
+        return isAgent ? (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        ) : (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
       default:
-        return <DashboardCentral />
+        return (
+          <Suspense fallback={suspenseFallback}>
+            <DashboardCentral />
+          </Suspense>
+        )
     }
   }
 
@@ -719,7 +802,7 @@ const spinner = {
   animation: "spin 0.8s linear infinite",
 }
 
-const permissionScreen = {
+const _permissionScreen = {
   minHeight: "100vh",
   display: "flex",
   alignItems: "center",
@@ -729,7 +812,7 @@ const permissionScreen = {
     "radial-gradient(circle at top, rgba(122,31,31,0.12), transparent 38%), linear-gradient(180deg, #fff7ed 0%, #fff 100%)",
 }
 
-const permissionCard = {
+const _permissionCard = {
   width: "100%",
   maxWidth: 460,
   padding: "32px 24px",
@@ -740,7 +823,7 @@ const permissionCard = {
   textAlign: "center",
 }
 
-const permissionTitle = {
+const _permissionTitle = {
   margin: 0,
   marginBottom: 16,
   fontSize: "clamp(24px, 4vw, 32px)",
@@ -749,21 +832,21 @@ const permissionTitle = {
   color: "#7a1f1f",
 }
 
-const permissionMessage = {
+const _permissionMessage = {
   margin: 0,
   color: "#1f2937",
   fontSize: 16,
   lineHeight: 1.6,
 }
 
-const permissionHelp = {
+const _permissionHelp = {
   margin: "16px 0 0",
   color: "#6b7280",
   fontSize: 14,
   lineHeight: 1.6,
 }
 
-const permissionButton = {
+const _permissionButton = {
   marginTop: 24,
   width: "100%",
   minHeight: 52,
@@ -776,4 +859,3 @@ const permissionButton = {
   cursor: "pointer",
   boxShadow: "0 16px 32px rgba(122, 31, 31, 0.22)",
 }
-

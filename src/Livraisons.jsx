@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "./supabaseClient"
 import { FaPlus, FaSearch, FaEdit, FaCheckCircle, FaClock } from "react-icons/fa"
 import Card from "./components/ui/Card"
@@ -9,10 +9,13 @@ import { useToast } from "./components/ui/Toast"
 import { useAuth } from "./context/AuthContext"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { getUserRoleInfo } from "./utils/rolePermissions"
+import { getCacheManager } from "./services/advancedCacheService"
 
 export default function Livraisons() {
   const { showToast } = useToast()
-  const { user, displayName } = useAuth()
+  const { user } = useAuth()
+  const cacheManager = getCacheManager()
+
   const [livraisons, setLivraisons] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -30,7 +33,7 @@ export default function Livraisons() {
     notes: "",
   })
 
-  async function fetchLivraisons() {
+  const fetchLivraisons = useCallback(async () => {
     try {
       setLoading(true)
       setErrorMessage("")
@@ -47,24 +50,30 @@ export default function Livraisons() {
         return
       }
 
-      let query = supabase.from("livraisons").select("*")
-      if (isCentre && centreId) {
-        query = query.eq("centre_id", centreId)
-      }
+      console.log("[Livraisons] Fetching livraisons (network-first)...")
 
-      query = query.order("date_livraison", { ascending: false })
+      // ✅ ULTRA PERFORMANCE: Use Network-First strategy for real-time status
+      const data = await cacheManager.getWithNetworkFirst(
+        `livraisons-${isCentre ? centreId : 'all'}`,
+        async () => {
+          let query = supabase.from("livraisons").select("*")
+          if (isCentre && centreId) {
+            query = query.eq("centre_id", centreId)
+          }
+          query = query.order("date_livraison", { ascending: false })
+          
+          const { data: result, error } = await query
+          if (error) throw error
+          return result
+        },
+        { 
+          ttl: 120000, // 2 min cache for real-time status
+          timeout: 3000, // 3s timeout
+          store: 'producteurs'
+        }
+      )
 
-      const { data, error } = await query
-      console.log("[Livraisons] Data:", data)
-      console.log("[Livraisons] Error:", error)
-
-      if (error) {
-        console.error("[Livraisons] Error loading livraisons:", error)
-        setErrorMessage(error.message || "Erreur lors du chargement des livraisons")
-        showToast("Erreur lors du chargement des livraisons", "error")
-        return
-      }
-
+      console.log("[Livraisons] Data loaded (cache-aware):", data?.length)
       setLivraisons(data || [])
     } catch (error) {
       console.error("[Livraisons] Exception loading livraisons:", error)
@@ -73,12 +82,12 @@ export default function Livraisons() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [cacheManager, centreId, isAgent, isCentre, showToast, user])
 
   useEffect(() => {
     console.log("[Livraisons] Initializing fetch", { user, isAdmin, isCentre, centreId })
     fetchLivraisons()
-  }, [user, isAdmin, isCentre, isAgent, centreId])
+  }, [centreId, fetchLivraisons, isAdmin, isCentre, user])
 
   function openForm(livraison = null) {
     if (livraison) {
