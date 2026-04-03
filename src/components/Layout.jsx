@@ -481,13 +481,13 @@ export default function Layout() {
         </main>
         <footer style={footer}>{renderFooterLinks(navigateToPage)}</footer>
       </div>
+
+      {/* PWA Welcome Screen (au premier lancement) */}
+      <PWAWelcomeScreen />
+
+      {/* PWA Installation Prompt */}
+      <PWAInstallPrompt />
     </div>
-
-    {/* PWA Welcome Screen (au premier lancement) */}
-    <PWAWelcomeScreen />
-
-    {/* PWA Installation Prompt */}
-    <PWAInstallPrompt />
   )
 }
 
