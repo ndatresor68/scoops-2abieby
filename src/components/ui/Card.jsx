@@ -1,81 +1,54 @@
-import { useMediaQuery } from "../../hooks/useMediaQuery"
+import React from 'react';
 
-export default function Card({
-  children,
-  title,
-  subtitle,
-  actions,
-  padding,
-  style = {},
-  className = "",
-  onMouseEnter,
+export default function Card({ 
+  children, 
+  title, 
+  subtitle, 
+  actions, 
+  padding, 
+  style = {}, 
+  className = "", 
+  onMouseEnter, 
   onMouseLeave,
+  variant = "default"
 }) {
-  const isMobile = useMediaQuery("(max-width: 640px)")
+  const variants = {
+    default: "bg-white border border-slate-200/80 shadow-soft",
+    glass: "bg-white/80 backdrop-blur-md border border-white/20 shadow-premium",
+    outline: "bg-transparent border-2 border-slate-100",
+    primary: "bg-primary-50 border border-primary-100",
+  };
+
+  const paddingClass = padding ? "" : "p-5 sm:p-6";
 
   return (
     <section
-      style={{
-        background: "var(--admin-card-bg, linear-gradient(180deg, rgba(255,255,255,0.98), #ffffff))",
-        borderRadius: 24,
-        boxShadow: "var(--admin-shadow-card, 0 18px 40px rgba(15, 23, 42, 0.07))",
-        padding: padding || (isMobile ? "20px" : "24px"),
-        border: "1px solid var(--admin-border, rgba(226, 232, 240, 0.9))",
-        transition:
-          "transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease, color 0.25s ease",
-        backdropFilter: "blur(12px)",
-        boxSizing: "border-box",
-        minWidth: 0,
-        ...style,
-      }}
-      className={className}
+      className={`rounded-3xl overflow-hidden transition-all duration-300 ${variants[variant] || variants.default} ${paddingClass} ${className}`}
+      style={style}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {title || subtitle || actions ? (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 16,
-            marginBottom: 16,
-            paddingBottom: 14,
-            borderBottom: "1px solid var(--admin-border-soft, rgba(226, 232, 240, 0.72))",
-          }}
-        >
-          <div style={{ minWidth: 0 }}>
-            {title ? (
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: isMobile ? "17px" : "18px",
-                  fontWeight: 800,
-                  color: "var(--admin-text, #0f172a)",
-                  letterSpacing: "-0.03em",
-                  lineHeight: 1.2,
-                }}
-              >
+      {(title || subtitle || actions) && (
+        <div className="flex justify-between items-start gap-4 mb-4 pb-3.5 border-b border-slate-100">
+          <div className="min-w-0">
+            {title && (
+              <h3 className="text-lg font-extrabold text-slate-900 tracking-tight leading-tight">
                 {title}
               </h3>
-            ) : null}
-            {subtitle ? (
-              <p
-                style={{
-                  margin: "6px 0 0",
-                  fontSize: 12,
-                  lineHeight: 1.55,
-                  color: "var(--admin-text-soft, #64748b)",
-                }}
-              >
+            )}
+            {subtitle && (
+              <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
                 {subtitle}
               </p>
-            ) : null}
+            )}
           </div>
-          {actions ? <div style={{ flexShrink: 0 }}>{actions}</div> : null}
+          {actions && <div className="flex-shrink-0">{actions}</div>}
         </div>
-      ) : null}
-      {children}
+      )}
+      
+      <div className="relative">
+        {children}
+      </div>
     </section>
-  )
+  );
 }

@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   FaChartLine,
   FaComments,
@@ -14,11 +15,10 @@ import {
   FaSeedling,
   FaClipboardList,
   FaTruck,
-} from "react-icons/fa"
-import logoImage from "../assets/logo-scoops.png"
-import { useAuth } from "../context/AuthContext"
+} from "react-icons/fa";
+import logoImage from "../assets/logo-scoops.png";
+import { useAuth } from "../context/AuthContext";
 
-// ADMIN Menu
 const ADMIN_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
   { id: "chat", label: "Chat", icon: FaComments },
@@ -29,9 +29,8 @@ const ADMIN_MODULES = [
   { id: "achats", label: "Pesées", icon: FaWeightHanging },
   { id: "admin", label: "Administration", icon: FaUserShield },
   { id: "parametres", label: "Paramètres", icon: FaCog },
-]
+];
 
-// AGENT Menu
 const AGENT_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
   { id: "chat", label: "Chat", icon: FaComments },
@@ -39,9 +38,8 @@ const AGENT_MODULES = [
   { id: "producteurs", label: "Producteurs", icon: FaUsers },
   { id: "parcelles", label: "Parcelles", icon: FaSeedling },
   { id: "activites", label: "Activités terrain", icon: FaClipboardList },
-]
+];
 
-// CENTRE Menu
 const CENTRE_MODULES = [
   { id: "dashboard", label: "Dashboard", icon: FaChartLine },
   { id: "chat", label: "Chat", icon: FaComments },
@@ -51,13 +49,13 @@ const CENTRE_MODULES = [
   { id: "parcelles", label: "Gestion Parcelles", icon: FaSeedling },
   { id: "livraisons", label: "Livraisons", icon: FaTruck },
   { id: "parametres", label: "Paramètres", icon: FaCog },
-]
+];
 
 const LEGAL_MODULES = [
   { id: "about", label: "À propos", icon: FaInfoCircle },
   { id: "contact", label: "Contact", icon: FaEnvelope },
   { id: "privacy", label: "Confidentialité", icon: FaShieldAlt },
-]
+];
 
 export default function Navbar({
   activePage,
@@ -67,263 +65,109 @@ export default function Navbar({
   onCloseMobile,
   isMobile,
 }) {
-  const { isAdmin, isAgent, isCentre } = useAuth()
+  const { isAdmin, isAgent, isCentre } = useAuth();
 
-  // Determine modules based on role
-  let modules = []
+  let modules = [];
   if (isAdmin) {
-    modules = ADMIN_MODULES
+    modules = ADMIN_MODULES;
   } else if (isAgent) {
-    modules = AGENT_MODULES
+    modules = AGENT_MODULES;
   } else if (isCentre) {
-    modules = CENTRE_MODULES
+    modules = CENTRE_MODULES;
   } else {
-    // Fallback: basic modules
     modules = [
       { id: "dashboard", label: "Dashboard", icon: FaChartLine },
       { id: "producteurs", label: "Producteurs", icon: FaUsers },
-    ]
+    ];
   }
+
+  const SidebarItem = ({ module, active }) => {
+    const Icon = module.icon;
+    return (
+      <button
+        onClick={() => {
+          onNavigate(module.id);
+          if (mobileOpen) onCloseMobile();
+        }}
+        className={`
+          w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 group
+          ${active 
+            ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30' 
+            : 'text-slate-400 hover:bg-white/10 hover:text-white'
+          }
+        `}
+      >
+        <Icon className={`text-xl flex-shrink-0 ${active ? 'text-white' : 'group-hover:scale-110 transition-transform'}`} />
+        {(!collapsed || isMobile) && (
+          <span className="font-bold text-sm tracking-wide whitespace-nowrap">{module.label}</span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <>
-      {isMobile && mobileOpen && <div style={overlay} onClick={onCloseMobile} />}
+      {isMobile && mobileOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1200]"
+          onClick={onCloseMobile}
+        />
+      )}
 
       <aside
-        style={{
-          ...sidebar,
-          width: collapsed && !isMobile ? 86 : 268,
-          transform: isMobile ? (mobileOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-        }}
+        className={`
+          fixed left-0 top-0 bottom-0 bg-slate-900 text-white z-[1300] transition-all duration-300 ease-in-out
+          flex flex-col shadow-2xl
+          ${collapsed && !isMobile ? 'w-20' : 'w-72'}
+          ${isMobile ? (mobileOpen ? 'translate-x-0' : '-translate-x-full') : 'translate-x-0'}
+        `}
       >
-        <div style={brandRow}>
+        <div className="p-6 flex items-center justify-between">
           {(!collapsed || isMobile) && (
-            <div style={brandContainer}>
-              <div style={brandLogo}>
-                <img 
-                  src={logoImage} 
-                  alt="SCOOP ASAB Logo" 
-                  style={logoImageStyle}
-                />
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex-shrink-0 flex items-center justify-center shadow-lg shadow-primary-600/20 overflow-hidden">
+                <img src={logoImage} alt="Logo" className="w-full h-full object-cover" />
               </div>
-              <div>
-                <h2 style={brandTitle}>SCOOP ASAB</h2>
-                <p style={brandSubtitle}>Gestion Coopérative</p>
+              <div className="flex flex-col animate-fadeIn">
+                <span className="font-black text-lg tracking-tighter leading-none">SCOOP ASAB</span>
+                <span className="text-[10px] font-bold text-primary-400 uppercase tracking-widest mt-1">Gestion Coopérative</span>
               </div>
             </div>
           )}
           {isMobile && (
-            <button style={closeMobileBtn} onClick={onCloseMobile}>
-              <FaTimes />
+            <button onClick={onCloseMobile} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+              <FaTimes className="text-xl" />
             </button>
           )}
         </div>
 
-        <nav style={navStyle}>
-          {modules.map((module) => {
-            const Icon = module.icon
-            const active = activePage === module.id
-            return (
-              <button
-                key={module.id}
-                style={{
-                  ...itemBtn,
-                  ...(active ? itemBtnActive : {}),
-                }}
-                onClick={() => {
-                  onNavigate(module.id)
-                  onCloseMobile?.()
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.08)"
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.05)"
-                  }
-                }}
-              >
-                <Icon style={{ fontSize: 20, minWidth: 24 }} />
-                {(!collapsed || isMobile) && <span>{module.label}</span>}
-              </button>
-            )
-          })}
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto scrollbar-hide">
+          <div className="space-y-1">
+            {modules.map(module => (
+              <SidebarItem key={module.id} module={module} active={activePage === module.id} />
+            ))}
+          </div>
+
+          <div className="pt-6 mt-6 border-t border-white/5">
+            {(!collapsed || isMobile) && (
+              <p className="px-4 mb-4 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Informations</p>
+            )}
+            <div className="space-y-1">
+              {LEGAL_MODULES.map(module => (
+                <SidebarItem key={module.id} module={module} active={activePage === module.id} />
+              ))}
+            </div>
+          </div>
         </nav>
 
-        <div style={secondaryNav}>
-          {(!collapsed || isMobile) && <div style={secondaryLabel}>Informations</div>}
-          <div style={secondaryList}>
-            {LEGAL_MODULES.map((module) => {
-              const Icon = module.icon
-              const active = activePage === module.id
-              return (
-                <button
-                  key={module.id}
-                  style={{
-                    ...itemBtn,
-                    ...(active ? itemBtnActive : {}),
-                  }}
-                  onClick={() => {
-                    onNavigate(module.id)
-                    onCloseMobile?.()
-                  }}
-                >
-                  <Icon style={{ fontSize: 18, minWidth: 24 }} />
-                  {(!collapsed || isMobile) && <span>{module.label}</span>}
-                </button>
-              )
-            })}
+        {(!collapsed || isMobile) && (
+          <div className="p-6 bg-white/5 m-4 rounded-3xl border border-white/5">
+            <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+              &copy; 2026 SCOOP ASAB.<br/>Version 2.1.0-Premium
+            </p>
           </div>
-        </div>
+        )}
       </aside>
     </>
-  )
-}
-
-const sidebar = {
-  position: "fixed",
-  left: 0,
-  top: 0,
-  bottom: 0,
-  background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
-  color: "#fff",
-  padding: "24px 16px",
-  boxSizing: "border-box",
-  zIndex: 1300,
-  transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-  display: "flex",
-  flexDirection: "column",
-  boxShadow: "4px 0 24px rgba(0,0,0,0.12)",
-}
-
-const brandRow = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  padding: "8px 12px",
-  marginBottom: 8,
-}
-
-const brandContainer = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-}
-
-const brandLogo = {
-  width: 48,
-  height: 48,
-  borderRadius: "12px",
-  background: "linear-gradient(135deg, #7a1f1f, #b02a2a)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "24px",
-  fontWeight: 800,
-  color: "white",
-  boxShadow: "0 4px 12px rgba(122, 31, 31, 0.4)",
-  overflow: "hidden",
-  flexShrink: 0,
-  position: "relative",
-}
-
-const logoImageStyle = {
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  display: "block",
-  border: "none",
-}
-
-const brandTitle = {
-  margin: 0,
-  fontSize: "18px",
-  fontWeight: 700,
-  letterSpacing: "0.5px",
-  color: "white",
-}
-
-const brandSubtitle = {
-  margin: 0,
-  fontSize: "11px",
-  color: "rgba(255,255,255,0.7)",
-  fontWeight: 500,
-  marginTop: 2,
-}
-
-const closeMobileBtn = {
-  border: "none",
-  background: "rgba(255,255,255,0.1)",
-  color: "white",
-  cursor: "pointer",
-  fontSize: 20,
-  width: 36,
-  height: 36,
-  borderRadius: "8px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  transition: "all 0.2s ease",
-}
-
-const navStyle = {
-  marginTop: 8,
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  flex: 1,
-}
-
-const secondaryNav = {
-  marginTop: 12,
-  paddingTop: 12,
-  borderTop: "1px solid rgba(255,255,255,0.08)",
-}
-
-const secondaryLabel = {
-  padding: "0 12px 8px",
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "rgba(255,255,255,0.52)",
-}
-
-const secondaryList = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-}
-
-const itemBtn = {
-  border: "none",
-  borderRadius: "12px",
-  background: "rgba(255,255,255,0.05)",
-  color: "rgba(255,255,255,0.9)",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-  padding: "14px 16px",
-  fontWeight: 600,
-  textAlign: "left",
-  fontSize: "14px",
-  transition: "all 0.2s ease",
-}
-
-const itemBtnActive = {
-  background: "linear-gradient(135deg, #7a1f1f, #b02a2a)",
-  color: "white",
-  boxShadow: "0 4px 16px rgba(122, 31, 31, 0.4)",
-  transform: "translateX(2px)",
-}
-
-const overlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.5)",
-  zIndex: 1200,
-  backdropFilter: "blur(4px)",
+  );
 }

@@ -1,55 +1,36 @@
-import { useMediaQuery } from "../../hooks/useMediaQuery"
+import React from 'react';
 
-export default function Input({
-  label,
-  value,
-  onChange,
-  type = "text",
-  placeholder = "",
-  disabled = false,
-  required = false,
-  error = "",
-  icon,
-  style = {},
-  inputStyle = {},
+export default function Input({ 
+  label, 
+  value, 
+  onChange, 
+  type = "text", 
+  placeholder = "", 
+  disabled = false, 
+  required = false, 
+  error = "", 
+  icon, 
+  style = {}, 
+  inputStyle = {}, 
+  className = "",
   ...props
 }) {
-  const isMobile = useMediaQuery("(max-width: 640px)")
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0, ...style }}>
-      {label ? (
-        <label
-          style={{
-            fontSize: 13,
-            color: "#334155",
-            fontWeight: 700,
-            display: "block",
-            letterSpacing: "0.01em",
-          }}
-        >
+    <div className={`flex flex-col gap-1.5 w-full ${className}`} style={style}>
+      {label && (
+        <label className="text-xs sm:text-sm font-bold text-slate-700 ml-1 flex items-center gap-1">
           {label}
-          {required ? <span style={{ color: "#dc2626", marginLeft: 4 }}>*</span> : null}
+          {required && <span className="text-red-500">*</span>}
         </label>
-      ) : null}
-      <div style={{ position: "relative" }}>
-        {icon ? (
-          <span
-            style={{
-              position: "absolute",
-              left: 16,
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: error ? "#dc2626" : "#64748b",
-              fontSize: 16,
-              zIndex: 1,
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
+      )}
+      
+      <div className="relative group">
+        {icon && (
+          <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200 z-10 flex items-center ${error ? 'text-red-500' : 'text-slate-400 group-focus-within:text-primary-600'}`}>
             {icon}
-          </span>
-        ) : null}
+          </div>
+        )}
+        
         <input
           type={type}
           value={value || ""}
@@ -57,46 +38,27 @@ export default function Input({
           placeholder={placeholder}
           disabled={disabled}
           required={required}
-          style={{
-            width: "100%",
-            padding: icon
-              ? isMobile
-                ? "14px 16px 14px 46px"
-                : "13px 16px 13px 46px"
-              : isMobile
-                ? "14px 16px"
-                : "13px 16px",
-            borderRadius: 16,
-            border: error ? "1px solid rgba(220, 38, 38, 0.55)" : "1px solid rgba(203, 213, 225, 0.95)",
-            fontSize: isMobile ? 16 : 14,
-            outline: "none",
-            transition: "border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease",
-            background: disabled ? "#f8fafc" : "rgba(255,255,255,0.96)",
-            color: disabled ? "#94a3b8" : "#0f172a",
-            minHeight: 48,
-            fontFamily: "inherit",
-            boxSizing: "border-box",
-            boxShadow: error ? "0 0 0 4px rgba(220, 38, 38, 0.08)" : "0 1px 2px rgba(15, 23, 42, 0.02)",
-            ...inputStyle,
-          }}
-          onFocus={(event) => {
-            if (!error && !disabled) {
-              event.target.style.borderColor = "rgba(153, 27, 27, 0.45)"
-              event.target.style.boxShadow = "0 0 0 4px rgba(153, 27, 27, 0.08)"
+          className={`
+            w-full bg-white border rounded-2xl px-4 py-3.5 sm:py-3
+            focus:ring-4 outline-none transition-all duration-200 placeholder:text-slate-400
+            disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed
+            text-base sm:text-sm min-h-[48px] font-medium
+            ${icon ? 'pl-11' : ''}
+            ${error 
+              ? 'border-red-500/50 focus:ring-red-500/10 focus:border-red-500 shadow-[0_0_0_4px_rgba(220,38,38,0.08)]' 
+              : 'border-slate-200/90 focus:ring-primary-600/10 focus:border-primary-600 shadow-sm'
             }
-            props.onFocus?.(event)
-          }}
-          onBlur={(event) => {
-            if (!error && !disabled) {
-              event.target.style.borderColor = "rgba(203, 213, 225, 0.95)"
-              event.target.style.boxShadow = "0 1px 2px rgba(15, 23, 42, 0.02)"
-            }
-            props.onBlur?.(event)
-          }}
+          `}
+          style={inputStyle}
           {...props}
         />
       </div>
-      {error ? <span style={{ fontSize: 12, color: "#dc2626", marginTop: -2 }}>{error}</span> : null}
+      
+      {error && (
+        <p className="text-xs font-semibold text-red-500 ml-1 mt-0.5 animate-fadeIn">
+          {error}
+        </p>
+      )}
     </div>
-  )
+  );
 }
